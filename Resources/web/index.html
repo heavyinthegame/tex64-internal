@@ -13,50 +13,220 @@
           <span class="brand-dot"></span>
           <span class="brand-name">tex180</span>
         </div>
-        <div class="breadcrumbs">main.tex / セクション / イントロ</div>
+        <div class="breadcrumbs" id="breadcrumbs">main.tex / セクション / イントロ</div>
         <div class="top-actions">
-          <button class="pill">ビルド</button>
-          <button class="pill ghost">自動ビルド</button>
+          <button class="pill" id="build-button" type="button">ビルド</button>
+          <button class="pill ghost" id="auto-build-button" type="button">自動ビルド</button>
+          <button class="pill ghost" id="quick-insert-button" type="button">クイック挿入</button>
         </div>
       </header>
 
       <div class="main">
         <aside class="sidebar">
-          <div class="tab-group">
-            <button class="tab is-active">ファイル</button>
-            <button class="tab">アウトライン</button>
-            <button class="tab">ブロック</button>
-            <button class="tab">Git</button>
+          <div class="tab-group" role="tablist" aria-label="サイドバー">
+            <button class="tab is-active" type="button" role="tab" data-tab="files" aria-selected="true">ファイル</button>
+            <button class="tab" type="button" role="tab" data-tab="outline" aria-selected="false">アウトライン</button>
+            <button class="tab" type="button" role="tab" data-tab="blocks" aria-selected="false">ブロック</button>
+            <button class="tab" type="button" role="tab" data-tab="git" aria-selected="false">Git</button>
           </div>
-          <div class="tab-group secondary">
-            <button class="tab">検索</button>
-            <button class="tab">設定</button>
+          <div class="tab-group secondary" role="tablist" aria-label="補助">
+            <button class="tab" type="button" role="tab" data-tab="search" aria-selected="false">検索</button>
+            <button class="tab" type="button" role="tab" data-tab="settings" aria-selected="false">設定</button>
+          </div>
+        </aside>
+        <aside class="sidebar-panel" aria-label="サイドバー詳細">
+          <div class="panel is-active" data-panel="files">
+            <div class="panel-header">
+              <span class="panel-title">エクスプローラー</span>
+              <div class="panel-header-actions">
+                <button class="panel-button ghost" id="new-file-button" type="button">新規ファイル</button>
+                <button class="panel-button ghost" id="new-folder-button" type="button">新規フォルダ</button>
+              </div>
+            </div>
+            <div class="panel-body">
+              <div class="workspace-label" id="workspace-label">ワークスペース未選択</div>
+              <div class="file-tree" id="file-tree"></div>
+              <div class="panel-actions">
+                <button class="panel-button ghost" id="save-file-button" type="button">保存</button>
+              </div>
+            </div>
+          </div>
+          <div class="panel" data-panel="outline">
+            <div class="panel-header">
+              <span class="panel-title">アウトライン</span>
+            </div>
+            <div class="panel-body outline-panel">
+              <div class="outline-empty" id="outline-empty">インデックスを作成中です。</div>
+              <div class="outline-section">
+                <div class="outline-section-title">ラベル</div>
+                <div class="outline-list" id="outline-labels"></div>
+              </div>
+              <div class="outline-section">
+                <div class="outline-section-title">参考文献</div>
+                <div class="outline-list" id="outline-citations"></div>
+              </div>
+            </div>
+          </div>
+          <div class="panel" data-panel="blocks">
+            <div class="panel-header">
+              <span class="panel-title">ブロック</span>
+            </div>
+            <div class="panel-body blocks-panel">
+              <div class="block-compose">
+                <div class="block-row">
+                  <div class="block-toggle" role="tablist" aria-label="ブロック種別">
+                    <button class="block-toggle-button is-active" type="button" data-block="math">数式</button>
+                    <button class="block-toggle-button" type="button" data-block="table">表</button>
+                  </div>
+                  <div class="block-target" id="block-target">挿入先: 行 -</div>
+                </div>
+                <div class="block-form is-active" data-form="math">
+                  <label class="block-label" for="block-math-input">数式</label>
+                  <textarea
+                    class="block-input"
+                    id="block-math-input"
+                    rows="4"
+                    placeholder="例: E = mc^2"
+                  ></textarea>
+                </div>
+                <div class="block-form" data-form="table">
+                  <div class="block-table-grid">
+                    <div class="block-field">
+                      <label class="block-label" for="block-table-rows">行</label>
+                      <input
+                        class="block-input"
+                        id="block-table-rows"
+                        type="number"
+                        min="1"
+                        max="20"
+                        value="2"
+                      >
+                    </div>
+                    <div class="block-field">
+                      <label class="block-label" for="block-table-cols">列</label>
+                      <input
+                        class="block-input"
+                        id="block-table-cols"
+                        type="number"
+                        min="1"
+                        max="12"
+                        value="2"
+                      >
+                    </div>
+                  </div>
+                </div>
+                <div class="block-actions">
+                  <button class="panel-button ghost" id="block-preview-button" type="button">プレビュー</button>
+                  <button class="panel-button ghost" id="block-cancel-button" type="button">キャンセル</button>
+                  <button class="panel-button" id="block-accept-button" type="button">確定</button>
+                </div>
+              </div>
+              <div class="block-divider"></div>
+              <div class="block-list">
+                <div class="block-list-title">保存済みブロック</div>
+                <div class="block-list-body" id="block-list"></div>
+              </div>
+            </div>
+          </div>
+          <div class="panel" data-panel="git">
+            <div class="panel-header">
+              <span class="panel-title">Git</span>
+              <div class="panel-header-actions">
+                <button class="panel-button ghost" id="git-refresh" type="button">更新</button>
+              </div>
+            </div>
+            <div class="panel-body git-panel">
+              <div class="git-status" id="git-status"></div>
+            </div>
+          </div>
+          <div class="panel" data-panel="search">
+            <div class="panel-header">
+              <span class="panel-title">検索</span>
+            </div>
+            <div class="panel-body search-panel">
+              <div class="search-input-row">
+                <input
+                  class="search-input"
+                  id="search-input"
+                  type="text"
+                  placeholder="ワークスペース検索"
+                >
+                <button class="panel-button" id="search-button" type="button">検索</button>
+              </div>
+              <div class="search-results" id="search-results"></div>
+            </div>
+          </div>
+          <div class="panel" data-panel="settings">
+            <div class="panel-header">
+              <span class="panel-title">設定</span>
+            </div>
+            <div class="panel-body settings-panel">
+              <div class="settings-item">
+                <span>自動ビルド</span>
+                <button class="panel-button" id="settings-auto-build" type="button">OFF</button>
+              </div>
+              <div class="settings-item">
+                <span>ワークスペース</span>
+                <span class="settings-path" id="settings-workspace">未選択</span>
+              </div>
+            </div>
           </div>
         </aside>
 
         <section class="editor">
           <div class="editor-header">
-            <div class="mini-outline">ミニアウトライン（準備中）</div>
-            <div class="editor-status">準備中</div>
+            <div class="mini-outline" id="mini-outline">ミニアウトライン: main.tex</div>
+            <div class="editor-status" id="editor-status">タブ: ファイル</div>
           </div>
           <div class="editor-surface">
             <div id="editor" class="editor-host" aria-label="editor"></div>
             <div class="editor-placeholder" id="editor-fallback">
-              <h1>編集エリア</h1>
-              <p>Monacoの読み込み準備中です。</p>
-              <div class="hint">読み込みに失敗した場合は再起動してください。</div>
+              <h1 id="editor-title">編集エリア</h1>
+              <p id="editor-desc">Monacoの読み込み準備中です。</p>
+              <div class="hint" id="editor-hint">読み込みに失敗した場合は再起動してください。</div>
+            </div>
+          </div>
+          <div class="quick-insert" id="quick-insert" aria-hidden="true">
+            <div class="quick-header">
+              <span class="quick-title">クイック挿入</span>
+              <span class="quick-target" id="quick-target">挿入先: 行 -</span>
+            </div>
+            <textarea
+              class="quick-input"
+              id="quick-input"
+              rows="6"
+              placeholder="挿入する内容を入力してください"
+            ></textarea>
+            <div class="quick-actions">
+              <div class="quick-hint" id="quick-hint">プレビュー中。確定後は⌘Zで取り消しできます。</div>
+              <div class="quick-buttons">
+                <button class="quick-button ghost" id="quick-cancel" type="button">キャンセル</button>
+                <button class="quick-button primary" id="quick-accept" type="button">確定</button>
+              </div>
             </div>
           </div>
         </section>
       </div>
 
       <footer class="issues">
-        <div class="issues-bar">
+        <div class="issues-bar" id="issues-bar" role="button" tabindex="0" aria-expanded="false">
           <span class="issues-title">問題</span>
-          <span class="issues-count">0</span>
-          <span class="issues-hint">ビルド結果はここに要約します。</span>
+          <span class="issues-count" id="issues-count">0</span>
+          <span class="issues-hint" id="issues-hint">ビルド結果はここに要約します。</span>
         </div>
       </footer>
+      <section class="issues-panel" id="issues-panel" aria-hidden="true">
+        <div class="issues-panel-inner">
+          <div class="issues-panel-header">
+            <span class="issues-panel-title">Issues</span>
+            <button class="issues-close" id="issues-close" type="button">閉じる</button>
+          </div>
+          <div class="issues-panel-body">
+            <div class="issues-empty" id="issues-empty">問題はありません。</div>
+            <div class="issues-list" id="issues-list"></div>
+          </div>
+        </div>
+      </section>
     </div>
 
     <script src="monaco/vs/loader.js"></script>

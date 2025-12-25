@@ -1,0 +1,15 @@
+.DS_Store
+DerivedData/
+*.xcuserstate
+*.xcuserdatad/
+xcuserdata/
+*.xcbkptlist
+*.xcscmblueprint
+*.xccheckout
+*.xcresult/
+.swiftpm/
+.build/
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

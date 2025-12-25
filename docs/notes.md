@@ -25,7 +25,7 @@
 
 ### B) ディレクトリ/ファイル構成案（初期）
 - Swift: AppShell, WorkspaceManager, BuildService, IndexerService, PDFWindowController, Bridge。
-- Web: `web/index.html`, `web/main.ts`, `editor/monaco.ts`, `ui/sidebar.ts`, `ui/quickInsert.ts`, `ui/issues.ts`, `ui/diffPreview.ts`, `theme.css`。
+- Web: `Resources/web/index.html`, `web-src/main.ts`, `editor/monaco.ts`, `ui/sidebar.ts`, `ui/quickInsert.ts`, `ui/issues.ts`, `ui/diffPreview.ts`, `theme.css`。
 - `.tex180/` 管理: `blocks.json`, `settings.json`, `cache/index.json`, `issues.json`。
 
 ### C) マイルストーン計画（DoD付き）
@@ -77,15 +77,48 @@
 - `WebViewLoadState` / `WebViewFailure` でロード成功・失敗・プロセス終了を表現し、失敗時は再読み込みUIを表示する。
 - SwiftUIの更新中に状態を変えないため、WebView状態更新は `DispatchQueue.main.async` で遅延送信する。
 - 再読み込みは `reloadToken` を更新してWebViewを再生成する。
+- `AppModel` に `WorkspaceManager` / `BuildService` / `PDFWindowController` を集約し、WebViewから利用する。
+- `IndexerService` を追加し、`.tex`/`.bib` から `label/ref/cite` を抽出してWebへ送る（非同期）。
+- `BlocksStore` を追加し、`.tex180/blocks.json` の読み書きを行う（必要時のみ作成）。
+- `SearchService` / `GitService` を追加し、検索結果とGitステータスを非同期で取得する。
+- `WorkspaceManager` はNSOpenPanelでプロジェクトフォルダを選択し、ルートURLを保持する。
+- `BuildService` は `latexmk` をバックグラウンド実行し、出力を解析してIssuesを生成する（UIはブロックしない）。
+- `WebView` は `tex180` メッセージハンドラでビルド要求を受け、Issues/ビルド状態をWebへ返す。
+- `PDFWindowController` は成功時のみPDFを読み込み、同一ウィンドウを使い回す。
 
 ### Web
-- `web/index.html` はVSCode風スケルトン（トップバー/左タブ/エディタ/Issues）とMonacoのホスト要素（`#editor`）を定義する。
-- `web/theme.css` はダーク寄りのフラットスタイル（細いボーダー/影なし/アクセント青）に統一し、エディタ領域を全面占有にする。
-- `web/main.js` は初期表示のフェードインとMonacoの読み込みを担当し、読み込み失敗時はフォールバック文言を更新する。
+- `Resources/web/index.html` はVSCode風スケルトン（トップバー/左タブ/エディタ/Issues）とMonacoのホスト要素（`#editor`）を定義する。
+- `Resources/web/theme.css` はダーク寄りのフラットスタイル（細いボーダー/影なし/アクセント青）に統一し、エディタ領域を全面占有にする。
+- `Resources/web/main.js` は初期表示のフェードインとMonacoの読み込みを担当し、読み込み失敗時はフォールバック文言を更新する。
+- `web-src/main.ts` で左タブの選択状態を管理し、ミニアウトライン/ステータス/プレースホルダ文言をタブに応じて更新する。
+- Quick Insertはトップバーのボタンで開き、ターゲット行をハイライト/ガター印/宛先表示し、エディタ内の挿入行「下」にプレビューを出してAccept/Cancelを行う。
+- アウトラインにラベル/参考文献キーを表示し、クリックで定義行へジャンプする。
+- `\ref{}` と `\cite{}` の補完候補をMonacoで提示する（定義元のラベル/参考文献を参照）。
+- ブロックタブで数式/表のノーコード挿入を行い、プレビュー→確定/キャンセルで挿入する。
+- ブロックは `.tex180/blocks.json` にメタ保存し、一覧から再編集（該当箇所の置換）できる。
+- 自動ビルドは保存後にのみ走る（編集時は予約して保存で実行）。
+- 検索タブでワークスペース検索を行い、結果クリックでジャンプする。
+- Gitタブで `git status --porcelain` の最小表示を行う。
+- 設定タブに自動ビルド切替とワークスペース表示を追加する。
+- ビルドボタンは `window.webkit.messageHandlers.tex180` に送信し、Issuesバーはネイティブからの結果で更新する。
+- Issuesバーは成功/失敗/進行中で色味を切り替える（詳細ログは出さない）。
+- Issuesパネルは必要時のみ展開し、エラー/警告の一覧と行番号ジャンプを提供する。
+- サイドバーにエクスプローラーを追加し、フォルダ選択→ファイル一覧→クリックで開く流れを用意する。
+- 保存は「保存ボタン/⌘S」で明示的に行い、保存前はファイル名に印を出す。
+- ビルド時に編集中のファイルが`.tex`ならそのファイルを対象にする（未選択時は`main.tex`）。
+- ファイル一覧は`.git`や`node_modules`などを除外し、ワークスペース配下のみ表示する。
+- ファイルツリーの折りたたみ状態はワークスペース単位で保持する。
+- 新規ファイル/フォルダは最小UI（prompt）で作成し、作成後に一覧を更新する。
+- Web側の準備完了時にワークスペース情報を再送して、未選択表示を防ぐ。
+- アプリ起動時に「新規プロジェクト作成 / 既存フォルダを開く」を選択し、エディタ画面ではフォルダ選択ボタンを出さない。
+- 新規プロジェクトは `main.tex` と `.tex180/settings.json` / `.tex180/blocks.json` を作成する。
+- 大きな変更を行ったら必ず `xcodebuild` でビルド確認を行う。
 - Monacoは `monaco-editor@0.55.1` の `min/vs` を `Resources/web/monaco/vs` に同梱し、`loader.js` からAMDロードする（バンドル内では `web/monaco/vs`）。
 - `file://` でも動くよう `MonacoEnvironment.getWorkerUrl` でBlob URLを生成し、Workerを起動する。
 - Monacoの初期設定は `vs-dark` / `automaticLayout` / `minimap: false` / `fontSize: 13` / `lineHeight: 20` など。
   - Monacoの既定ショートカットは維持（無効化しない）。
+  - `web-src/main.ts` を `npm run web:build` で `Resources/web/main.js` に出力する。
+  - ビルドは `package.json` の `web:build` スクリプトで行う。
 
 ### バンドル/リソース
 - `Resources/web` を `Copy Bundle Resources` に追加し、アプリバンドル内では `web` として参照する。
@@ -102,6 +135,20 @@
 - 2025-12-25: Monaco Editor 0.55.1 を `Resources/web/monaco/vs` に同梱し、AMDローダーで読み込む。
 - 2025-12-25: MonacoのWorkerは`file://`でも動くようBlob URLで起動する。
 - 2025-12-25: `web` フォルダを `Resources/web` に移動し、File System Synchronized Groupの重複コピーを避ける。
+- 2025-12-25: 左タブの切替でミニアウトライン/ステータス/プレースホルダ文言が変わるようにした。
+- 2025-12-25: Quick InsertのUI（挿入行の下にプレビュー/ターゲット可視化/Accept/Cancel）を実装した。
+- 2025-12-25: Phase 4の土台として、ビルド要求のネイティブ連携とIssuesバー更新、成功時のみPDF表示を実装した。
+- 2025-12-25: Issuesパネルに詳細一覧を追加し、クリックで該当行へジャンプできるようにした。
+- 2025-12-25: エクスプローラー（フォルダ選択/ファイル一覧/保存/開く）を追加した。
+- 2025-12-25: ファイルツリーの折りたたみ状態を保持し、新規ファイル/フォルダ作成を追加した。
+- 2025-12-25: 起動時のプロジェクト選択でワークスペース未選択状態を解消した。
+- 2025-12-25: 起動時のプロジェクト選択画面を追加し、エディタ内のフォルダ選択UIを削除した。
+- 2025-12-25: 起動時のプロジェクト選択画面を洗練（背景グラデーション/グリッド、カード構成、ボタンスタイルを調整）。
+- 2025-12-25: 起動画面の余計な補足UI（カプセルラベル）を削除して簡潔にした。
+- 2025-12-25: Indexerでlabel/ref/citeを抽出し、アウトライン表示/補完/定義ジャンプを追加した。
+- 2025-12-25: 数式/表ブロックの挿入UIとblocks.jsonの保存/再編集を追加した。
+- 2025-12-25: Auto Build / Search / Git / Settings の最小実装を追加した。
+- 2025-12-25: `xcodebuild -scheme tex180 -configuration Debug -destination platform=macOS build` でビルド確認を実施（multiple destinations の警告のみ）。
 
 ## 既知の警告ログ（現時点で致命ではない）
 - Modifying state during view update, this will cause undefined behavior.（修正: WebViewの状態更新はmain async）

@@ -1,0 +1,12 @@
+{
+  "name": "tex180",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "web:build": "tsc -p web-src/tsconfig.json"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4"
+  }
+}
