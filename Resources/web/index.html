@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>tex180</title>
     <link rel="stylesheet" href="theme.css">
+    <link rel="stylesheet" href="mathlive/mathlive-static.css">
   </head>
   <body>
     <div class="app">
@@ -24,24 +25,114 @@
       <div class="main">
         <aside class="sidebar">
           <div class="tab-group" role="tablist" aria-label="サイドバー">
-            <button class="tab is-active" type="button" role="tab" data-tab="files" aria-selected="true">ファイル</button>
-            <button class="tab" type="button" role="tab" data-tab="outline" aria-selected="false">アウトライン</button>
-            <button class="tab" type="button" role="tab" data-tab="blocks" aria-selected="false">ブロック</button>
-            <button class="tab" type="button" role="tab" data-tab="git" aria-selected="false">Git</button>
+            <button
+              class="tab is-active"
+              type="button"
+              role="tab"
+              data-tab="files"
+              aria-selected="true"
+              aria-label="ファイル"
+              title="ファイル"
+            >
+              <span class="tab-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path d="M6 3h7l5 5v13H6z"></path>
+                  <path d="M13 3v5h5"></path>
+                </svg>
+              </span>
+            </button>
+            <button
+              class="tab"
+              type="button"
+              role="tab"
+              data-tab="outline"
+              aria-selected="false"
+              aria-label="アウトライン"
+              title="アウトライン"
+            >
+              <span class="tab-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path d="M8 6h11M8 12h11M8 18h11"></path>
+                  <path d="M5 6h.01M5 12h.01M5 18h.01"></path>
+                </svg>
+              </span>
+            </button>
+            <button
+              class="tab"
+              type="button"
+              role="tab"
+              data-tab="blocks"
+              aria-selected="false"
+              aria-label="ブロック"
+              title="ブロック"
+            >
+              <span class="tab-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path d="M6 20h12"></path>
+                  <path d="M7 15l3.5-3.5 4-4a2.5 2.5 0 0 1 3.5 0l.5.5-8 8-3 1z"></path>
+                  <path d="M14.5 6.5l3 3"></path>
+                </svg>
+              </span>
+            </button>
+            <button
+              class="tab"
+              type="button"
+              role="tab"
+              data-tab="git"
+              aria-selected="false"
+              aria-label="Git"
+              title="Git"
+            >
+              <span class="tab-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <circle cx="6" cy="6" r="2"></circle>
+                  <circle cx="6" cy="18" r="2"></circle>
+                  <circle cx="18" cy="12" r="2"></circle>
+                  <path d="M6 8v8M8 12h8"></path>
+                </svg>
+              </span>
+            </button>
           </div>
           <div class="tab-group secondary" role="tablist" aria-label="補助">
-            <button class="tab" type="button" role="tab" data-tab="search" aria-selected="false">検索</button>
-            <button class="tab" type="button" role="tab" data-tab="settings" aria-selected="false">設定</button>
+            <button
+              class="tab"
+              type="button"
+              role="tab"
+              data-tab="search"
+              aria-selected="false"
+              aria-label="検索"
+              title="検索"
+            >
+              <span class="tab-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <circle cx="11" cy="11" r="6"></circle>
+                  <path d="M16 16l4 4"></path>
+                </svg>
+              </span>
+            </button>
+            <button
+              class="tab"
+              type="button"
+              role="tab"
+              data-tab="settings"
+              aria-selected="false"
+              aria-label="設定"
+              title="設定"
+            >
+              <span class="tab-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path d="M4 7h16M4 17h16"></path>
+                  <circle cx="9" cy="7" r="2"></circle>
+                  <circle cx="15" cy="17" r="2"></circle>
+                </svg>
+              </span>
+            </button>
           </div>
         </aside>
         <aside class="sidebar-panel" aria-label="サイドバー詳細">
           <div class="panel is-active" data-panel="files">
             <div class="panel-header">
               <span class="panel-title">エクスプローラー</span>
-              <div class="panel-header-actions">
-                <button class="panel-button ghost" id="new-file-button" type="button">新規ファイル</button>
-                <button class="panel-button ghost" id="new-folder-button" type="button">新規フォルダ</button>
-              </div>
             </div>
             <div class="panel-body">
               <div class="workspace-label" id="workspace-label">ワークスペース未選択</div>
@@ -57,14 +148,30 @@
             </div>
             <div class="panel-body outline-panel">
               <div class="outline-empty" id="outline-empty">インデックスを作成中です。</div>
-              <div class="outline-section">
-                <div class="outline-section-title">ラベル</div>
+              <details class="outline-section" data-outline="sections" open>
+                <summary class="outline-section-title">章節</summary>
+                <div class="outline-list" id="outline-sections"></div>
+              </details>
+              <details class="outline-section" data-outline="figures" open>
+                <summary class="outline-section-title">図</summary>
+                <div class="outline-list" id="outline-figures"></div>
+              </details>
+              <details class="outline-section" data-outline="tables" open>
+                <summary class="outline-section-title">表</summary>
+                <div class="outline-list" id="outline-tables"></div>
+              </details>
+              <details class="outline-section" data-outline="todos" open>
+                <summary class="outline-section-title">TODO</summary>
+                <div class="outline-list" id="outline-todos"></div>
+              </details>
+              <details class="outline-section" data-outline="labels" open>
+                <summary class="outline-section-title">ラベル</summary>
                 <div class="outline-list" id="outline-labels"></div>
-              </div>
-              <div class="outline-section">
-                <div class="outline-section-title">参考文献</div>
+              </details>
+              <details class="outline-section" data-outline="citations" open>
+                <summary class="outline-section-title">参考文献</summary>
                 <div class="outline-list" id="outline-citations"></div>
-              </div>
+              </details>
             </div>
           </div>
           <div class="panel" data-panel="blocks">
@@ -161,23 +268,44 @@
               <span class="panel-title">設定</span>
             </div>
             <div class="panel-body settings-panel">
-              <div class="settings-item">
-                <span>自動ビルド</span>
-                <button class="panel-button" id="settings-auto-build" type="button">OFF</button>
+              <div class="settings-group">
+                <div class="settings-group-title">ビルド</div>
+                <div class="settings-item">
+                  <div class="settings-label">
+                    <span class="settings-title">自動ビルド</span>
+                    <span class="settings-desc">保存後にビルドを実行します。</span>
+                  </div>
+                  <button class="settings-toggle" id="settings-auto-build" type="button">OFF</button>
+                </div>
               </div>
-              <div class="settings-item">
-                <span>ワークスペース</span>
-                <span class="settings-path" id="settings-workspace">未選択</span>
+              <div class="settings-group">
+                <div class="settings-group-title">プロジェクト</div>
+                <div class="settings-item">
+                  <div class="settings-label">
+                    <span class="settings-title">メインTeX</span>
+                    <span class="settings-desc">ビルド対象の主ファイルです。</span>
+                  </div>
+                  <div class="settings-control">
+                    <select class="settings-select" id="settings-root-select"></select>
+                    <button class="panel-button ghost" id="settings-root-auto" type="button">
+                      自動検出
+                    </button>
+                  </div>
+                </div>
+                <div class="settings-item">
+                  <div class="settings-label">
+                    <span class="settings-title">ワークスペース</span>
+                    <span class="settings-desc">現在開いているフォルダです。</span>
+                  </div>
+                  <div class="settings-path" id="settings-workspace">未選択</div>
+                </div>
               </div>
             </div>
           </div>
         </aside>
 
         <section class="editor">
-          <div class="editor-header">
-            <div class="mini-outline" id="mini-outline">ミニアウトライン: main.tex</div>
-            <div class="editor-status" id="editor-status">タブ: ファイル</div>
-          </div>
+          <div class="editor-tabs" id="editor-tabs"></div>
           <div class="editor-surface">
             <div id="editor" class="editor-host" aria-label="editor"></div>
             <div class="editor-placeholder" id="editor-fallback">
@@ -227,9 +355,83 @@
           </div>
         </div>
       </section>
+
+      <div class="modal" id="create-modal" aria-hidden="true">
+        <div
+          class="modal-card"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="create-modal-title"
+        >
+          <div class="modal-title" id="create-modal-title">新規作成</div>
+          <div class="modal-subtitle" id="create-modal-subtitle">
+            ファイル名を入力してください。
+          </div>
+          <div class="modal-body">
+            <div class="modal-row">
+              <span class="modal-label">作成先</span>
+              <span class="modal-path" id="create-modal-parent">ワークスペース直下</span>
+            </div>
+            <div class="modal-field">
+              <label class="modal-label" for="create-modal-input" id="create-modal-label">
+                ファイル名
+              </label>
+              <input
+                class="modal-input"
+                id="create-modal-input"
+                type="text"
+                placeholder="新規ファイル名"
+                autocomplete="off"
+              />
+            </div>
+            <div class="modal-help" id="create-modal-help"></div>
+          </div>
+          <div class="modal-actions">
+            <button class="panel-button ghost" id="create-modal-cancel" type="button">
+              キャンセル
+            </button>
+            <button class="panel-button" id="create-modal-submit" type="button">作成</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal" id="rename-modal" aria-hidden="true">
+        <div
+          class="modal-card"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="rename-modal-title"
+        >
+          <div class="modal-title" id="rename-modal-title">名前の変更</div>
+          <div class="modal-body">
+            <div class="modal-row">
+              <span class="modal-label">対象</span>
+              <span class="modal-path" id="rename-modal-target">未選択</span>
+            </div>
+            <input
+              class="modal-input"
+              id="rename-modal-input"
+              type="text"
+              placeholder="新しい名前"
+            />
+            <div class="modal-help" id="rename-modal-help"></div>
+          </div>
+          <div class="modal-actions">
+            <button class="panel-button ghost" id="rename-modal-cancel" type="button">
+              キャンセル
+            </button>
+            <button class="panel-button" id="rename-modal-submit" type="button">変更</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="context-menu" id="context-menu" aria-hidden="true">
+        <div class="context-menu-panel" id="context-menu-panel"></div>
+      </div>
     </div>
 
     <script src="monaco/vs/loader.js"></script>
+    <script src="mathlive/mathlive.min.js"></script>
     <script src="main.js"></script>
   </body>
 </html>

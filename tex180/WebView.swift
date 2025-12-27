@@ -5,6 +5,7 @@
 //  Created by Codex.
 //
 
+import AppKit
 import Foundation
 import SwiftUI
 import WebKit
@@ -29,7 +30,7 @@ struct WebView: NSViewRepresentable {
     func makeNSView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
         configuration.userContentController.add(context.coordinator, name: "tex180")
-        let webView = WKWebView(frame: .zero, configuration: configuration)
+        let webView = NoContextMenuWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
         context.coordinator.attachWebView(webView)
         webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
@@ -43,6 +44,12 @@ struct WebView: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator {
         Coordinator(state: $state, appModel: appModel)
+    }
+
+    final class NoContextMenuWebView: WKWebView {
+        override func menu(for event: NSEvent) -> NSMenu? {
+            nil
+        }
     }
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
@@ -113,6 +120,41 @@ struct WebView: NSViewRepresentable {
                 if let path = body["path"] as? String {
                     handleCreateFolder(path: path)
                 }
+            case "revealInFinder":
+                if let path = body["path"] as? String {
+                    handleRevealInFinder(path: path)
+                }
+            case "openInTerminal":
+                if let path = body["path"] as? String {
+                    handleOpenInTerminal(path: path)
+                }
+            case "renameItem":
+                if let path = body["path"] as? String,
+                   let newName = body["newName"] as? String {
+                    handleRenameItem(path: path, newName: newName)
+                }
+            case "deleteItem":
+                if let path = body["path"] as? String {
+                    handleDeleteItem(path: path)
+                }
+            case "moveItem":
+                if let path = body["path"] as? String,
+                   let destination = body["destination"] as? String {
+                    handleMoveItem(path: path, destination: destination)
+                }
+            case "copyItem":
+                if let path = body["path"] as? String,
+                   let destination = body["destination"] as? String {
+                    handleCopyItem(path: path, destination: destination)
+                }
+            case "undoFileOperation":
+                handleUndoFileOperation()
+            case "setRoot":
+                if let path = body["path"] as? String {
+                    handleSetRoot(path: path)
+                }
+            case "detectRoot":
+                handleDetectRoot()
             case "requestIndex":
                 handleIndexRequest()
             case "loadBlocks":
@@ -150,7 +192,10 @@ struct WebView: NSViewRepresentable {
                     return
                 }
                 self.updateWorkspaceIfNeeded(rootURL: rootURL)
-                let targetFile = (mainFile?.isEmpty == false ? mainFile : nil) ?? "main.tex"
+                let rootFile = self.appModel.workspaceManager.rootInfo(rootURL: rootURL)?.path
+                let targetFile = (mainFile?.isEmpty == false ? mainFile : nil)
+                    ?? rootFile
+                    ?? "main.tex"
                 self.appModel.buildService.build(rootURL: rootURL, mainFileName: targetFile) { result in
                     switch result {
                     case .busy:
@@ -322,6 +367,314 @@ struct WebView: NSViewRepresentable {
             }
         }
 
+        private func handleRevealInFinder(path: String) {
+            guard let webView else { return }
+            appModel.workspaceManager.ensureWorkspace(window: webView.window) { [weak self] rootURL in
+                guard let self else { return }
+                guard let rootURL else {
+                    self.sendIssues(count: 1, summary: "ワークスペースが選択されていません。", status: "error", issues: [
+                        BuildIssue(severity: .error, message: "ワークスペースが選択されていません。", line: nil),
+                    ])
+                    return
+                }
+                guard let itemURL = self.resolveItemURL(rootURL: rootURL, relativePath: path) else {
+                    self.sendIssues(count: 1, summary: "対象が見つかりません。", status: "error", issues: [
+                        BuildIssue(severity: .error, message: "対象が見つかりません。", line: nil),
+                    ])
+                    return
+                }
+                NSWorkspace.shared.activateFileViewerSelecting([itemURL])
+            }
+        }
+
+        private func handleOpenInTerminal(path: String) {
+            guard let webView else { return }
+            appModel.workspaceManager.ensureWorkspace(window: webView.window) { [weak self] rootURL in
+                guard let self else { return }
+                guard let rootURL else {
+                    self.sendIssues(count: 1, summary: "ワークスペースが選択されていません。", status: "error", issues: [
+                        BuildIssue(severity: .error, message: "ワークスペースが選択されていません。", line: nil),
+                    ])
+                    return
+                }
+                guard let itemURL = self.resolveItemURL(rootURL: rootURL, relativePath: path) else {
+                    self.sendIssues(count: 1, summary: "対象が見つかりません。", status: "error", issues: [
+                        BuildIssue(severity: .error, message: "対象が見つかりません。", line: nil),
+                    ])
+                    return
+                }
+                let targetURL: URL
+                var isDirectory: ObjCBool = false
+                if FileManager.default.fileExists(atPath: itemURL.path, isDirectory: &isDirectory),
+                   !isDirectory.boolValue {
+                    targetURL = itemURL.deletingLastPathComponent()
+                } else {
+                    targetURL = itemURL
+                }
+                let process = Process()
+                process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+                process.arguments = ["-a", "Terminal", targetURL.path]
+                do {
+                    try process.run()
+                } catch {
+                    self.sendIssues(count: 1, summary: "ターミナルを開けませんでした。", status: "error", issues: [
+                        BuildIssue(severity: .error, message: "ターミナルを開けませんでした。", line: nil),
+                    ])
+                }
+            }
+        }
+
+        private func handleRenameItem(path: String, newName: String) {
+            guard let webView else { return }
+            appModel.workspaceManager.ensureWorkspace(window: webView.window) { [weak self] rootURL in
+                guard let self else { return }
+                guard let rootURL else {
+                    self.sendIssues(count: 1, summary: "ワークスペースが選択されていません。", status: "error", issues: [
+                        BuildIssue(severity: .error, message: "ワークスペースが選択されていません。", line: nil),
+                    ])
+                    return
+                }
+                self.updateWorkspaceIfNeeded(rootURL: rootURL)
+                DispatchQueue.global(qos: .userInitiated).async {
+                    let itemURL = self.resolveItemURL(rootURL: rootURL, relativePath: path)
+                    var isDirectory: ObjCBool = false
+                    if let itemURL {
+                        _ = FileManager.default.fileExists(atPath: itemURL.path, isDirectory: &isDirectory)
+                    }
+                    let result = self.appModel.workspaceManager.renameItem(
+                        rootURL: rootURL,
+                        relativePath: path,
+                        newName: newName
+                    )
+                    DispatchQueue.main.async {
+                        switch result {
+                        case .success(let newPath):
+                            self.sendRenameResult(oldPath: path, newPath: newPath, isDirectory: isDirectory.boolValue)
+                            self.sendWorkspace(rootURL: rootURL)
+                            self.sendIssues(count: 0, summary: "名前を変更しました。", status: "success", issues: [])
+                            if path.lowercased().hasSuffix(".tex")
+                                || path.lowercased().hasSuffix(".bib")
+                                || newPath.lowercased().hasSuffix(".tex")
+                                || newPath.lowercased().hasSuffix(".bib")
+                                || isDirectory.boolValue {
+                                self.requestIndex(rootURL: rootURL)
+                            }
+                        case .failure(let error):
+                            let message = error.localizedDescription
+                            self.sendIssues(count: 1, summary: message, status: "error", issues: [
+                                BuildIssue(severity: .error, message: message, line: nil),
+                            ])
+                        }
+                    }
+                }
+            }
+        }
+
+        private func handleDeleteItem(path: String) {
+            guard let webView else { return }
+            appModel.workspaceManager.ensureWorkspace(window: webView.window) { [weak self] rootURL in
+                guard let self else { return }
+                guard let rootURL else {
+                    self.sendIssues(count: 1, summary: "ワークスペースが選択されていません。", status: "error", issues: [
+                        BuildIssue(severity: .error, message: "ワークスペースが選択されていません。", line: nil),
+                    ])
+                    return
+                }
+                self.updateWorkspaceIfNeeded(rootURL: rootURL)
+                DispatchQueue.global(qos: .userInitiated).async {
+                    let result = self.appModel.workspaceManager.deleteItem(
+                        rootURL: rootURL,
+                        relativePath: path
+                    )
+                    DispatchQueue.main.async {
+                        switch result {
+                        case .success:
+                            self.sendWorkspace(rootURL: rootURL)
+                            self.sendIssues(count: 0, summary: "削除しました。", status: "success", issues: [])
+                            if path.lowercased().hasSuffix(".tex")
+                                || path.lowercased().hasSuffix(".bib") {
+                                self.requestIndex(rootURL: rootURL)
+                            }
+                        case .failure(let error):
+                            let message = error.localizedDescription
+                            self.sendIssues(count: 1, summary: message, status: "error", issues: [
+                                BuildIssue(severity: .error, message: message, line: nil),
+                            ])
+                        }
+                    }
+                }
+            }
+        }
+
+        private func handleMoveItem(path: String, destination: String) {
+            guard let webView else { return }
+            appModel.workspaceManager.ensureWorkspace(window: webView.window) { [weak self] rootURL in
+                guard let self else { return }
+                guard let rootURL else {
+                    self.sendIssues(count: 1, summary: "ワークスペースが選択されていません。", status: "error", issues: [
+                        BuildIssue(severity: .error, message: "ワークスペースが選択されていません。", line: nil),
+                    ])
+                    return
+                }
+                self.updateWorkspaceIfNeeded(rootURL: rootURL)
+                let sourceURL = self.resolveItemURL(rootURL: rootURL, relativePath: path)
+                var isDirectory: ObjCBool = false
+                if let sourceURL {
+                    _ = FileManager.default.fileExists(atPath: sourceURL.path, isDirectory: &isDirectory)
+                }
+                DispatchQueue.global(qos: .userInitiated).async {
+                    let result = self.appModel.workspaceManager.moveItem(
+                        rootURL: rootURL,
+                        relativePath: path,
+                        destinationFolder: destination
+                    )
+                    DispatchQueue.main.async {
+                        switch result {
+                        case .success(let newPath):
+                            self.sendRenameResult(oldPath: path, newPath: newPath, isDirectory: isDirectory.boolValue)
+                            self.sendWorkspace(rootURL: rootURL)
+                            self.sendIssues(count: 0, summary: "移動しました。", status: "success", issues: [])
+                            if path.lowercased().hasSuffix(".tex")
+                                || path.lowercased().hasSuffix(".bib")
+                                || newPath.lowercased().hasSuffix(".tex")
+                                || newPath.lowercased().hasSuffix(".bib")
+                                || isDirectory.boolValue {
+                                self.requestIndex(rootURL: rootURL)
+                            }
+                        case .failure(let error):
+                            let message = error.localizedDescription
+                            self.sendIssues(count: 1, summary: message, status: "error", issues: [
+                                BuildIssue(severity: .error, message: message, line: nil),
+                            ])
+                        }
+                    }
+                }
+            }
+        }
+
+        private func handleCopyItem(path: String, destination: String) {
+            guard let webView else { return }
+            appModel.workspaceManager.ensureWorkspace(window: webView.window) { [weak self] rootURL in
+                guard let self else { return }
+                guard let rootURL else {
+                    self.sendIssues(count: 1, summary: "ワークスペースが選択されていません。", status: "error", issues: [
+                        BuildIssue(severity: .error, message: "ワークスペースが選択されていません。", line: nil),
+                    ])
+                    return
+                }
+                self.updateWorkspaceIfNeeded(rootURL: rootURL)
+                DispatchQueue.global(qos: .userInitiated).async {
+                    let result = self.appModel.workspaceManager.copyItem(
+                        rootURL: rootURL,
+                        relativePath: path,
+                        destinationFolder: destination
+                    )
+                    DispatchQueue.main.async {
+                        switch result {
+                        case .success(let newPath):
+                            self.sendWorkspace(rootURL: rootURL)
+                            self.sendIssues(count: 0, summary: "コピーしました。", status: "success", issues: [])
+                            if path.lowercased().hasSuffix(".tex")
+                                || path.lowercased().hasSuffix(".bib")
+                                || newPath.lowercased().hasSuffix(".tex")
+                                || newPath.lowercased().hasSuffix(".bib") {
+                                self.requestIndex(rootURL: rootURL)
+                            }
+                        case .failure(let error):
+                            let message = error.localizedDescription
+                            self.sendIssues(count: 1, summary: message, status: "error", issues: [
+                                BuildIssue(severity: .error, message: message, line: nil),
+                            ])
+                        }
+                    }
+                }
+            }
+        }
+
+        private func handleUndoFileOperation() {
+            guard let webView else { return }
+            appModel.workspaceManager.ensureWorkspace(window: webView.window) { [weak self] rootURL in
+                guard let self else { return }
+                guard let rootURL else {
+                    self.sendIssues(count: 1, summary: "ワークスペースが選択されていません。", status: "error", issues: [
+                        BuildIssue(severity: .error, message: "ワークスペースが選択されていません。", line: nil),
+                    ])
+                    return
+                }
+                self.updateWorkspaceIfNeeded(rootURL: rootURL)
+                DispatchQueue.global(qos: .userInitiated).async {
+                    let result = self.appModel.workspaceManager.undoLastOperation(rootURL: rootURL)
+                    DispatchQueue.main.async {
+                        switch result {
+                        case .success(let operation):
+                            if let operation {
+                                if operation.kind == .move,
+                                   let oldPath = operation.toPath {
+                                    self.sendRenameResult(
+                                        oldPath: oldPath,
+                                        newPath: operation.fromPath,
+                                        isDirectory: operation.isDirectory
+                                    )
+                                }
+                                self.sendWorkspace(rootURL: rootURL)
+                                self.sendIssues(count: 0, summary: "操作を戻しました。", status: "success", issues: [])
+                                if operation.affectsIndex {
+                                    self.requestIndex(rootURL: rootURL)
+                                }
+                            } else {
+                                self.sendIssues(count: 0, summary: "戻す操作はありません。", status: "info", issues: [])
+                            }
+                        case .failure(let error):
+                            let message = error.localizedDescription
+                            self.sendIssues(count: 1, summary: message, status: "error", issues: [
+                                BuildIssue(severity: .error, message: message, line: nil),
+                            ])
+                        }
+                    }
+                }
+            }
+        }
+
+        private func handleSetRoot(path: String) {
+            guard let rootURL = appModel.workspaceManager.rootURL else {
+                sendIssues(count: 1, summary: "ワークスペースが選択されていません。", status: "error", issues: [
+                    BuildIssue(severity: .error, message: "ワークスペースが選択されていません。", line: nil),
+                ])
+                return
+            }
+            let result = appModel.workspaceManager.setRootFile(rootURL: rootURL, path: path)
+            switch result {
+            case .success:
+                sendWorkspace(rootURL: rootURL)
+                sendIssues(count: 0, summary: "メインTeXを更新しました。", status: "success", issues: [])
+            case .failure(let error):
+                let message = error.localizedDescription
+                sendIssues(count: 1, summary: message, status: "error", issues: [
+                    BuildIssue(severity: .error, message: message, line: nil),
+                ])
+            }
+        }
+
+        private func handleDetectRoot() {
+            guard let rootURL = appModel.workspaceManager.rootURL else {
+                sendIssues(count: 1, summary: "ワークスペースが選択されていません。", status: "error", issues: [
+                    BuildIssue(severity: .error, message: "ワークスペースが選択されていません。", line: nil),
+                ])
+                return
+            }
+            let result = appModel.workspaceManager.clearRootOverride(rootURL: rootURL)
+            switch result {
+            case .success:
+                sendWorkspace(rootURL: rootURL)
+                sendIssues(count: 0, summary: "メインTeXを自動検出しました。", status: "success", issues: [])
+            case .failure(let error):
+                let message = error.localizedDescription
+                sendIssues(count: 1, summary: message, status: "error", issues: [
+                    BuildIssue(severity: .error, message: message, line: nil),
+                ])
+            }
+        }
+
         private func handleIndexRequest() {
             guard let rootURL = appModel.workspaceManager.rootURL else { return }
             requestIndex(rootURL: rootURL)
@@ -426,25 +779,38 @@ struct WebView: NSViewRepresentable {
         private func sendWorkspace(rootURL: URL) {
             DispatchQueue.global(qos: .userInitiated).async {
                 let result = self.appModel.workspaceManager.listFiles(rootURL: rootURL)
+                let folderResult = self.appModel.workspaceManager.listFolders(rootURL: rootURL)
+                let rootInfo = self.appModel.workspaceManager.rootInfo(rootURL: rootURL)
                 DispatchQueue.main.async {
+                    var files: [String] = []
+                    var folders: [String] = []
+                    var errorMessage: String? = nil
                     switch result {
-                    case .success(let files):
-                        let payload: [String: Any] = [
-                            "rootName": rootURL.lastPathComponent,
-                            "rootPath": rootURL.path,
-                            "files": files,
-                        ]
-                        self.callJavaScript(function: "window.tex180UpdateWorkspace", payload: payload)
+                    case .success(let fileList):
+                        files = fileList
                     case .failure(let error):
-                        let message = error.localizedDescription
-                        let payload: [String: Any] = [
-                            "rootName": rootURL.lastPathComponent,
-                            "rootPath": rootURL.path,
-                            "files": [],
-                        ]
-                        self.callJavaScript(function: "window.tex180UpdateWorkspace", payload: payload)
-                        self.sendIssues(count: 1, summary: message, status: "error", issues: [
-                            BuildIssue(severity: .error, message: message, line: nil),
+                        errorMessage = error.localizedDescription
+                    }
+                    switch folderResult {
+                    case .success(let list):
+                        folders = list
+                    case .failure(let error):
+                        if errorMessage == nil {
+                            errorMessage = error.localizedDescription
+                        }
+                    }
+                    let payload: [String: Any] = [
+                        "rootName": rootURL.lastPathComponent,
+                        "rootPath": rootURL.path,
+                        "files": files,
+                        "folders": folders,
+                        "rootFile": rootInfo?.path ?? "",
+                        "rootSource": rootInfo?.source.rawValue ?? "",
+                    ]
+                    self.callJavaScript(function: "window.tex180UpdateWorkspace", payload: payload)
+                    if let errorMessage {
+                        self.sendIssues(count: 1, summary: errorMessage, status: "error", issues: [
+                            BuildIssue(severity: .error, message: errorMessage, line: nil),
                         ])
                     }
                 }
@@ -471,6 +837,25 @@ struct WebView: NSViewRepresentable {
             callJavaScript(function: "window.tex180OpenFileResult", payload: payload)
         }
 
+        private func sendRenameResult(oldPath: String, newPath: String, isDirectory: Bool) {
+            let payload: [String: Any] = [
+                "oldPath": oldPath,
+                "newPath": newPath,
+                "isDirectory": isDirectory,
+            ]
+            callJavaScript(function: "window.tex180RenameResult", payload: payload)
+        }
+
+        private func resolveItemURL(rootURL: URL, relativePath: String) -> URL? {
+            let url = rootURL.appendingPathComponent(relativePath)
+            let rootPath = rootURL.standardizedFileURL.path
+            let filePath = url.standardizedFileURL.path
+            guard filePath == rootPath || filePath.hasPrefix(rootPath + "/") else {
+                return nil
+            }
+            return url
+        }
+
         private func sendSaveResult(path: String, ok: Bool, message: String?) {
             var payload: [String: Any] = ["path": path, "ok": ok]
             if let message {
@@ -484,6 +869,10 @@ struct WebView: NSViewRepresentable {
                 "labels": encodeIndexSymbols(snapshot.labels),
                 "references": encodeIndexSymbols(snapshot.references),
                 "citations": encodeIndexSymbols(snapshot.citations),
+                "sections": encodeSections(snapshot.sections),
+                "figures": encodeIndexSymbols(snapshot.figures),
+                "tables": encodeIndexSymbols(snapshot.tables),
+                "todos": encodeIndexSymbols(snapshot.todos),
             ]
             callJavaScript(function: "window.tex180UpdateIndex", payload: payload)
         }
@@ -546,6 +935,17 @@ struct WebView: NSViewRepresentable {
                 return []
             }
             return array
+        }
+
+        private func encodeSections(_ sections: [SectionSymbol]) -> [[String: Any]] {
+            sections.map { section in
+                [
+                    "title": section.title,
+                    "path": section.path,
+                    "line": section.line,
+                    "level": section.level,
+                ]
+            }
         }
 
         private func encodeSearchResults(_ results: [SearchResult]) -> [[String: Any]] {

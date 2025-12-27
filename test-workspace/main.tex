@@ -1,0 +1,22 @@
+\documentclass{article}
+\usepackage{graphicx}
+\newcommand{\todo}[1]{\textbf{TODO: #1}}
+
+\title{tex180 Test Document}
+\author{Test Author}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This document exists to test outline parsing, references, citations, build, and UI workflows.
+\end{abstract}
+
+\input{sections/intro}
+\input{sections/methods}
+\input{sections/results}
+
+\bibliographystyle{plain}
+\bibliography{refs}
+\end{document}

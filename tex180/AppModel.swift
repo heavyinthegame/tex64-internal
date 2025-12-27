@@ -30,8 +30,12 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func createNewProject(window: NSWindow?, completion: @escaping (String?) -> Void) {
-        workspaceManager.createNewProject(window: window) { [weak self] result in
+    func createNewProject(
+        window: NSWindow?,
+        template: WorkspaceManager.ProjectTemplate,
+        completion: @escaping (String?) -> Void
+    ) {
+        workspaceManager.createNewProject(window: window, template: template) { [weak self] result in
             switch result {
             case .success(let url):
                 self?.workspaceURL = url

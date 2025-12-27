@@ -57,8 +57,8 @@ final class BuildService {
             let issue = BuildIssue(severity: .error, message: "\(mainFileName) が見つかりません。", line: nil)
             return .failure(summary: issue.message, issues: [issue])
         }
-        let pdfURL = rootURL
-            .appendingPathComponent((mainFileName as NSString).deletingPathExtension)
+        let pdfURL = mainFileURL
+            .deletingPathExtension()
             .appendingPathExtension("pdf")
 
         let output: String
@@ -101,6 +101,20 @@ final class BuildService {
         ]
         process.currentDirectoryURL = rootURL
         process.standardInput = FileHandle.nullDevice
+        var environment = ProcessInfo.processInfo.environment
+        let existingPath = environment["PATH"] ?? ""
+        let searchPaths = [
+            "/Library/TeX/texbin",
+            "/usr/local/bin",
+            "/opt/homebrew/bin",
+            "/usr/bin",
+            "/bin",
+            "/usr/sbin",
+            "/sbin",
+            existingPath,
+        ]
+        environment["PATH"] = searchPaths.joined(separator: ":")
+        process.environment = environment
 
         let outputPipe = Pipe()
         process.standardOutput = outputPipe

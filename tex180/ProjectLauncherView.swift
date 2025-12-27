@@ -12,6 +12,7 @@ struct ProjectLauncherView: View {
     @ObservedObject var appModel: AppModel
     @State private var statusMessage: String?
     @State private var isBusy = false
+    @State private var selectedTemplate: WorkspaceManager.ProjectTemplate = .paper
 
     var body: some View {
         ZStack {
@@ -38,13 +39,25 @@ struct ProjectLauncherView: View {
                 Divider()
                     .overlay(Color.white.opacity(0.08))
 
+                HStack(spacing: 12) {
+                    Text("テンプレート")
+                        .font(.custom("Hiragino Sans", size: 12))
+                        .foregroundStyle(Color.white.opacity(0.7))
+                    Picker("", selection: $selectedTemplate) {
+                        Text("論文").tag(WorkspaceManager.ProjectTemplate.paper)
+                        Text("講義ノート").tag(WorkspaceManager.ProjectTemplate.lecture)
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: 240)
+                }
+
                 VStack(spacing: 12) {
                     Button {
                         createNewProject()
                     } label: {
                         LauncherButtonLabel(
                             title: "新規プロジェクトを作成",
-                            detail: "main.tex と .tex180 を作成します",
+                            detail: "テンプレートから main.tex を作成します",
                             systemImage: "plus.square.fill"
                         )
                     }
@@ -120,7 +133,7 @@ struct ProjectLauncherView: View {
         guard !isBusy else { return }
         isBusy = true
         statusMessage = nil
-        appModel.createNewProject(window: NSApp.keyWindow) { message in
+        appModel.createNewProject(window: NSApp.keyWindow, template: selectedTemplate) { message in
             isBusy = false
             if let message {
                 statusMessage = message

@@ -1,0 +1,2 @@
+To trigger a build error, paste the next line into main.tex and build:
+\badcommand
