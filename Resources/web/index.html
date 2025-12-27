@@ -8,6 +8,52 @@
     <link rel="stylesheet" href="mathlive/mathlive-static.css">
   </head>
   <body>
+    <div class="launcher" id="launcher" aria-hidden="true">
+      <div class="launcher-grid" aria-hidden="true"></div>
+      <div class="launcher-card" role="dialog" aria-modal="true">
+        <div class="launcher-brand">
+          <div class="launcher-title">tex180</div>
+          <div class="launcher-tagline">LaTeX編集の起点</div>
+        </div>
+        <div class="launcher-note">最初にプロジェクトを選択してください。</div>
+        <div class="launcher-divider"></div>
+        <div class="launcher-template">
+          <span class="launcher-label">テンプレート</span>
+          <div class="launcher-toggle" role="tablist" aria-label="テンプレート">
+            <button
+              class="launcher-template-button is-active"
+              type="button"
+              data-template="paper"
+              aria-selected="true"
+            >
+              論文
+            </button>
+            <button
+              class="launcher-template-button"
+              type="button"
+              data-template="lecture"
+              aria-selected="false"
+            >
+              講義ノート
+            </button>
+          </div>
+        </div>
+        <div class="launcher-actions">
+          <button class="launcher-action primary" id="launcher-create" type="button">
+            <span class="launcher-action-title">新規プロジェクトを作成</span>
+            <span class="launcher-action-desc">テンプレートから main.tex を作成します</span>
+          </button>
+          <button class="launcher-action" id="launcher-open" type="button">
+            <span class="launcher-action-title">既存のフォルダを開く</span>
+            <span class="launcher-action-desc">既存のLaTeXフォルダを開きます</span>
+          </button>
+        </div>
+        <div class="launcher-status" id="launcher-status" aria-live="polite">
+          <span class="launcher-status-spinner" id="launcher-status-spinner" aria-hidden="true"></span>
+          <span class="launcher-status-text" id="launcher-status-text"></span>
+        </div>
+      </div>
+    </div>
     <div class="app">
       <header class="topbar">
         <div class="brand">
@@ -136,7 +182,7 @@
             </div>
             <div class="panel-body">
               <div class="workspace-label" id="workspace-label">ワークスペース未選択</div>
-              <div class="file-tree" id="file-tree"></div>
+              <div class="file-tree" id="file-tree" tabindex="0"></div>
               <div class="panel-actions">
                 <button class="panel-button ghost" id="save-file-button" type="button">保存</button>
               </div>

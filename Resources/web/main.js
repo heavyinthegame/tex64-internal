@@ -1,5 +1,5 @@
 window.addEventListener("DOMContentLoaded", () => {
-    var _a;
+    var _a, _b;
     requestAnimationFrame(() => {
         document.body.classList.add("is-ready");
     });
@@ -77,6 +77,13 @@ window.addEventListener("DOMContentLoaded", () => {
     const issuesClose = document.getElementById("issues-close");
     const breadcrumbs = document.getElementById("breadcrumbs");
     const editorTabs = document.getElementById("editor-tabs");
+    const launcher = document.getElementById("launcher");
+    const launcherCreateButton = document.getElementById("launcher-create");
+    const launcherOpenButton = document.getElementById("launcher-open");
+    const launcherStatus = document.getElementById("launcher-status");
+    const launcherStatusText = document.getElementById("launcher-status-text");
+    const launcherStatusSpinner = document.getElementById("launcher-status-spinner");
+    const launcherTemplateButtons = Array.from(document.querySelectorAll(".launcher-template-button"));
     const sidebarPanels = Array.from(document.querySelectorAll(".panel[data-panel]"));
     const sidebar = document.querySelector(".sidebar");
     const sidebarPanel = document.querySelector(".sidebar-panel");
@@ -132,6 +139,50 @@ window.addEventListener("DOMContentLoaded", () => {
             element.textContent = text;
         }
     };
+    const setLauncherVisible = (isVisible) => {
+        if (launcher instanceof HTMLElement) {
+            launcher.classList.toggle("is-visible", isVisible);
+            launcher.setAttribute("aria-hidden", isVisible ? "false" : "true");
+        }
+        document.body.classList.toggle("has-launcher", isVisible);
+    };
+    const updateLauncherTemplate = (template) => {
+        launcherTemplate = template;
+        launcherTemplateButtons.forEach((button) => {
+            const isActive = button.dataset.template === template;
+            button.classList.toggle("is-active", isActive);
+            button.setAttribute("aria-selected", isActive ? "true" : "false");
+        });
+    };
+    const setLauncherStatus = (payload) => {
+        var _a;
+        if (typeof payload.isBusy === "boolean") {
+            launcherBusy = payload.isBusy;
+        }
+        if (payload.message !== undefined) {
+            launcherMessage = (_a = payload.message) !== null && _a !== void 0 ? _a : null;
+        }
+        if (launcherCreateButton instanceof HTMLButtonElement) {
+            launcherCreateButton.disabled = launcherBusy;
+        }
+        if (launcherOpenButton instanceof HTMLButtonElement) {
+            launcherOpenButton.disabled = launcherBusy;
+        }
+        if (!(launcherStatus instanceof HTMLElement) || !(launcherStatusText instanceof HTMLElement)) {
+            return;
+        }
+        if (!launcherBusy && !launcherMessage) {
+            launcherStatus.classList.remove("is-visible", "is-busy");
+            launcherStatusText.textContent = "";
+            return;
+        }
+        launcherStatus.classList.add("is-visible");
+        launcherStatus.classList.toggle("is-busy", launcherBusy);
+        launcherStatusText.textContent = launcherBusy ? "準備中..." : launcherMessage !== null && launcherMessage !== void 0 ? launcherMessage : "";
+        if (launcherStatusSpinner instanceof HTMLElement) {
+            launcherStatusSpinner.hidden = !launcherBusy;
+        }
+    };
     const bridgeWindow = window;
     const setIssuesStatus = (status) => {
         if (issuesBar instanceof HTMLElement) {
@@ -156,6 +207,9 @@ window.addEventListener("DOMContentLoaded", () => {
     let workspaceRootKey = null;
     let rootFilePath = null;
     let rootSource = "auto";
+    let launcherTemplate = "paper";
+    let launcherBusy = false;
+    let launcherMessage = null;
     let openFolders = new Set();
     let openStateLoaded = false;
     let currentFilePath = null;
@@ -169,6 +223,7 @@ window.addEventListener("DOMContentLoaded", () => {
     let activeBlockType = "math";
     let blockPreviewActive = false;
     let activeBlockEditId = null;
+    let activeBlockOriginalSnippet = null;
     let activeBlockRange = null;
     let pendingBlockEdit = null;
     let autoBuildEnabled = false;
@@ -494,6 +549,72 @@ window.addEventListener("DOMContentLoaded", () => {
         blockMathInput.replaceWith(mathfield);
         blockMathInput = mathfield;
     };
+    const buildLineDiff = (beforeLines, afterLines) => {
+        const rows = beforeLines.length;
+        const cols = afterLines.length;
+        const table = Array.from({ length: rows + 1 }, () => Array(cols + 1).fill(0));
+        for (let i = 1; i <= rows; i += 1) {
+            for (let j = 1; j <= cols; j += 1) {
+                if (beforeLines[i - 1] === afterLines[j - 1]) {
+                    table[i][j] = table[i - 1][j - 1] + 1;
+                }
+                else {
+                    table[i][j] = Math.max(table[i - 1][j], table[i][j - 1]);
+                }
+            }
+        }
+        const diff = [];
+        let i = rows;
+        let j = cols;
+        while (i > 0 && j > 0) {
+            if (beforeLines[i - 1] === afterLines[j - 1]) {
+                diff.push({ type: "same", line: beforeLines[i - 1] });
+                i -= 1;
+                j -= 1;
+            }
+            else if (table[i - 1][j] >= table[i][j - 1]) {
+                diff.push({ type: "del", line: beforeLines[i - 1] });
+                i -= 1;
+            }
+            else {
+                diff.push({ type: "add", line: afterLines[j - 1] });
+                j -= 1;
+            }
+        }
+        while (i > 0) {
+            diff.push({ type: "del", line: beforeLines[i - 1] });
+            i -= 1;
+        }
+        while (j > 0) {
+            diff.push({ type: "add", line: afterLines[j - 1] });
+            j -= 1;
+        }
+        return diff.reverse();
+    };
+    const buildDiffPreview = (before, after) => {
+        const beforeText = before.trimEnd();
+        const afterText = after.trimEnd();
+        if (beforeText === afterText) {
+            return "変更なし";
+        }
+        const beforeLines = beforeText.length ? beforeText.split(/\r?\n/) : [""];
+        const afterLines = afterText.length ? afterText.split(/\r?\n/) : [""];
+        const diffLines = buildLineDiff(beforeLines, afterLines);
+        const header = "差分（-削除 / +追加）";
+        const body = diffLines
+            .map((entry) => {
+            const prefix = entry.type === "add" ? "+" : entry.type === "del" ? "-" : " ";
+            return `${prefix} ${entry.line}`;
+        })
+            .join("\n");
+        return `${header}\n${body}`;
+    };
+    const buildBlockPreviewSnippet = (snippet) => {
+        if (!activeBlockEditId || !activeBlockOriginalSnippet) {
+            return snippet;
+        }
+        return buildDiffPreview(activeBlockOriginalSnippet, snippet);
+    };
     const buildMathSnippet = (formula) => {
         const trimmed = formula.trim();
         if (!trimmed) {
@@ -557,12 +678,13 @@ window.addEventListener("DOMContentLoaded", () => {
             setInsertPreviewText("");
             return;
         }
-        setInsertPreviewText(draft.snippet);
+        setInsertPreviewText(buildBlockPreviewSnippet(draft.snippet));
     };
     const resetBlockSession = () => {
         blockPreviewActive = false;
         activeBlockEditId = null;
         activeBlockRange = null;
+        activeBlockOriginalSnippet = null;
         pendingBlockEdit = null;
         clearInsertPreview();
         setText(blockTarget, "挿入先: 行 -");
@@ -644,6 +766,7 @@ window.addEventListener("DOMContentLoaded", () => {
     const startBlockEdit = (block) => {
         var _a;
         activeBlockEditId = block.id;
+        activeBlockOriginalSnippet = block.snippet;
         if (block.type === "math") {
             setMathInputValue((_a = block.content.formula) !== null && _a !== void 0 ? _a : "");
         }
@@ -982,6 +1105,9 @@ window.addEventListener("DOMContentLoaded", () => {
         treeHasFocus = value;
         if (fileTree instanceof HTMLElement) {
             fileTree.classList.toggle("is-focused", value);
+            if (value) {
+                fileTree.focus({ preventScroll: true });
+            }
         }
     };
     const scheduleAfterComposition = (action) => {
@@ -1353,7 +1479,9 @@ window.addEventListener("DOMContentLoaded", () => {
                 };
                 summary.addEventListener("mousedown", (event) => {
                     // Prevent focus stealing from editor during IME composition
-                    event.preventDefault();
+                    if (isComposing) {
+                        event.preventDefault();
+                    }
                 });
                 summary.addEventListener("click", (event) => {
                     event.preventDefault();
@@ -1972,7 +2100,7 @@ window.addEventListener("DOMContentLoaded", () => {
         postToNative({ type: "revealInFinder", path });
     };
     const requestDeleteItem = (path, kind) => {
-        // TODO: re-enable confirm dialogs after fixing WKWebView issue
+        // TODO: re-enable confirm dialogs after fixing host input issue
         postToNative({ type: "deleteItem", path });
     };
     const requestCopyItem = (path, destination) => {
@@ -2092,9 +2220,9 @@ window.addEventListener("DOMContentLoaded", () => {
         }
     };
     const postToNative = (payload, silent = false) => {
-        var _a, _b;
-        const handler = (_b = (_a = bridgeWindow.webkit) === null || _a === void 0 ? void 0 : _a.messageHandlers) === null || _b === void 0 ? void 0 : _b.tex180;
-        if (!handler) {
+        var _a, _b, _c;
+        const handler = (_a = bridgeWindow.tex180Bridge) !== null && _a !== void 0 ? _a : (_c = (_b = bridgeWindow.webkit) === null || _b === void 0 ? void 0 : _b.messageHandlers) === null || _c === void 0 ? void 0 : _c.tex180;
+        if (!handler || typeof handler.postMessage !== "function") {
             if (!silent) {
                 updateIssues(1, "ネイティブ連携が利用できません。", "error", [
                     { severity: "error", message: "ネイティブ連携が利用できません。" },
@@ -2119,6 +2247,13 @@ window.addEventListener("DOMContentLoaded", () => {
             updateIssues(0, "ビルドを開始します。", "info", []);
         }
     };
+    const handleLauncherStatus = (payload) => {
+        var _a;
+        setLauncherStatus({
+            isBusy: typeof payload.isBusy === "boolean" ? payload.isBusy : undefined,
+            message: (_a = payload.message) !== null && _a !== void 0 ? _a : null,
+        });
+    };
     const handleWorkspaceUpdate = (payload) => {
         var _a;
         const previousRoot = workspaceRootKey;
@@ -2127,6 +2262,10 @@ window.addEventListener("DOMContentLoaded", () => {
         workspaceRootKey = payload.rootPath;
         setWorkspaceLabel(payload.rootName);
         setText(settingsWorkspace, payload.rootPath);
+        if (payload.rootPath) {
+            setLauncherVisible(false);
+            setLauncherStatus({ isBusy: false, message: null });
+        }
         rootFilePath = ((_a = payload.rootFile) === null || _a === void 0 ? void 0 : _a.trim()) ? payload.rootFile : null;
         rootSource =
             payload.rootSource === "manual" || payload.rootSource === "auto"
@@ -2409,6 +2548,11 @@ window.addEventListener("DOMContentLoaded", () => {
     renderGitStatus();
     renderRootSelector();
     updateIssues(0, "ビルド結果はここに要約します。", "info", []);
+    updateLauncherTemplate(launcherTemplate);
+    if (!workspaceRootKey) {
+        setLauncherVisible(true);
+        setLauncherStatus({ isBusy: false, message: null });
+    }
     postToNative({ type: "ready" }, true);
     if (autoBuildButton instanceof HTMLButtonElement) {
         updateAutoBuildUI();
@@ -2418,6 +2562,30 @@ window.addEventListener("DOMContentLoaded", () => {
             setActiveTab(normalizeTabKey(tab.dataset.tab));
         });
     });
+    launcherTemplateButtons.forEach((button) => {
+        button.addEventListener("click", () => {
+            const template = button.dataset.template === "lecture" ? "lecture" : "paper";
+            updateLauncherTemplate(template);
+        });
+    });
+    if (launcherCreateButton instanceof HTMLButtonElement) {
+        launcherCreateButton.addEventListener("click", () => {
+            if (launcherBusy) {
+                return;
+            }
+            setLauncherStatus({ isBusy: true, message: null });
+            postToNative({ type: "createProject", template: launcherTemplate });
+        });
+    }
+    if (launcherOpenButton instanceof HTMLButtonElement) {
+        launcherOpenButton.addEventListener("click", () => {
+            if (launcherBusy) {
+                return;
+            }
+            setLauncherStatus({ isBusy: true, message: null });
+            postToNative({ type: "openWorkspace" });
+        });
+    }
     const editorHost = document.getElementById("editor");
     const fallback = document.getElementById("editor-fallback");
     if (editorHost instanceof HTMLElement) {
@@ -2593,7 +2761,7 @@ window.addEventListener("DOMContentLoaded", () => {
         setText(blockTarget, `${currentFilePath} · 行 ${quickInsertTarget.lineNumber}`);
         applyQuickInsertDecorations();
         ensureQuickInsertWidget();
-        setInsertPreviewText(snippet);
+        setInsertPreviewText(buildBlockPreviewSnippet(snippet));
         blockPreviewActive = true;
     };
     const applyBlockInsert = () => {
@@ -3034,9 +3202,9 @@ window.addEventListener("DOMContentLoaded", () => {
     window.addEventListener("keydown", (event) => {
         const targetElement = event.target;
         const isTreeShortcutTarget = treeHasFocus &&
-            fileTree instanceof HTMLElement &&
             !!targetElement &&
-            fileTree.contains(targetElement);
+            ((fileTree instanceof HTMLElement && fileTree.contains(targetElement)) ||
+                (contextMenu instanceof HTMLElement && contextMenu.contains(targetElement)));
         if (event.metaKey && isTreeShortcutTarget) {
             const key = event.key.toLowerCase();
             if ((key === "c" || key === "x") && selectedTreePath && selectedTreeType) {
@@ -3153,6 +3321,52 @@ window.addEventListener("DOMContentLoaded", () => {
     bridgeWindow.tex180RenameResult = (payload) => {
         handleRenameResult(payload);
     };
+    const handleBridgeMessage = (message) => {
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
+        if (!(message === null || message === void 0 ? void 0 : message.type)) {
+            return;
+        }
+        switch (message.type) {
+            case "setBuildState":
+                (_a = bridgeWindow.tex180SetBuildState) === null || _a === void 0 ? void 0 : _a.call(bridgeWindow, message.payload);
+                break;
+            case "updateIssues":
+                (_b = bridgeWindow.tex180UpdateIssues) === null || _b === void 0 ? void 0 : _b.call(bridgeWindow, message.payload);
+                break;
+            case "updateWorkspace":
+                (_c = bridgeWindow.tex180UpdateWorkspace) === null || _c === void 0 ? void 0 : _c.call(bridgeWindow, message.payload);
+                break;
+            case "updateIndex":
+                (_d = bridgeWindow.tex180UpdateIndex) === null || _d === void 0 ? void 0 : _d.call(bridgeWindow, message.payload);
+                break;
+            case "updateBlocks":
+                (_e = bridgeWindow.tex180UpdateBlocks) === null || _e === void 0 ? void 0 : _e.call(bridgeWindow, message.payload);
+                break;
+            case "updateSearch":
+                (_f = bridgeWindow.tex180UpdateSearch) === null || _f === void 0 ? void 0 : _f.call(bridgeWindow, message.payload);
+                break;
+            case "updateGit":
+                (_g = bridgeWindow.tex180UpdateGit) === null || _g === void 0 ? void 0 : _g.call(bridgeWindow, message.payload);
+                break;
+            case "openFileResult":
+                (_h = bridgeWindow.tex180OpenFileResult) === null || _h === void 0 ? void 0 : _h.call(bridgeWindow, message.payload);
+                break;
+            case "saveResult":
+                (_j = bridgeWindow.tex180SaveResult) === null || _j === void 0 ? void 0 : _j.call(bridgeWindow, message.payload);
+                break;
+            case "renameResult":
+                (_k = bridgeWindow.tex180RenameResult) === null || _k === void 0 ? void 0 : _k.call(bridgeWindow, message.payload);
+                break;
+            case "launcherStatus":
+                handleLauncherStatus(message.payload);
+                break;
+            default:
+                break;
+        }
+    };
+    if ((_b = bridgeWindow.tex180Bridge) === null || _b === void 0 ? void 0 : _b.onMessage) {
+        bridgeWindow.tex180Bridge.onMessage(handleBridgeMessage);
+    }
     if (!(editorHost instanceof HTMLElement)) {
         updateFallback("エディタ領域が見つかりません。");
         return;

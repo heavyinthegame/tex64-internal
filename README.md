@@ -1,10 +1,11 @@
 # tex180
 
-macOS向けTeXエディタ（開発中）。
+ElectronベースのTeXエディタ（開発中）。
 
 ## 開発
-1. Xcodeで`tex180.xcodeproj`を開いて実行
-2. Web UIを変更したら `npm install`（初回のみ）→ `npm run web:build`
+1. `npm install`（初回のみ）
+2. `npm run web:build`
+3. `npm run electron:dev`
 
 ## 構成
 - `Resources/web`: アプリに同梱されるWeb UI（生成物を含む）

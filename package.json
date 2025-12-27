@@ -3,10 +3,13 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
+    "electron:dev": "electron .",
     "web:build": "tsc -p web-src/tsconfig.json"
   },
   "devDependencies": {
+    "electron": "^31.0.0",
     "typescript": "^5.5.4"
   },
   "dependencies": {

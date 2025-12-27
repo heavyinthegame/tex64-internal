@@ -10,7 +10,7 @@
 - ブロック再編集のために blockID + internal JSON + deps を保持（`.tex180/blocks.json`）。
 - UI構成はVSCode風（左タブ/右エディタ/下Issues/上ビルド）。PDFは別ウィンドウでroot単位に使い回し。
 - Outlineは左タブ＋エディタ上部ミニOutline＋ジャンプ導線。
-- 技術方針はSwift（殻）＋WKWebView（中身TS/Monaco）。
+- 技術方針はElectron（殻）＋Web UI（TS/Monaco）。
 - テーマは中立背景、紫はアクセントのみ。
 - ショートカットは基本のみ（コピー/Undo等）。Command+K系は当面使わない。
 - ノーコードのブロック編集は数式/表から始め、段階的に拡張する。
@@ -18,18 +18,18 @@
 
 ## 初期設計依頼の記録（A〜E + 追加制約）
 ### A) アーキテクチャ設計（tex180全体像）
-- モジュール境界: Swift側（ウィンドウ/メニュー/PDF別窓/ファイル権限/ビルド/Indexer/安定性）、Web側（Monaco/Quick Insert/ゴースト挿入/ブロックUI/差分UI/補完UI）。
+- モジュール境界: Electron/Node側（ウィンドウ/メニュー/PDF別窓/ファイル権限/ビルド/Indexer/安定性）、Web側（Monaco/Quick Insert/ゴースト挿入/ブロックUI/差分UI/補完UI）。
 - データフロー: Editor ↔ Indexer ↔ Build ↔ PDF ↔ Issues。
-- 非同期設計: Index/Buildは非同期でUIをブロックしない。入力はWeb側が唯一の真実で、Swiftは自動書換えをしない。
+- 非同期設計: Index/Buildは非同期でUIをブロックしない。入力はWeb側が唯一の真実で、ホスト側（Electron/Node）は自動書換えをしない。
 - プロジェクト概念: ルートフォルダ単位のワークスペース、複数ファイル管理。
 
 ### B) ディレクトリ/ファイル構成案（初期）
-- Swift: AppShell, WorkspaceManager, BuildService, IndexerService, PDFWindowController, Bridge。
+- Electron/Node: `electron/main.cjs`, `electron/preload.cjs`, `electron/services/*`。
 - Web: `Resources/web/index.html`, `web-src/main.ts`, `editor/monaco.ts`, `ui/sidebar.ts`, `ui/quickInsert.ts`, `ui/issues.ts`, `ui/diffPreview.ts`, `theme.css`。
 - `.tex180/` 管理: `blocks.json`, `settings.json`, `cache/index.json`, `issues.json`。
 
 ### C) マイルストーン計画（DoD付き）
-- Phase 0: WKWebViewがbundleのindex.htmlを表示（DoD: 起動でWeb UIが表示）。
+- Phase 0: Electronが`Resources/web/index.html`を表示（DoD: 起動でWeb UIが表示）。
 - Phase 1: Monaco表示＋基本編集（DoD: 編集/Undo/Redoが動作）。
 - Phase 2: 左サイドバー＋タブ切替＋ミニOutline枠（DoD: UI切替が動作）。
 - Phase 3: Quick Insert（⌘K）→ プレビュー → Accept/Cancel（DoD: 挿入UIの鉄則を満たす）。
@@ -51,7 +51,7 @@
 - 不明瞭な点は必ず質問して確認する。
 
 ### E) 最初の実装タスク
-- SwiftUIにWKWebViewを埋め込み、bundleの`index.html`を読み、表示確認できる状態にする。
+- Electronで`Resources/web/index.html`を読み込み、表示確認できる状態にする。
 
 ### 追加制約
 - 外部クラウド依存なし（完全ローカル）。
@@ -95,7 +95,7 @@
 - 将来のミニOutline/パレットジャンプを想定。
 
 ### 8) 技術構成
-- Swift（ネイティブ殻）＋TypeScript（WebView内）。
+- Electron（殻）＋TypeScript（Renderer）＋Node（サービス）。
 - 編集/ビルドはオフライン前提（AIは将来拡張）。
 
 ### 9) 実装優先順位
@@ -104,7 +104,7 @@
 - その次: cite/ref/label補完、Outline、SyncTeX（必要時）。
 
 ## 各フェーズの実装方針（簡易）
-- Phase 0: WKWebView + バンドルリソース読み込み、失敗時のフォールバックUI。
+- Phase 0: Electronでバンドルの`Resources/web/index.html`を読み込み、失敗時のフォールバックUIを用意する。
 - Phase 1: Monacoをローカル同梱、`file://`向けWorker起動、基本編集のみ。
 - Phase 2: 左タブの選択状態/表示切替、上部ミニOutline枠の動的更新。
 - Phase 3: Quick Insertはターゲット可視化→プレビュー→Accept/Cancelを必須にし、Undo導線をつける。
@@ -115,22 +115,16 @@
 - Phase 8: 署名/サンドボックス/配布の最終調整。
 
 ## 実装詳細（現状）
-### Swift
-- `ContentView` は `Bundle.main.url(forResource: "index", withExtension: "html", subdirectory: "web")` でWeb UIを取得し、見つからない場合は案内を表示する。
-- `WebView` は `WKWebView` を `NSViewRepresentable` で保持し、`WKNavigationDelegate` でロード状態を監視する。
-- `WebViewLoadState` / `WebViewFailure` でロード成功・失敗・プロセス終了を表現し、失敗時は再読み込みUIを表示する。
-- SwiftUIの更新中に状態を変えないため、WebView状態更新は `DispatchQueue.main.async` で遅延送信する。
-- 再読み込みは `reloadToken` を更新してWebViewを再生成する。
-- `AppModel` に `WorkspaceManager` / `BuildService` / `PDFWindowController` を集約し、WebViewから利用する。
-- `IndexerService` を追加し、`.tex`/`.bib` から `label/ref/cite` を抽出してWebへ送る（非同期）。
-- `BlocksStore` を追加し、`.tex180/blocks.json` の読み書きを行う（必要時のみ作成）。
-- `SearchService` / `GitService` を追加し、検索結果とGitステータスを非同期で取得する。
-- `WorkspaceManager` はNSOpenPanelでプロジェクトフォルダを選択し、ルートURLを保持する。
-- `WorkspaceManager` はメインTeXを自動検出し、設定で手動指定された場合は `.tex180/settings.json` に保存する。
-- `BuildService` は `latexmk` をバックグラウンド実行し、出力を解析してIssuesを生成する（UIはブロックしない）。
-- `WebView` は `tex180` メッセージハンドラでビルド要求を受け、Issues/ビルド状態をWebへ返す。
-- `PDFWindowController` は成功時のみPDFを読み込み、同一ウィンドウを使い回す。
-- `ProjectLauncherView` でテンプレート（論文/講義ノート）を選択して新規プロジェクトを作成する。
+### Electron/Node
+- `electron/main.cjs` がBrowserWindowを生成し、`Resources/web/index.html` を読み込む。
+- `electron/preload.cjs` が `window.tex180Bridge` を公開し、Web側の `postMessage` をIPCへ中継する（`window.webkit.messageHandlers.tex180` は互換用）。
+- `electron/services/workspace.cjs` がワークスペース選択/ファイル操作/メインTeX検出/設定保存を担当する。
+- `electron/services/build.cjs` が `latexmk` をバックグラウンド実行し、Issuesを生成する（UIはブロックしない）。
+- `electron/services/indexer.cjs` が `.tex`/`.bib` から `label/ref/cite` を抽出し、アウトライン/補完/ジャンプに渡す（非同期）。
+- `electron/services/blocks.cjs` が `.tex180/blocks.json` の読み書きを行う（必要時のみ作成）。
+- `electron/services/search.cjs` / `electron/services/git.cjs` が検索結果とGitステータスを非同期で取得する。
+- `electron/services/pdf.cjs` が成功時のみPDFを別ウィンドウで表示し、同一rootの再ビルドで使い回す。
+- テンプレート選択/新規プロジェクト作成はElectronのダイアログで行う。
 
 ### Web
 - `Resources/web/index.html` はVSCode風スケルトン（トップバー/左タブ/エディタ/Issues）とMonacoのホスト要素（`#editor`）を定義する。
@@ -148,7 +142,7 @@
 - Gitタブで `git status --porcelain` の最小表示を行う。
 - 設定タブに自動ビルド切替とワークスペース表示を追加する。
 - 設定タブにメインTeXの自動検出/手動指定UIを追加する。
-- ビルドボタンは `window.webkit.messageHandlers.tex180` に送信し、Issuesバーはネイティブからの結果で更新する。
+- ビルドボタンは `window.tex180Bridge.postMessage` で送信し、Issuesバーはネイティブからの結果で更新する（`window.webkit.messageHandlers.tex180` は互換用）。
 - Issuesバーは成功/失敗/進行中で色味を切り替える（詳細ログは出さない）。
 - Issuesパネルは必要時のみ展開し、エラー/警告の一覧と行番号ジャンプを提供する。
 - サイドバーにエクスプローラーを追加し、フォルダ選択→ファイル一覧→クリックで開く流れを用意する。
@@ -161,7 +155,7 @@
 - ワークスペースを開いた直後にメインTeX（未指定なら最初のTeX）を自動で開く。
 - アプリ起動時に「新規プロジェクト作成 / 既存フォルダを開く」を選択し、エディタ画面ではフォルダ選択ボタンを出さない。
 - 新規プロジェクトは `main.tex` のみ作成し、`.tex180` は必要時に作成する。
-- 大きな変更を行ったら必ず `xcodebuild` でビルド確認を行う。
+- 大きな変更を行ったら必ず `npm run web:build` とElectronの起動確認を行う。
 - Monacoは `monaco-editor@0.55.1` の `min/vs` を `Resources/web/monaco/vs` に同梱し、`loader.js` からAMDロードする（バンドル内では `web/monaco/vs`）。
 - `file://` でも動くよう `MonacoEnvironment.getWorkerUrl` でBlob URLを生成し、Workerを起動する。
 - Monacoの初期設定は `vs-dark` / `automaticLayout` / `minimap: false` / `fontSize: 13` / `lineHeight: 20` など。
@@ -170,9 +164,10 @@
   - ビルドは `package.json` の `web:build` スクリプトで行う。
 
 ### バンドル/リソース
-- `Resources/web` を `Copy Bundle Resources` に追加し、アプリバンドル内では `web` として参照する。
+- `Resources/web` をElectronアプリから `Resources/web/index.html` として読み込む。
 - MathLiveは `Resources/web/mathlive` に同梱し、オフラインで数式入力を提供する。
 
+- 旧Swift版の履歴（Electron移行前の記録）。
 - 2025-12-25: Phase 0はWKWebViewでアプリバンドル内の`web/index.html`を読み込み表示する。
 - 2025-12-25: バンドルリソースが見つからない場合はクラッシュせず案内表示にする。
 - 2025-12-25: Command+K系のショートカットは実装しない。基本ショートカット（コピー/Undo等）のみ。
@@ -267,3 +262,12 @@
 - WebContent[...] Unable to hide query parameters from script (missing data)
 - Error acquiring assertion: RBSServiceErrorDomain (runningboard.assertions.webkit のエンタイトルメント不足)
 - Message from debugger: killed
+
+## Electron移行メモ（WIP）
+- Swiftの殻を置き換え、Electron（`electron/main.cjs`）でWeb UIを起動する方針に変更。
+- Web→ネイティブ連携は `window.tex180Bridge.postMessage` を採用し、従来の `window.webkit.messageHandlers.tex180` も併存。
+- Node側にWorkspace/Build/Indexer/Blocks/Search/Git/PDFの各サービスを移植（`electron/services/*`）。
+- PDFはElectronの別ウィンドウで表示し、ビルド成功時のみ更新。
+- 削除Undoの安定性を優先して `.tex180/.trash` に退避（OSゴミ箱直結は後で再検討）。
+- TeX環境の導線（TinyTeX固定や不足パッケージの自動導入UI）は後で実装。
+- 開発の起動手順: `npm run web:build` → `npm run electron:dev`。
