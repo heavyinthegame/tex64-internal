@@ -187,6 +187,8 @@ window.addEventListener("DOMContentLoaded", () => {
     let dragPayload = null;
     let treeHasFocus = false;
     let isComposing = false;
+    let compositionText = "";
+    let composingFilePath = null;
     let pendingCompositionAction = null;
     let fileClipboard = null;
     const monacoModels = new Map();
@@ -987,12 +989,12 @@ window.addEventListener("DOMContentLoaded", () => {
             action();
             return;
         }
+        // Blur will trigger compositionend which handles recovery
         pendingCompositionAction = action;
         const input = editorHost === null || editorHost === void 0 ? void 0 : editorHost.querySelector("textarea.inputarea");
         input === null || input === void 0 ? void 0 : input.blur();
     };
     const handleCompositionEnd = () => {
-        isComposing = false;
         if (!pendingCompositionAction) {
             return;
         }
@@ -1128,16 +1130,6 @@ window.addEventListener("DOMContentLoaded", () => {
             closeButton.type = "button";
             closeButton.className = "editor-tab-close";
             closeButton.textContent = "×";
-            closeButton.addEventListener("mousedown", (event) => {
-                if (!isComposing) {
-                    return;
-                }
-                event.preventDefault();
-                event.stopPropagation();
-                scheduleAfterComposition(() => {
-                    closeTab(path);
-                });
-            });
             closeButton.addEventListener("click", (event) => {
                 event.stopPropagation();
                 if (isComposing) {
@@ -1149,16 +1141,6 @@ window.addEventListener("DOMContentLoaded", () => {
                 closeTab(path);
             });
             tab.append(label, closeButton);
-            tab.addEventListener("mousedown", (event) => {
-                if (!isComposing || path === currentFilePath) {
-                    return;
-                }
-                event.preventDefault();
-                event.stopPropagation();
-                scheduleAfterComposition(() => {
-                    requestOpenFile(path);
-                });
-            });
             tab.addEventListener("click", () => {
                 if (path !== currentFilePath) {
                     requestOpenFile(path);
@@ -1369,6 +1351,10 @@ window.addEventListener("DOMContentLoaded", () => {
                     }
                     saveOpenState();
                 };
+                summary.addEventListener("mousedown", (event) => {
+                    // Prevent focus stealing from editor during IME composition
+                    event.preventDefault();
+                });
                 summary.addEventListener("click", (event) => {
                     event.preventDefault();
                     selectFolderSummary(summary, node.path);
@@ -1613,12 +1599,7 @@ window.addEventListener("DOMContentLoaded", () => {
         if (currentFilePath === path) {
             return false;
         }
-        if (isComposing) {
-            scheduleAfterComposition(() => {
-                requestOpenFile(path, force);
-            });
-            return true;
-        }
+        // Always cache buffer immediately (preserves IME composition text)
         if (!force) {
             cacheCurrentBuffer();
         }
@@ -1991,17 +1972,7 @@ window.addEventListener("DOMContentLoaded", () => {
         postToNative({ type: "revealInFinder", path });
     };
     const requestDeleteItem = (path, kind) => {
-        if (isDirty && isPathAffected(path)) {
-            const confirmMessage = "未保存の変更があります。このまま削除すると変更は失われます。削除しますか？";
-            if (!window.confirm(confirmMessage)) {
-                return;
-            }
-        }
-        const label = kind === "dir" ? "フォルダ" : "ファイル";
-        const ok = window.confirm(`${label}を削除しますか？`);
-        if (!ok) {
-            return;
-        }
+        // TODO: re-enable confirm dialogs after fixing WKWebView issue
         postToNative({ type: "deleteItem", path });
     };
     const requestCopyItem = (path, destination) => {
@@ -2135,6 +2106,7 @@ window.addEventListener("DOMContentLoaded", () => {
         return true;
     };
     const startBuild = () => {
+        cacheCurrentBuffer();
         const mainFile = rootFilePath !== null && rootFilePath !== void 0 ? rootFilePath : (currentFilePath && currentFilePath.endsWith(".tex")
             ? currentFilePath
             : undefined);
@@ -2994,10 +2966,7 @@ window.addEventListener("DOMContentLoaded", () => {
         fileTree.addEventListener("contextmenu", (event) => {
             event.preventDefault();
         });
-        fileTree.addEventListener("mousedown", (event) => {
-            if (isComposing && event.button === 0) {
-                event.preventDefault();
-            }
+        fileTree.addEventListener("mousedown", () => {
             setTreeFocus(true);
         });
         fileTree.addEventListener("dragover", (event) => {
@@ -3227,13 +3196,37 @@ window.addEventListener("DOMContentLoaded", () => {
             lineHeight: 20,
             scrollBeyondLastLine: false,
             wordWrap: "off",
-        });
+        }); // Cast to any to access full Monaco API
         monacoEditor = editor;
         openPendingFileIfReady();
         editorHost.addEventListener("compositionstart", () => {
             isComposing = true;
+            compositionText = "";
+            composingFilePath = currentFilePath;
         });
-        editorHost.addEventListener("compositionend", () => {
+        editorHost.addEventListener("compositionupdate", (e) => {
+            compositionText = e.data || "";
+        });
+        editorHost.addEventListener("compositionend", (e) => {
+            const data = e.data;
+            // If compositionend has no data (cancelled by focus loss) but we have stored text
+            if (!data && compositionText) {
+                // Verify we are still in the same file to prevent leaking text to new tab
+                if (composingFilePath === currentFilePath) {
+                    const editor = monacoEditor;
+                    const selection = editor.getSelection();
+                    if (selection) {
+                        editor.executeEdits("ime-recover", [{
+                                range: selection,
+                                text: compositionText,
+                                forceMoveMarkers: true
+                            }]);
+                    }
+                }
+            }
+            compositionText = "";
+            isComposing = false;
+            composingFilePath = null;
             handleCompositionEnd();
         });
         (_a = editor.onDidFocusEditorWidget) === null || _a === void 0 ? void 0 : _a.call(editor, () => {

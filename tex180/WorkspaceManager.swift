@@ -42,10 +42,33 @@ final class WorkspaceManager {
         let trashedURL: URL?
     }
 
-    private(set) var rootURL: URL?
+    private var _rootURL: URL?
+    private var _isAccessingSecurityScope = false
+
+    private(set) var rootURL: URL? {
+        get { _rootURL }
+        set {
+            // Stop previous access if any
+            if _isAccessingSecurityScope, let oldURL = _rootURL {
+                oldURL.stopAccessingSecurityScopedResource()
+                _isAccessingSecurityScope = false
+            }
+            _rootURL = newValue
+            // Start security-scoped access for new URL
+            if let url = newValue {
+                _isAccessingSecurityScope = url.startAccessingSecurityScopedResource()
+            }
+        }
+    }
     private var rootFileInfo: RootFileInfo?
     private var rootInfoRootPath: String?
     private var undoStack: [FileOperation] = []
+
+    deinit {
+        if _isAccessingSecurityScope, let url = _rootURL {
+            url.stopAccessingSecurityScopedResource()
+        }
+    }
 
     func ensureWorkspace(window: NSWindow?, completion: @escaping (URL?) -> Void) {
         if let rootURL {

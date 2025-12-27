@@ -1424,6 +1424,7 @@ body.has-editor .editor-placeholder {
 
 .issue-item[data-severity="error"] {
   border-left-color: #f87171;
+  background: rgba(239, 68, 68, 0.1);
 }
 
 .issue-item[data-severity="warning"] {

@@ -31,6 +31,15 @@ final class PDFWindowController: NSWindowController {
     }
 
     func show(pdfURL: URL) {
+        if let currentURL = currentURL, currentURL == pdfURL {
+            // Force reload by re-creating the document
+            if let document = PDFDocument(url: pdfURL) {
+                pdfView.document = document
+            }
+            showWindow(nil)
+            return
+        }
+
         guard let document = PDFDocument(url: pdfURL) else {
             return
         }

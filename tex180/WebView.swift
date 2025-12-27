@@ -95,6 +95,7 @@ struct WebView: NSViewRepresentable {
             guard message.name == "tex180" else { return }
             guard let body = message.body as? [String: Any] else { return }
             guard let type = body["type"] as? String else { return }
+            print("[tex180] Received message: \(type)")
             switch type {
             case "build":
                 let mainFile = body["mainFile"] as? String
@@ -169,6 +170,10 @@ struct WebView: NSViewRepresentable {
                 }
             case "gitStatus":
                 handleGitStatus()
+            case "consoleLog":
+                if let msg = body["message"] as? String {
+                    print("[WebView] \(msg)")
+                }
             default:
                 break
             }
@@ -181,11 +186,16 @@ struct WebView: NSViewRepresentable {
         }
 
         private func handleBuildRequest(mainFile: String?) {
-            guard let webView else { return }
+            print("[tex180] handleBuildRequest called, mainFile: \(mainFile ?? "nil")")
+            guard let webView else {
+                print("[tex180] handleBuildRequest: webView is nil")
+                return
+            }
             sendBuildState("building", message: "ビルド中...")
             sendIssues(count: 0, summary: "ビルド中...", status: "info", issues: [])
             appModel.workspaceManager.ensureWorkspace(window: webView.window) { [weak self] rootURL in
                 guard let self else { return }
+                print("[tex180] handleBuildRequest: ensureWorkspace completed, rootURL: \(String(describing: rootURL))")
                 guard let rootURL else {
                     self.sendBuildState("idle", message: "キャンセル")
                     self.sendIssues(count: 0, summary: "ビルドをキャンセルしました。", status: "info", issues: [])
@@ -196,7 +206,9 @@ struct WebView: NSViewRepresentable {
                 let targetFile = (mainFile?.isEmpty == false ? mainFile : nil)
                     ?? rootFile
                     ?? "main.tex"
+                print("[tex180] handleBuildRequest: calling build with targetFile: \(targetFile)")
                 self.appModel.buildService.build(rootURL: rootURL, mainFileName: targetFile) { result in
+                    print("[tex180] handleBuildRequest: build completed with result: \(result)")
                     switch result {
                     case .busy:
                         self.sendBuildState("building", message: "ビルド中...")
@@ -471,9 +483,14 @@ struct WebView: NSViewRepresentable {
         }
 
         private func handleDeleteItem(path: String) {
-            guard let webView else { return }
+            print("[tex180] handleDeleteItem called with path: \(path)")
+            guard let webView else {
+                print("[tex180] handleDeleteItem: webView is nil")
+                return
+            }
             appModel.workspaceManager.ensureWorkspace(window: webView.window) { [weak self] rootURL in
                 guard let self else { return }
+                print("[tex180] handleDeleteItem: ensureWorkspace completed, rootURL: \(String(describing: rootURL))")
                 guard let rootURL else {
                     self.sendIssues(count: 1, summary: "ワークスペースが選択されていません。", status: "error", issues: [
                         BuildIssue(severity: .error, message: "ワークスペースが選択されていません。", line: nil),
@@ -482,10 +499,12 @@ struct WebView: NSViewRepresentable {
                 }
                 self.updateWorkspaceIfNeeded(rootURL: rootURL)
                 DispatchQueue.global(qos: .userInitiated).async {
+                    print("[tex180] handleDeleteItem: calling deleteItem")
                     let result = self.appModel.workspaceManager.deleteItem(
                         rootURL: rootURL,
                         relativePath: path
                     )
+                    print("[tex180] handleDeleteItem: deleteItem result: \(result)")
                     DispatchQueue.main.async {
                         switch result {
                         case .success:
@@ -497,6 +516,7 @@ struct WebView: NSViewRepresentable {
                             }
                         case .failure(let error):
                             let message = error.localizedDescription
+                            print("[tex180] handleDeleteItem: error: \(message)")
                             self.sendIssues(count: 1, summary: message, status: "error", issues: [
                                 BuildIssue(severity: .error, message: message, line: nil),
                             ])

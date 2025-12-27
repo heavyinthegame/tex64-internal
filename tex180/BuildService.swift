@@ -46,7 +46,9 @@ final class BuildService {
     }
 
     private func runBuild(rootURL: URL, mainFileName: String) -> BuildResult {
+        print("[tex180] runBuild called: \(rootURL.path), \(mainFileName)")
         let didStartAccess = rootURL.startAccessingSecurityScopedResource()
+        print("[tex180] runBuild: security access started: \(didStartAccess)")
         defer {
             if didStartAccess {
                 rootURL.stopAccessingSecurityScopedResource()
@@ -54,6 +56,7 @@ final class BuildService {
         }
         let mainFileURL = rootURL.appendingPathComponent(mainFileName)
         guard FileManager.default.fileExists(atPath: mainFileURL.path) else {
+            print("[tex180] runBuild: main file not found: \(mainFileURL.path)")
             let issue = BuildIssue(severity: .error, message: "\(mainFileName) が見つかりません。", line: nil)
             return .failure(summary: issue.message, issues: [issue])
         }
@@ -68,7 +71,10 @@ final class BuildService {
             let result = try runLatexmk(rootURL: rootURL, mainFileName: mainFileName)
             output = result.output
             status = result.status
+            print("[tex180] runBuild: latexmk status: \(status)")
+            print("[tex180] runBuild: latexmk output:\n\(output)")
         } catch {
+            print("[tex180] runBuild: latexmk failed to start: \(error)")
             let issue = BuildIssue(severity: .error, message: "ビルドの起動に失敗しました。", line: nil)
             return .failure(summary: issue.message, issues: [issue])
         }
@@ -89,11 +95,23 @@ final class BuildService {
     }
 
     private func runLatexmk(rootURL: URL, mainFileName: String) throws -> ProcessOutput {
+        // Find latexmk in known locations
+        let searchPaths = [
+            "/Library/TeX/texbin/latexmk",
+            "/usr/local/bin/latexmk",
+            "/opt/homebrew/bin/latexmk",
+            "/usr/bin/latexmk",
+        ]
+        guard let latexmkPath = searchPaths.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else {
+            print("[tex180] latexmk not found in any of: \(searchPaths)")
+            throw NSError(domain: "BuildService", code: 1, userInfo: [NSLocalizedDescriptionKey: "latexmk not found"])
+        }
+        print("[tex180] Using latexmk at: \(latexmkPath)")
+        
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.executableURL = URL(fileURLWithPath: latexmkPath)
         process.arguments = [
-            "latexmk",
-            "-pdf",
+            "-lualatex",
             "-interaction=nonstopmode",
             "-halt-on-error",
             "-file-line-error",
@@ -103,17 +121,15 @@ final class BuildService {
         process.standardInput = FileHandle.nullDevice
         var environment = ProcessInfo.processInfo.environment
         let existingPath = environment["PATH"] ?? ""
-        let searchPaths = [
+        let pathDirs = [
             "/Library/TeX/texbin",
             "/usr/local/bin",
             "/opt/homebrew/bin",
             "/usr/bin",
             "/bin",
-            "/usr/sbin",
-            "/sbin",
             existingPath,
         ]
-        environment["PATH"] = searchPaths.joined(separator: ":")
+        environment["PATH"] = pathDirs.joined(separator: ":")
         process.environment = environment
 
         let outputPipe = Pipe()
@@ -159,7 +175,8 @@ final class BuildService {
     }
 
     private func extractLineNumber(from line: String) -> Int? {
-        let pattern = #"l\.(\d+)"#
+        // Match "l.10" or ":10:" patterns
+        let pattern = #"(?:l\.|:)(\d+)"#
         guard let regex = try? NSRegularExpression(pattern: pattern) else {
             return nil
         }
