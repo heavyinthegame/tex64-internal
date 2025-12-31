@@ -1,22 +1,144 @@
-\documentclass{article}
+% !TEX encoding = UTF-8 Unicode
+% !TEX TS-program = lualatex
+\documentclass{ltjsarticle}
+\usepackage{amsmath,amssymb,amsthm} % amsthmを追加
+\usepackage{bm}         % 太字ベクトル用
 \usepackage{graphicx}
-\newcommand{\todo}[1]{\textbf{TODO: #1}}
+\usepackage{url}
+\usepackage{booktabs}   % きれいな表のため
+\usepackage{multirow}   % 縦方向のセル結合のため
 
-\title{tex180 Test Document}
-\author{Test Author}
+% 定理環境の定義
+\theoremstyle{definition}
+\newtheorem{theorem}{定理}
+\newtheorem{definition}[theorem]{定義}
+\newtheorem{lemma}[theorem]{補題}
+
+% タイトル情報
+\title{標準的なLaTeX文書（拡張版）}
+\author{著者名}
 \date{\today}
 
 \begin{document}
+
 \maketitle
+\tableofcontents
+\newpage
 
 \begin{abstract}
-This document exists to test outline parsing, references, citations, build, and UI workflows.
+この文書は、LaTeXの標準的な機能に加えて、数式や表のより高度な記述例をまとめたものです。
 \end{abstract}
 
-\input{sections/intro}
-\input{sections/methods}
-\input{sections/results}
+\section{はじめに}
+LaTeXは数式の組版に優れています。ここでは様々な数式や表のレイアウトを紹介します。
 
-\bibliographystyle{plain}
-\bibliography{refs}
+\section{数式の例}
+
+\subsection{基本的な記号とギリシャ文字}
+基本的な演算: $a + b$, $a \times b$, $a \div b$, $a \pm b$\\
+分数と根号: $\frac{a}{b}$, $\sqrt{x}$, $\sqrt[3]{y}$\\
+上付き・下付き: $x^2$, $a_n$, ${}_{n}C_{r}$\\
+ギリシャ文字: $\alpha, \beta, \gamma, \delta, \pi, \theta, \Omega, \Sigma$
+
+\subsection{三角関数・対数・極限}
+\begin{equation}
+  \sin^2 \theta + \cos^2 \theta = 1
+\end{equation}
+\begin{equation}
+  \lim_{x \to 0} \frac{\sin x}{x} = 1, \quad \log_a M^p = p \log_a M
+\end{equation}
+
+\subsection{総和・積分}
+\begin{equation}
+  \sum_{k=1}^{n} k = \frac{1}{2}n(n+1)
+\end{equation}
+\begin{equation}
+  \int_{a}^{b} f(x) dx = \left[ F(x) \right]_{a}^{b} = F(b) - F(a)
+\end{equation}
+
+\subsection{行列 (Matrices)}
+行列には \texttt{pmatrix} (丸括弧) や \texttt{bmatrix} (角括弧) などを使います。
+
+\begin{equation}
+  A = \begin{pmatrix}
+    a & b \\
+    c & d
+  \end{pmatrix}, \quad
+  \bm{x} = \begin{bmatrix}
+    x_1 \\
+    x_2 \\
+    \vdots \\
+    x_n
+  \end{bmatrix}
+\end{equation}
+
+\subsection{連立方程式と場合分け}
+\texttt{cases} 環境を使用します。
+
+\begin{equation}
+  |x| = \begin{cases}
+    x & (x \ge 0) \\
+    -x & (x < 0)
+  \end{cases}
+\end{equation}
+
+\subsection{複数行の数式 (align)}
+\texttt{align} 環境を使って、等号記号などで位置を揃えます。
+
+\begin{align}
+  (a+b)^3 &= (a+b)(a+b)^2 \\
+          &= (a+b)(a^2 + 2ab + b^2) \\
+          &= a^3 + 3a^2b + 3ab^2 + b^3 \label{eq:expansion}
+\end{align}
+式(\ref{eq:expansion})のようにラベルを参照できます。
+
+\section{定理と証明}
+\begin{definition}
+  偶数とは、2で割り切れる整数のことである。
+\end{definition}
+
+\begin{theorem}
+  偶数と偶数の和は偶数である。
+\end{theorem}
+
+\begin{proof}
+  証明をここに書きます。\qed
+\end{proof}
+
+\section{表の例}
+
+\subsection{罫線を工夫した表 (booktabs)}
+\texttt{booktabs} パッケージを使うと、プロフェッショナルな表が作れます。
+
+\begin{table}[htbp]
+  \centering
+  \caption{成績一覧（booktabs使用）}
+  \begin{tabular}{lrr} \toprule
+    氏名 & 数学 & 英語 \\ \midrule
+    山田 & 85 & 70 \\
+    佐藤 & 90 & 88 \\
+    鈴木 & 75 & 92 \\ \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{セルの結合 (multirow, multicolumn)}
+\texttt{multirow} や \texttt{multicolumn} を使ってセルを結合します。
+
+\begin{table}[htbp]
+  \centering
+  \caption{複雑な表の例}
+  \begin{tabular}{|c|c|c|c|} \hline
+    \multirow{2}{*}{クラス} & \multicolumn{2}{c|}{性別} & \multirow{2}{*}{合計} \\ \cline{2-3}
+     & 男 & 女 & \\ \hline
+    A組 & 15 & 14 & 29 \\ \hline
+    B組 & 16 & 15 & 31 \\ \hline
+  \end{tabular}
+\end{table}
+
+\section{参考文献}
+\begin{thebibliography}{9}
+  \bibitem{lamport} Leslie Lamport. \textit{\LaTeX: A Document Preparation System}. Addison-Wesley, 1994.
+  \bibitem{example} 著者名. 『書名』. 出版社, 2023.
+\end{thebibliography}
+
 \end{document}

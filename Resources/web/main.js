@@ -67,6 +67,7 @@ window.addEventListener("DOMContentLoaded", () => {
     const quickInsertAccept = document.getElementById("quick-accept");
     const quickInsertCancel = document.getElementById("quick-cancel");
     const buildButton = document.getElementById("build-button");
+    const blockEditorButton = document.getElementById("block-editor-button");
     const autoBuildButton = document.getElementById("auto-build-button");
     const issuesCount = document.getElementById("issues-count");
     const issuesHint = document.getElementById("issues-hint");
@@ -148,14 +149,15 @@ window.addEventListener("DOMContentLoaded", () => {
             element.textContent = text;
         }
     };
-    // ============================================
-    // LaTeX Block Auto-Detection
-    // ============================================
     let currentDetectedBlock = null;
     let blockDetectionDebounceTimer = null;
     const LATEX_BLOCK_PATTERNS = [
         // ブロック数式（複数行対応）
-        { type: "math", pattern: /\\begin\{(equation|align|gather|multline|eqnarray)\*?\}([\s\S]*?)\\end\{\1\*?\}/g, env: true },
+        {
+            type: "math",
+            pattern: /\\begin\{(equation|align|gather|multline|eqnarray)\*?\}([\s\S]*?)\\end\{\1\*?\}/g,
+            env: true,
+        },
         // ディスプレイ数式
         { type: "math", pattern: /\\\[([\s\S]*?)\\\]/g, env: false },
         // インライン数式（$...$）
@@ -163,12 +165,6 @@ window.addEventListener("DOMContentLoaded", () => {
         // 表
         { type: "table", pattern: /\\begin\{(tabular|table)\*?\}([\s\S]*?)\\end\{\1\*?\}/g, env: true },
     ];
-    /**
-     * カーソル位置のLaTeXブロックを検出
-     * @param {string} text - ドキュメント全体のテキスト
-     * @param {number} offset - カーソル位置（0-indexed）
-     * @returns {{ type: string, content: string, start: number, end: number, envName?: string } | null}
-     */
     const detectLatexBlockAtOffset = (text, offset) => {
         for (const patternDef of LATEX_BLOCK_PATTERNS) {
             const regex = new RegExp(patternDef.pattern.source, patternDef.pattern.flags);
@@ -184,10 +180,12 @@ window.addEventListener("DOMContentLoaded", () => {
                         // 環境の場合、環境名と内容を抽出
                         envName = match[1];
                         content = match[2] || "";
-                    } else if (patternDef.pattern.source.includes("\\$")) {
+                    }
+                    else if (patternDef.pattern.source.includes("\\$")) {
                         // インライン$...$の場合
                         content = match[1] || "";
-                    } else {
+                    }
+                    else {
                         // \[...\]の場合
                         content = match[1] || "";
                     }
@@ -198,48 +196,44 @@ window.addEventListener("DOMContentLoaded", () => {
                         end,
                         envName,
                         inline: patternDef.inline || false,
-                        fullMatch: match[0]
+                        fullMatch: match[0],
                     };
                 }
             }
         }
         return null;
     };
-    /**
-     * カーソル位置変更時にブロックを検出してサイドバーを更新
-     */
     const handleCursorPositionChange = (position) => {
-        if (!monacoEditor) return;
-        // デバウンス処理
+        if (!monacoEditor)
+            return;
         if (blockDetectionDebounceTimer) {
             clearTimeout(blockDetectionDebounceTimer);
         }
         blockDetectionDebounceTimer = setTimeout(() => {
-            const model = monacoEditor.getModel();
-            if (!model) return;
+            var _a;
+            const editor = monacoEditor;
+            const model = (_a = editor.getModel) === null || _a === void 0 ? void 0 : _a.call(editor);
+            if (!model)
+                return;
             const text = model.getValue();
             const offset = model.getOffsetAt(position);
             const detected = detectLatexBlockAtOffset(text, offset);
-            if (detected && (!currentDetectedBlock || 
-                currentDetectedBlock.start !== detected.start || 
-                currentDetectedBlock.end !== detected.end)) {
-                // 新しいブロックを検出
+            if (detected &&
+                (!currentDetectedBlock ||
+                    currentDetectedBlock.start !== detected.start ||
+                    currentDetectedBlock.end !== detected.end)) {
                 currentDetectedBlock = detected;
-                // サイドバーをブロックパネルに切り替え
                 if (!document.querySelector('.panel[data-panel="blocks"].is-active')) {
                     const blocksTab = document.querySelector('.tab[data-tab="blocks"]');
-                    if (blocksTab) blocksTab.click();
+                    blocksTab === null || blocksTab === void 0 ? void 0 : blocksTab.click();
                 }
-                // ブロックタイプを設定
                 setActiveBlockType(detected.type);
-                // 内容をロード
                 if (detected.type === "math") {
                     setMathInputValue(detected.content);
                 }
-                // 視覚的フィードバック：エディタ内のブロックをハイライト
                 highlightDetectedBlock(detected.start, detected.end);
-            } else if (!detected && currentDetectedBlock) {
-                // ブロック外に移動
+            }
+            else if (!detected && currentDetectedBlock) {
                 currentDetectedBlock = null;
                 clearBlockHighlight();
             }
@@ -247,28 +241,35 @@ window.addEventListener("DOMContentLoaded", () => {
     };
     let blockHighlightDecorations = [];
     const highlightDetectedBlock = (start, end) => {
-        if (!monacoEditor) return;
-        const model = monacoEditor.getModel();
-        if (!model) return;
+        var _a;
+        if (!monacoEditor)
+            return;
+        const editor = monacoEditor;
+        const model = (_a = editor.getModel) === null || _a === void 0 ? void 0 : _a.call(editor);
+        if (!model)
+            return;
         const startPos = model.getPositionAt(start);
         const endPos = model.getPositionAt(end);
-        blockHighlightDecorations = monacoEditor.deltaDecorations(blockHighlightDecorations, [{
-            range: {
-                startLineNumber: startPos.lineNumber,
-                startColumn: startPos.column,
-                endLineNumber: endPos.lineNumber,
-                endColumn: endPos.column
+        blockHighlightDecorations = editor.deltaDecorations(blockHighlightDecorations, [
+            {
+                range: {
+                    startLineNumber: startPos.lineNumber,
+                    startColumn: startPos.column,
+                    endLineNumber: endPos.lineNumber,
+                    endColumn: endPos.column,
+                },
+                options: {
+                    className: "detected-block-highlight",
+                    isWholeLine: false,
+                },
             },
-            options: {
-                className: "detected-block-highlight",
-                isWholeLine: false
-            }
-        }]);
+        ]);
     };
     const clearBlockHighlight = () => {
-        if (monacoEditor) {
-            blockHighlightDecorations = monacoEditor.deltaDecorations(blockHighlightDecorations, []);
-        }
+        if (!monacoEditor)
+            return;
+        const editor = monacoEditor;
+        blockHighlightDecorations = editor.deltaDecorations(blockHighlightDecorations, []);
     };
     const setLauncherVisible = (isVisible) => {
         if (launcher instanceof HTMLElement) {
@@ -463,27 +464,59 @@ window.addEventListener("DOMContentLoaded", () => {
             return;
         }
         issuesEmpty.style.display = "none";
-        issuesList.style.display = "grid";
+        issuesList.style.display = "flex";
         issues.forEach((issue) => {
+            const parseIssueMessage = () => {
+                var _a, _b, _c;
+                const trimmed = issue.message.trim();
+                const match = (_a = trimmed.match(/^(.+?\.tex):(\d+):\s*(.+)$/)) !== null && _a !== void 0 ? _a : trimmed.match(/^(.+?):(\d+):\s*(.+)$/);
+                if (match) {
+                    const [, path, lineRaw, rest] = match;
+                    const parsedLine = Number.parseInt(lineRaw, 10);
+                    return {
+                        path,
+                        line: Number.isFinite(parsedLine) ? parsedLine : (_b = issue.line) !== null && _b !== void 0 ? _b : null,
+                        message: rest.trim(),
+                    };
+                }
+                return {
+                    path: null,
+                    line: (_c = issue.line) !== null && _c !== void 0 ? _c : null,
+                    message: trimmed,
+                };
+            };
+            const detail = parseIssueMessage();
             const item = document.createElement("button");
             item.type = "button";
             item.className = "issue-item";
             item.dataset.severity = issue.severity;
+            const header = document.createElement("div");
+            header.className = "issue-header";
+            const badge = document.createElement("span");
+            badge.className = `issue-badge issue-badge-${issue.severity}`;
+            badge.textContent = issue.severity === "warning" ? "警告" : "エラー";
+            const location = document.createElement("span");
+            location.className = "issue-location";
+            if (detail.path && detail.line) {
+                location.textContent = `${detail.path}:${detail.line}`;
+            }
+            else if (detail.path) {
+                location.textContent = detail.path;
+            }
+            else if (detail.line) {
+                location.textContent = `行 ${detail.line}`;
+            }
+            else {
+                location.textContent = "位置不明";
+            }
+            header.append(badge, location);
             const message = document.createElement("div");
             message.className = "issue-message";
-            message.textContent = issue.message;
-            const meta = document.createElement("div");
-            meta.className = "issue-meta";
-            const severity = document.createElement("span");
-            severity.textContent = issue.severity === "warning" ? "警告" : "エラー";
-            meta.appendChild(severity);
-            if (issue.line) {
-                const line = document.createElement("span");
-                line.className = "issue-line";
-                line.textContent = `行 ${issue.line}`;
-                meta.appendChild(line);
-            }
-            item.append(message, meta);
+            message.textContent = detail.message || issue.message;
+            const hint = document.createElement("div");
+            hint.className = "issue-hintline";
+            hint.textContent = "クリックで該当行へ移動";
+            item.append(header, message, hint);
             item.addEventListener("click", () => {
                 focusIssue(issue);
             });
@@ -1183,7 +1216,7 @@ window.addEventListener("DOMContentLoaded", () => {
                 return;
             }
             const MathLiveGlobal = window.MathLive;
-            if (MathLiveGlobal?.convertLatexToMarkup) {
+            if (MathLiveGlobal === null || MathLiveGlobal === void 0 ? void 0 : MathLiveGlobal.convertLatexToMarkup) {
                 markMathLiveReady();
                 return;
             }
@@ -1226,14 +1259,12 @@ window.addEventListener("DOMContentLoaded", () => {
     const renderMathKeyLabel = (button, key) => {
         const MathLiveGlobal = window.MathLive;
         const displayLatex = buildMathKeyDisplayLatex(key);
-        // Use convertLatexToMarkup (MathLive 0.108+ API)
-        if (displayLatex && MathLiveGlobal?.convertLatexToMarkup) {
+        if (displayLatex && (MathLiveGlobal === null || MathLiveGlobal === void 0 ? void 0 : MathLiveGlobal.convertLatexToMarkup)) {
             try {
-                const latexToRender = "\\displaystyle " + displayLatex;
-                const markup = MathLiveGlobal.convertLatexToMarkup(latexToRender);
+                const latexToRender = `\\displaystyle ${displayLatex}`;
                 const wrapper = document.createElement("span");
                 wrapper.className = "math-keyboard-math";
-                wrapper.innerHTML = markup;
+                wrapper.innerHTML = MathLiveGlobal.convertLatexToMarkup(latexToRender);
                 button.textContent = "";
                 button.appendChild(wrapper);
                 button.classList.add("has-math");
@@ -1588,7 +1619,7 @@ window.addEventListener("DOMContentLoaded", () => {
                 return;
             }
         }
-        if (MathLiveGlobal?.convertLatexToMarkup) {
+        if (MathLiveGlobal === null || MathLiveGlobal === void 0 ? void 0 : MathLiveGlobal.convertLatexToMarkup) {
             markMathLiveReady();
         }
         else {
@@ -3360,6 +3391,182 @@ window.addEventListener("DOMContentLoaded", () => {
             updateIssues(0, "ビルドを開始します。", "info", []);
         }
     };
+    const openBlockEditorWindow = () => {
+        if (!currentFilePath || !currentFilePath.endsWith(".tex")) {
+            updateIssues(1, "ブロック編集は .tex ファイルでのみ利用できます。", "error", [
+                { severity: "error", message: "ブロック編集は .tex ファイルでのみ利用できます。" },
+            ]);
+            return;
+        }
+        if (!monacoEditor) {
+            updateIssues(1, "エディタの準備が完了していません。", "error", [
+                { severity: "error", message: "エディタの準備が完了していません。" },
+            ]);
+            return;
+        }
+        const editor = monacoEditor;
+        const content = editor.getValue();
+        const ok = postToNative({
+            type: "openBlockEditor",
+            path: currentFilePath,
+            content,
+        });
+        if (!ok) {
+            updateIssues(1, "ブロック編集ウィンドウを開けませんでした。", "error", [
+                { severity: "error", message: "ブロック編集ウィンドウを開けませんでした。" },
+            ]);
+        }
+    };
+    const sendBlockEditorSyncResult = (payload) => {
+        postToNative({ type: "blockEditorSyncResult", ...payload }, true);
+    };
+    const sendBlockEditorPatchResult = (payload) => {
+        postToNative({ type: "blockEditorPatchResult", ...payload }, true);
+    };
+    const handleBlockEditorSyncRequest = (payload) => {
+        if (!(payload === null || payload === void 0 ? void 0 : payload.requestId))
+            return;
+        if (!currentFilePath || payload.path !== currentFilePath) {
+            sendBlockEditorSyncResult({
+                requestId: payload.requestId,
+                path: payload.path,
+                error: "現在のファイルのみ同期できます。",
+            });
+            return;
+        }
+        if (!monacoEditor) {
+            sendBlockEditorSyncResult({
+                requestId: payload.requestId,
+                path: payload.path,
+                error: "エディタが未初期化です。",
+            });
+            return;
+        }
+        const editor = monacoEditor;
+        sendBlockEditorSyncResult({
+            requestId: payload.requestId,
+            path: payload.path,
+            content: editor.getValue(),
+        });
+    };
+    const handleBlockEditorApplyPatch = (payload) => {
+        var _a, _b, _c, _d, _e, _f, _g, _h;
+        if (!(payload === null || payload === void 0 ? void 0 : payload.requestId))
+            return;
+        if (!currentFilePath || payload.path !== currentFilePath) {
+            sendBlockEditorPatchResult({
+                requestId: payload.requestId,
+                ok: false,
+                error: "現在のファイルのみ編集できます。",
+            });
+            return;
+        }
+        if (!monacoEditor || !monacoApi) {
+            sendBlockEditorPatchResult({
+                requestId: payload.requestId,
+                ok: false,
+                error: "エディタが未初期化です。",
+            });
+            return;
+        }
+        const editor = monacoEditor;
+        const model = (_a = editor.getModel) === null || _a === void 0 ? void 0 : _a.call(editor);
+        const snippet = (_c = (_b = payload.target) === null || _b === void 0 ? void 0 : _b.snippet) !== null && _c !== void 0 ? _c : "";
+        const replacement = (_d = payload.replacement) !== null && _d !== void 0 ? _d : "";
+        if (!model || !snippet) {
+            sendBlockEditorPatchResult({
+                requestId: payload.requestId,
+                ok: false,
+                error: "対象ブロックが特定できません。",
+            });
+            return;
+        }
+        const content = model.getValue();
+        let range = null;
+        const start = (_e = payload.target) === null || _e === void 0 ? void 0 : _e.start;
+        const end = (_f = payload.target) === null || _f === void 0 ? void 0 : _f.end;
+        if (typeof start === "number" && typeof end === "number" && start >= 0 && end >= start) {
+            const slice = content.slice(start, end);
+            if (slice === snippet && model.getPositionAt) {
+                const startPos = model.getPositionAt(start);
+                const endPos = model.getPositionAt(end);
+                range = {
+                    startLineNumber: startPos.lineNumber,
+                    startColumn: startPos.column,
+                    endLineNumber: endPos.lineNumber,
+                    endColumn: endPos.column,
+                };
+            }
+        }
+        if (!range && model.findMatches) {
+            const matches = model.findMatches(snippet, false, false, false, null, true, 2);
+            if (matches && matches.length === 1) {
+                range = matches[0].range;
+            }
+        }
+        if (!range && ((_h = (_g = payload.target) === null || _g === void 0 ? void 0 : _g.anchor) === null || _h === void 0 ? void 0 : _h.kind) === "label" && payload.target.anchor.value) {
+            const labelText = `\\\\label{${payload.target.anchor.value}}`;
+            const labelIndex = content.indexOf(labelText);
+            if (labelIndex !== -1 && model.getPositionAt) {
+                const beginIndex = content.lastIndexOf("\\\\begin{", labelIndex);
+                if (beginIndex !== -1) {
+                    const envMatch = content.slice(beginIndex).match(/^\\\\begin\\{([^}]+)\\}/);
+                    if (envMatch) {
+                        const envName = envMatch[1];
+                        const endToken = `\\\\end{${envName}}`;
+                        let depth = 1;
+                        let searchPos = beginIndex + envMatch[0].length;
+                        while (searchPos < content.length) {
+                            const nextBegin = content.indexOf(`\\\\begin{${envName}}`, searchPos);
+                            const nextEnd = content.indexOf(endToken, searchPos);
+                            if (nextEnd === -1)
+                                break;
+                            if (nextBegin !== -1 && nextBegin < nextEnd) {
+                                depth += 1;
+                                searchPos = nextBegin + envName.length + 8;
+                            }
+                            else {
+                                depth -= 1;
+                                searchPos = nextEnd + endToken.length;
+                                if (depth === 0) {
+                                    const startPos = model.getPositionAt(beginIndex);
+                                    const endPos = model.getPositionAt(searchPos);
+                                    range = {
+                                        startLineNumber: startPos.lineNumber,
+                                        startColumn: startPos.column,
+                                        endLineNumber: endPos.lineNumber,
+                                        endColumn: endPos.column,
+                                    };
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (!range) {
+            sendBlockEditorPatchResult({
+                requestId: payload.requestId,
+                ok: false,
+                error: "ブロック位置が見つかりません。再解析してください。",
+            });
+            return;
+        }
+        const monacoApiAny = monacoApi;
+        editor.executeEdits("block-editor", [
+            {
+                range: new monacoApiAny.Range(range.startLineNumber, range.startColumn, range.endLineNumber, range.endColumn),
+                text: replacement,
+                forceMoveMarkers: true,
+            },
+        ]);
+        sendBlockEditorPatchResult({
+            requestId: payload.requestId,
+            ok: true,
+            content: editor.getValue(),
+        });
+    };
     const handleLauncherStatus = (payload) => {
         var _a;
         setLauncherStatus({
@@ -3906,8 +4113,7 @@ window.addEventListener("DOMContentLoaded", () => {
         blockPreviewActive = true;
     };
     const applyBlockInsert = () => {
-        // 自動検出ブロックの場合はプレビューなしでも確定OK
-        if (!blockPreviewActive && !currentDetectedBlock) {
+        if (!blockPreviewActive) {
             updateIssues(1, "プレビューを確認してから確定してください。", "error", [
                 { severity: "error", message: "プレビューを確認してから確定してください。" },
             ]);
@@ -3935,23 +4141,7 @@ window.addEventListener("DOMContentLoaded", () => {
         let range;
         let line = quickInsertTarget.lineNumber;
         let column = quickInsertTarget.column;
-        // 自動検出されたブロックを更新する場合
-        if (currentDetectedBlock && !activeBlockEditId) {
-            const model = editor.getModel();
-            if (model) {
-                const startPos = model.getPositionAt(currentDetectedBlock.start);
-                const endPos = model.getPositionAt(currentDetectedBlock.end);
-                range = new monacoApiAny.Range(
-                    startPos.lineNumber,
-                    startPos.column,
-                    endPos.lineNumber,
-                    endPos.column
-                );
-                line = startPos.lineNumber;
-                column = startPos.column;
-            }
-        }
-        else if (activeBlockEditId) {
+        if (activeBlockEditId) {
             if (!activeBlockRange) {
                 updateIssues(1, "ブロックの位置が見つかりません。", "error", [
                     { severity: "error", message: "ブロックの位置が見つかりません。" },
@@ -4447,6 +4637,11 @@ window.addEventListener("DOMContentLoaded", () => {
             startBuild();
         });
     }
+    if (blockEditorButton instanceof HTMLButtonElement) {
+        blockEditorButton.addEventListener("click", () => {
+            openBlockEditorWindow();
+        });
+    }
     if (issuesBar instanceof HTMLElement) {
         issuesBar.addEventListener("click", () => {
             if (currentIssues.length === 0) {
@@ -4544,6 +4739,12 @@ window.addEventListener("DOMContentLoaded", () => {
             case "renameResult":
                 (_k = bridgeWindow.tex180RenameResult) === null || _k === void 0 ? void 0 : _k.call(bridgeWindow, message.payload);
                 break;
+            case "blockEditorSyncRequest":
+                handleBlockEditorSyncRequest(message.payload);
+                break;
+            case "blockEditorApplyPatch":
+                handleBlockEditorApplyPatch(message.payload);
+                break;
             case "launcherStatus":
                 handleLauncherStatus(message.payload);
                 break;
@@ -4577,7 +4778,7 @@ window.addEventListener("DOMContentLoaded", () => {
     }
     monacoWindow.require.config({ paths: { vs: requireBase } });
     monacoWindow.require(["vs/editor/editor.main"], () => {
-        var _a;
+        var _a, _b;
         if (!monacoWindow.monaco || !monacoWindow.monaco.editor) {
             updateFallback("Monacoの初期化に失敗しました。");
             return;
@@ -4652,8 +4853,7 @@ window.addEventListener("DOMContentLoaded", () => {
             updateBreadcrumbs();
             renderFileTree();
         });
-        // カーソル位置変更時にLaTeXブロックを検出
-        editor.onDidChangeCursorPosition((e) => {
+        (_b = editor.onDidChangeCursorPosition) === null || _b === void 0 ? void 0 : _b.call(editor, (e) => {
             if (currentFilePath && currentFilePath.endsWith(".tex")) {
                 handleCursorPositionChange(e.position);
             }

@@ -6,13 +6,33 @@
   "main": "electron/main.cjs",
   "scripts": {
     "electron:dev": "electron .",
-    "web:build": "tsc -p web-src/tsconfig.json"
+    "web:build:block-editor": "tailwindcss -i web-src/block-editor-app/block-editor.css -o Resources/web/block-editor.css --content \"web-src/block-editor-app/**/*.{ts,tsx,html}\" && node scripts/build-block-editor.mjs",
+    "web:build": "tsc -p web-src/tsconfig.json && npm run web:build:block-editor"
   },
   "devDependencies": {
+    "@tailwindcss/cli": "^4.0.0",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
     "electron": "^31.0.0",
+    "esbuild": "^0.23.0",
+    "tailwindcss": "^4.0.0",
+    "tailwindcss-animate": "^1.0.7",
     "typescript": "^5.5.4"
   },
   "dependencies": {
-    "mathlive": "^0.108.2"
+    "@radix-ui/react-dropdown-menu": "^2.1.16",
+    "@radix-ui/react-slot": "^1.2.4",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "katex": "^0.16.27",
+    "lucide-react": "^0.554.0",
+    "mathlive": "^0.108.2",
+    "nanoid": "^5.1.6",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "slate": "^0.120.0",
+    "slate-history": "^0.113.1",
+    "slate-react": "^0.120.0",
+    "tailwind-merge": "^3.4.0"
   }
 }
