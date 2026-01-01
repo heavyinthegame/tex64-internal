@@ -586,11 +586,19 @@ export function Tex180MathKeyboard({ forceOpen = false }: { forceOpen?: boolean 
     insertToActive(key.latex);
   };
 
+  const isActive = !!openMathFieldId;
+  // If forceOpen is true, it is always visible (layout-wise), but we dim it if not active
+  const isVisible = forceOpen || isActive;
+
   return (
     <div
-      className={`math-keyboard-dock ${isOpen ? "is-open" : ""}`}
-      aria-hidden={isOpen ? "false" : "true"}
+      className={`math-keyboard-dock ${isVisible ? "is-open" : ""}`}
+      aria-hidden={isVisible ? "false" : "true"}
       data-math-keyboard
+      style={{
+        // Always show at full opacity - only disable interaction when not active
+        pointerEvents: isActive ? "auto" : "none",
+      }}
     >
       <div className="math-keyboard-tabs" role="tablist" aria-label="数式キーボード">
         {(["greek", "analysis", "algebra", "sets", "logic", "arrows"] as MathKeyboardTab[]).map(

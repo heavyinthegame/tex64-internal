@@ -7,6 +7,7 @@ import { Tex180MathKeyboard } from "@/components/Tex180MathKeyboard";
 import { parseContentToDocument, type BlockEntry, type BlockAnchor } from "@/adapter/blockParser";
 import { buildPatchOperations, type PatchOperation } from "@/adapter/patcher";
 import { buildDiffPreview } from "@/adapter/diff";
+import { DiffViewer } from "@/components/diff/DiffViewer";
 
 type BridgeMessage = {
   type?: string;
@@ -208,12 +209,16 @@ export function BlockEditorApp() {
 
   const isDirty = patches.length > 0;
 
+  const modifiedContent = useMemo(() => {
+    if (!patches.length) return sourceContent;
+    return applyPatchesToString(sourceContent, patches);
+  }, [sourceContent, patches]);
+
   const diffText = useMemo(() => {
     if (!showDiff) return "";
     if (!patches.length) return "変更なし";
-    const nextContent = applyPatchesToString(sourceContent, patches);
-    return buildDiffPreview(sourceContent, nextContent);
-  }, [showDiff, sourceContent, patches]);
+    return buildDiffPreview(sourceContent, modifiedContent);
+  }, [showDiff, sourceContent, modifiedContent, patches.length]);
 
   const applyChanges = useCallback(async () => {
     if (!filePath) {
@@ -313,7 +318,7 @@ export function BlockEditorApp() {
               </button>
               <button
                 type="button"
-                className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${showDiff ? "bg-indigo-100 text-indigo-700" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}
                 onClick={() => setShowDiff((prev) => !prev)}
               >
                 差分
@@ -416,23 +421,12 @@ export function BlockEditorApp() {
                 />
               </div>
 
-              {showDiff && (
-                <div className="absolute right-6 bottom-6 w-[380px] max-h-[45vh] bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden">
-                  <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200 bg-slate-50">
-                    <span className="text-xs font-semibold text-slate-600">差分プレビュー</span>
-                    <button
-                      type="button"
-                      className="text-xs text-slate-500 hover:text-slate-700"
-                      onClick={() => setShowDiff(false)}
-                    >
-                      閉じる
-                    </button>
-                  </div>
-                  <pre className="p-3 text-xs font-mono text-slate-700 whitespace-pre-wrap overflow-auto">
-                    {diffText}
-                  </pre>
-                </div>
-              )}
+              <DiffViewer 
+                original={sourceContent} 
+                modified={modifiedContent} 
+                isOpen={showDiff} 
+                onClose={() => setShowDiff(false)} 
+              />
 
               {status && (
                 <div className="absolute left-6 bottom-6 bg-white/90 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-600 shadow">

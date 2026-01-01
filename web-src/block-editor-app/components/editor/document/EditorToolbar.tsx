@@ -2,7 +2,6 @@
 import {
   Bold,
   Italic,
-
   Type,
   Heading1,
   Heading2,
@@ -20,8 +19,7 @@ import {
   BookOpen,
   ScrollText,
   CheckCircle,
-  Pi,
-  X,
+  Divide,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -34,12 +32,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
-export type EditorStyle = "paragraph" | "heading1" | "heading2" | "heading3" | "bullet" | "numbered"
+export type EditorStyle = "paragraph" | "chapter" | "section" | "subsection" | "subsubsection" | "bullet" | "numbered"
 
 // Extended block types for math environments
 export type MathEnvironmentType = "math" | "definition" | "theorem" | "lemma" | "proof" | "corollary" | "proposition" | "example" | "remark"
 
 import { Editor, Transforms } from 'slate'
+import { ReactEditor } from 'slate-react'
 import { nanoid } from 'nanoid'
 import type { InlineMathElement } from '@/types/slate'
 import { useState, useRef, useEffect } from "react"
@@ -50,15 +49,18 @@ interface EditorToolbarProps {
   onAddBlock: (
     type:
       | "paragraph"
-      | "heading1"
-      | "heading2"
-      | "heading3"
+      | "chapter"
+      | "section"
+      | "subsection"
+      | "subsubsection"
       | "list-bullet"
       | "list-numbered"
       | "math"
       | "figure"
       | "table"
       | "abstract"
+      | "pageBreak"
+      | "maketitle"
       | "definition"
       | "theorem"
       | "lemma"
@@ -112,10 +114,22 @@ export function EditorToolbar({
     if (slateEditor) {
        const latex = ""
        const math: InlineMathElement = { type: 'inline-math', id: nanoid(), latex, children: [{ text: '' }] }
-       Transforms.insertNodes(slateEditor, math)
+       Transforms.insertNodes(slateEditor, math, { select: true })
+       
+       if (!ReactEditor.isFocused(slateEditor)) {
+         ReactEditor.focus(slateEditor)
+       }
        return
     }
     onInlineMath()
+  }
+
+  const handleSoftBreak = () => {
+    if (slateEditor) {
+      // Insert ⏎ as simple text - represents LaTeX \\ line break
+      // This is simpler than inline void elements and has no cursor issues
+      Transforms.insertText(slateEditor, "⏎")
+    }
   }
   
   // Helper for Slate marks
@@ -127,11 +141,13 @@ export function EditorToolbar({
   // Structure items for the first dropdown (change or insert structure blocks)
   const structureItems: Array<{ type: AddableBlockType; label: string; icon: LucideIcon; style: EditorStyle }> = [
     { type: "paragraph", label: t("editor.addBody"), icon: Type, style: "paragraph" },
-    { type: "heading1", label: t("editor.addChapter"), icon: Heading1, style: "heading1" },
-    { type: "heading2", label: t("editor.addSection"), icon: Heading2, style: "heading2" },
-    { type: "heading3", label: t("editor.addSubsection"), icon: Heading3, style: "heading3" },
+    { type: "chapter", label: "章", icon: Heading1, style: "chapter" },
+    { type: "section", label: "節", icon: Heading2, style: "section" },
+    { type: "subsection", label: "項", icon: Heading3, style: "subsection" },
+    { type: "subsubsection", label: "目", icon: Heading3, style: "subsubsection" },
     { type: "list-bullet", label: t("editor.addBulletList"), icon: List, style: "bullet" },
     { type: "list-numbered", label: t("editor.addNumberedList"), icon: ListOrdered, style: "numbered" },
+    { type: "pageBreak", label: "改ページ", icon: Divide, style: "paragraph" },
   ]
 
   // Math environment items for the second dropdown
@@ -220,6 +236,24 @@ export function EditorToolbar({
         >
           <Italic className="h-4 w-4" />
         </button>
+        <button
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={handleInlineMath}
+          className="p-2 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors"
+          title={t("editor.inlineMath")}
+        >
+          <div className="flex items-center font-serif italic font-bold text-lg leading-none pt-1">
+            <span className="mr-[1px]">x</span>
+          </div>
+        </button>
+        <button
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={handleSoftBreak}
+          className="p-2 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors"
+          title="改行 (Enter)"
+        >
+          <span className="text-sm font-medium">↵</span>
+        </button>
 
       </div>
 
@@ -228,10 +262,6 @@ export function EditorToolbar({
 
       {/* 
         インライン数式ボタン
-        UXの意図: onMouseDown で preventDefault することで、
-        ボタンクリック時にエディタからフォーカスが外れない
-        これにより activeTextEditor がクリアされず、正しい位置に数式が挿入される
-      */}
       <button
         onMouseDown={(e) => e.preventDefault()}
         onClick={handleInlineMath}

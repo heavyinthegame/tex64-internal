@@ -23,11 +23,17 @@ export type BlockType =
   | 'abstract'
   | 'slideFrame'
   | 'columnBreak'
-  | 'toc';
+  | 'toc'
+  | 'pageBreak'
+  | 'maketitle'
+  | 'listoffigures'
+  | 'listoftables'
+  | 'appendix'
+  | 'bibliography';
 
 export type MathEnvType = 'definition' | 'theorem' | 'lemma' | 'proof' | 'corollary' | 'proposition' | 'example' | 'remark' | 'law' | 'block' | 'alertblock' | 'quote' | 'frame' | 'columns';
 
-export type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6; // section, subsection, etc.
+export type HeadingLevel = 0 | 1 | 2 | 3 | 4 | 5 | 6; // 0=chapter, 1=section, 2=subsection, etc.
 export type ListType = 'itemize' | 'enumerate' | 'description';
 
 // ============================================================================
@@ -52,7 +58,12 @@ export interface InlineMath {
   latex: string;
 }
 
-export type InlineContent = InlineText | InlineMath;
+export interface SoftBreak {
+  id?: string;
+  type: 'soft-break';
+}
+
+export type InlineContent = InlineText | InlineMath | SoftBreak;
 
 // ============================================================================
 // Block Content Definitions
@@ -66,6 +77,7 @@ export interface HeadingContent {
   level: HeadingLevel;
   title: string;
   label?: string; // for \label{}
+  command?: 'part' | 'chapter' | 'section' | 'subsection' | 'subsubsection' | 'paragraph' | 'subparagraph';
 }
 
 export interface ListItem {
@@ -133,6 +145,10 @@ export interface SlideFrameContent {
 
 export interface ColumnBreakContent {
   width?: string;
+}
+
+export interface PageBreakContent {
+  type: 'newpage' | 'clearpage';
 }
 
 // ============================================================================
@@ -209,6 +225,16 @@ export interface TocBlock extends BaseBlock {
   content: Record<string, never>; // No content needed
 }
 
+export interface PageBreakBlock extends BaseBlock {
+  type: 'pageBreak';
+  content: PageBreakContent;
+}
+
+export interface MaketitleBlock extends BaseBlock {
+  type: 'maketitle';
+  content: Record<string, never>;
+}
+
 export type DocumentBlock =
   | ParagraphBlock
   | HeadingBlock
@@ -222,7 +248,35 @@ export type DocumentBlock =
   | AbstractBlock
   | SlideFrameBlock
   | ColumnBreakBlock
-  | TocBlock;
+  | TocBlock
+  | PageBreakBlock
+  | MaketitleBlock
+  | ListOfFiguresBlock
+  | ListOfTablesBlock
+  | AppendixBlock
+  | BibliographyBlock;
+
+export interface ListOfFiguresBlock extends BaseBlock {
+  type: 'listoffigures';
+  content: Record<string, never>;
+}
+
+export interface ListOfTablesBlock extends BaseBlock {
+  type: 'listoftables';
+  content: Record<string, never>;
+}
+
+export interface AppendixBlock extends BaseBlock {
+  type: 'appendix';
+  content: Record<string, never>;
+}
+
+export interface BibliographyBlock extends BaseBlock {
+  type: 'bibliography';
+  content: {
+    file?: string; // for \bibliography{file}
+  };
+}
 
 // ============================================================================
 // Document Structure

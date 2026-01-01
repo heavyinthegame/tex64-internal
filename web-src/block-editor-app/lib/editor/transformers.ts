@@ -1,9 +1,9 @@
 import { Descendant, Text } from 'slate'
-import type { DocumentBlock, InlineContent, ListType, MathEnvType, HeadingLevel, MathBlock } from '@/lib/document/types'
-import { CustomElement, CustomText } from '@/types/slate'
+import type { DocumentBlock, InlineContent, InlineText, ListType, MathEnvType, HeadingLevel, MathBlock } from '@/lib/document/types'
+import { CustomElement, CustomText, SoftBreakElement } from '@/types/slate'
 import { nanoid } from 'nanoid'
 
-type InlineSlateNode = CustomText | Extract<CustomElement, { type: 'inline-math' }>
+type InlineSlateNode = CustomText | Extract<CustomElement, { type: 'inline-math' }> | SoftBreakElement
 
 const makeEmptyText = (): CustomText => ({ text: '' })
 
@@ -16,25 +16,34 @@ const toInlineNodes = (inlines: InlineContent[] = []): InlineSlateNode[] => {
       return {
         type: 'inline-math',
         id: inline.id,
-        latex: inline.latex,
+        latex: inline.latex, // Restore missing latex content
         children: [makeEmptyText()],
       } as InlineSlateNode
     }
+    if (inline.type === 'soft-break') {
+      return {
+        type: 'soft-break',
+        id: inline.id,
+        children: [makeEmptyText()],
+      } as InlineSlateNode
+    }
+    // InlineText type
+    const textInline = inline as InlineText
     return {
-      id: inline.id,
-      text: inline.content,
-      bold: inline.formatting?.bold,
-      italic: inline.formatting?.italic,
-      underline: inline.formatting?.underline,
-      code: inline.formatting?.texttt,
+      id: textInline.id,
+      text: textInline.content,
+      bold: textInline.formatting?.bold,
+      italic: textInline.formatting?.italic,
+      underline: textInline.formatting?.underline,
+      code: textInline.formatting?.texttt,
     }
   })
 }
 
 const fromInlineNodes = (nodes: Descendant[]): InlineContent[] => {
-  return nodes.map((child) => {
+  return nodes.flatMap((child) => {
     if (typeof child !== 'object') {
-      return { id: nanoid(), type: 'text', content: '' } as InlineContent
+      return [{ id: nanoid(), type: 'text', content: '' } as InlineContent]
     }
     const inlineNode = child as CustomElement | CustomText
     if ((inlineNode as CustomElement).type === 'inline-math') {
@@ -45,19 +54,29 @@ const fromInlineNodes = (nodes: Descendant[]): InlineContent[] => {
         latex: mathNode.latex || '',
       }
     }
+    
+    if ((inlineNode as CustomElement).type === 'soft-break') {
+      return [{
+        id: (inlineNode as CustomElement).id || nanoid(),
+        type: 'soft-break',
+      }]
+    }
 
     const textNode = inlineNode as CustomText
-    return {
+    const text = textNode.text || ''
+    
+    // 単純にテキストとして返す（\nもそのままこれに含まれる）
+    return [{
       id: textNode.id || nanoid(),
       type: 'text',
-      content: textNode.text || '',
+      content: text,
       formatting: {
         bold: textNode.bold || undefined,
         italic: textNode.italic || undefined,
         underline: textNode.underline || undefined,
         texttt: textNode.code || undefined,
       },
-    }
+    }]
   })
 }
 
@@ -83,6 +102,7 @@ export function toSlateNode(block: DocumentBlock): CustomElement {
         type: 'heading',
         id: block.id,
         level: block.content.level,
+        command: block.content.command,
         children: [{ text: block.content.title }],
       }
     case 'list':
@@ -165,6 +185,44 @@ export function toSlateNode(block: DocumentBlock): CustomElement {
         type: 'column-break',
         id: block.id,
         width: block.content.width,
+        children: [makeEmptyText()],
+      }
+    case 'pageBreak':
+      return {
+        type: 'pageBreak',
+        id: block.id,
+        content: block.content,
+        children: [makeEmptyText()],
+      }
+    case 'maketitle':
+      return {
+        type: 'maketitle',
+        id: block.id,
+        children: [makeEmptyText()],
+      }
+    case 'listoffigures':
+      return {
+        type: 'listoffigures',
+        id: block.id,
+        children: [makeEmptyText()],
+      }
+    case 'listoftables':
+      return {
+        type: 'listoftables',
+        id: block.id,
+        children: [makeEmptyText()],
+      }
+    case 'appendix':
+      return {
+        type: 'appendix',
+        id: block.id,
+        children: [makeEmptyText()],
+      }
+    case 'bibliography':
+      return {
+        type: 'bibliography',
+        id: block.id,
+        content: block.content,
         children: [makeEmptyText()],
       }
     default:
@@ -302,6 +360,18 @@ function fromSlateNodeUncached(node: CustomElement): DocumentBlock {
           caption: node.caption,
         },
       }
+    case 'maketitle':
+      return { id, type: 'maketitle', content: {} }
+    case 'pageBreak':
+      return { id, type: 'pageBreak', content: node.content }
+    case 'listoffigures':
+      return { id, type: 'listoffigures', content: {} }
+    case 'listoftables':
+      return { id, type: 'listoftables', content: {} }
+    case 'appendix':
+      return { id, type: 'appendix', content: {} }
+    case 'bibliography':
+      return { id, type: 'bibliography', content: node.content }
     case 'slide-frame':
       return {
         id,
@@ -317,6 +387,7 @@ function fromSlateNodeUncached(node: CustomElement): DocumentBlock {
         type: 'columnBreak',
         content: { width: node.width },
       }
+
     case 'inline-math':
       // Inline math shouldn't be top-level; wrap in paragraph to avoid data loss.
       return {

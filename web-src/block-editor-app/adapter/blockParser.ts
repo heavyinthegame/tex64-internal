@@ -7,9 +7,12 @@ import type {
   ListType,
   MathEnvType,
   HeadingLevel,
+  HeadingContent,
   TableContent,
+  BlockType, // Import BlockType
 } from "@/lib/document/types";
 
+/*
 export type BlockType =
   | "paragraph"
   | "heading"
@@ -23,7 +26,10 @@ export type BlockType =
   | "abstract"
   | "toc"
   | "slideFrame"
-  | "columnBreak";
+  | "columnBreak"
+  | "pageBreak"
+  | "maketitle";
+*/
 
 type AnchorKind = "label" | "hash" | "context";
 
@@ -280,23 +286,34 @@ export const parseBlocks = (content: string) => {
   const headingRegex = new RegExp(`\\\\(${HEADING_COMMANDS.join("|")})\\*?`, "g");
   const beginRegex = /\\begin\{([^}]+)\}/g;
   const tocRegex = /\\tableofcontents/g;
-  const columnRegex = /\\column\b/g;
+  const pageBreakRegex = /\\(newpage|clearpage)(?![a-zA-Z])/g;
+  const maketitleRegex = /\\maketitle(?![a-zA-Z])/g;
+  const columnRegex = /\\columnbreak(?![a-zA-Z])/g;
+  const structuralRegex = /\\(listoffigures|listoftables|appendix|bibliography|printbibliography)(?![a-zA-Z])/g;
 
   while (pos < content.length) {
     const headingMatch = findNextMatch(headingRegex, content, pos, commentRanges);
     const envMatch = findNextMatch(beginRegex, content, pos, commentRanges);
     const tocMatch = findNextMatch(tocRegex, content, pos, commentRanges);
+    const pageBreakMatch = findNextMatch(pageBreakRegex, content, pos, commentRanges);
+    const maketitleMatch = findNextMatch(maketitleRegex, content, pos, commentRanges);
     const columnMatch = findNextMatch(columnRegex, content, pos, commentRanges);
+    const structuralMatch = findNextMatch(structuralRegex, content, pos, commentRanges);
 
-    const candidates = [headingMatch, envMatch, tocMatch, columnMatch].filter(Boolean) as RegExpMatchArray[];
+    const candidates = [headingMatch, envMatch, tocMatch, pageBreakMatch, maketitleMatch, columnMatch, structuralMatch].filter(Boolean) as RegExpMatchArray[];
     if (candidates.length === 0) {
       const tail = content.slice(pos);
-      if (tail.trim()) {
+      const trimmedTail = tail.trim();
+      
+      if (trimmedTail) {
         const snippet = tail;
+        // Strip \\ and check for environments
+        const cleanedTail = tail.replace(/\\\\[\s\[\]0-9a-z]*/g, ' ').trim();
+        const hasEnvironment = /\\begin\{|\\end\{/.test(cleanedTail);
         blocksParsed.push({
           id: buildHash(`${pos}-${snippet.length}`),
-          type: "raw",
-          title: "本文",
+          type: hasEnvironment ? "raw" : "paragraph",
+          title: hasEnvironment ? "本文" : cleanedTail.slice(0, 30),
           snippet,
           start: pos,
           end: content.length,
@@ -314,12 +331,16 @@ export const parseBlocks = (content: string) => {
 
     if (nextMatch.index > pos) {
       const between = content.slice(pos, nextMatch.index);
-      if (between.trim()) {
-        const simpleParagraph = !between.match(/\\[A-Za-z]+|\\begin\{|\\end\{/);
+      const trimmedBetween = between.trim();
+      if (trimmedBetween) {
+        // Only mark as raw if it contains \begin{} or \end{} - inline commands and math are fine in paragraphs
+        // Also strip \\ from the content as it's not meaningful in a block editor
+        const cleanedBetween = between.replace(/\\\\[\s\[\]0-9a-z]*/g, ' ').trim();
+        const hasEnvironment = /\\begin\{|\\end\{/.test(cleanedBetween);
         blocksParsed.push({
           id: buildHash(`${pos}-${between.length}`),
-          type: simpleParagraph ? "paragraph" : "raw",
-          title: simpleParagraph ? between.trim().slice(0, 30) : "本文",
+          type: hasEnvironment ? "raw" : "paragraph",
+          title: hasEnvironment ? "本文" : cleanedBetween.slice(0, 30),
           snippet: between,
           start: pos,
           end: nextMatch.index,
@@ -332,6 +353,7 @@ export const parseBlocks = (content: string) => {
     }
 
     if (headingMatch && nextMatch === headingMatch) {
+      // ... (heading handling same as before)
       const command = headingMatch[1];
       const afterCommand = headingMatch.index + headingMatch[0].length;
       let cursor = skipWhitespace(content, afterCommand);
@@ -372,10 +394,12 @@ export const parseBlocks = (content: string) => {
     }
 
     if (envMatch && nextMatch === envMatch) {
+        // ... (env logic mostly same, just checking simple pass-through)
       const envName = envMatch[1];
       const beginIndex = envMatch.index;
       let cursor = skipWhitespace(content, beginIndex + envMatch[0].length);
       let optionalArg: string | undefined;
+      // ... (parsing args)
       if (content[cursor] === "[") {
         const group = readGroup(content, cursor, "[", "]");
         if (group) {
@@ -514,6 +538,40 @@ export const parseBlocks = (content: string) => {
       continue;
     }
 
+    if (pageBreakMatch && nextMatch === pageBreakMatch) {
+      const snippet = pageBreakMatch[0];
+      blocksParsed.push({
+        id: buildHash(`${pageBreakMatch.index}-${snippet.length}`),
+        type: "pageBreak",
+        title: "改ページ",
+        snippet,
+        start: pageBreakMatch.index,
+        end: pageBreakMatch.index + snippet.length,
+        anchor: extractAnchor(snippet),
+        fingerprint: buildFingerprint(snippet),
+        meta: { envName: pageBreakMatch[1] },
+      });
+      pos = pageBreakMatch.index + snippet.length;
+      continue;
+    }
+
+    if (maketitleMatch && nextMatch === maketitleMatch) {
+      const snippet = maketitleMatch[0];
+      blocksParsed.push({
+        id: buildHash(`${maketitleMatch.index}-${snippet.length}`),
+        type: "maketitle",
+        title: "タイトルページ",
+        snippet,
+        start: maketitleMatch.index,
+        end: maketitleMatch.index + snippet.length,
+        anchor: extractAnchor(snippet),
+        fingerprint: buildFingerprint(snippet),
+        meta: {},
+      });
+      pos = maketitleMatch.index + snippet.length;
+      continue;
+    }
+
     if (columnMatch && nextMatch === columnMatch) {
       const columnGroup = readGroup(content, columnMatch.index + columnMatch[0].length, "{", "}");
       const end = columnGroup ? columnGroup.end : columnMatch.index + columnMatch[0].length;
@@ -533,11 +591,65 @@ export const parseBlocks = (content: string) => {
       continue;
     }
 
+    if (structuralMatch && nextMatch === structuralMatch) {
+      const typeStr = structuralMatch[1];
+      const snippet = structuralMatch[0];
+      let type: BlockType = "raw";
+      let meta: BlockMeta = {};
+      
+      if (typeStr === "listoffigures") type = "listoffigures";
+      else if (typeStr === "listoftables") type = "listoftables";
+      else if (typeStr === "appendix") type = "appendix";
+      else if (typeStr === "bibliography" || typeStr === "printbibliography") {
+        type = "bibliography";
+        // Handle bibliography file arg if present
+        let cursor = skipWhitespace(content, structuralMatch.index + snippet.length);
+        if (content[cursor] === "{") {
+           const group = readGroup(content, cursor, "{", "}");
+           if (group) {
+             meta.optionalArg = group.content; // Use optionalArg for filename
+             pos = group.end; // Advance position past args
+             // Rebuild snippet to include args? Yes, otherwise content is lost.
+             const fullSnippet = content.slice(structuralMatch.index, group.end);
+             blocksParsed.push({
+                id: buildHash(`${structuralMatch.index}-${fullSnippet.length}`),
+                type,
+                title: typeStr,
+                snippet: fullSnippet,
+                start: structuralMatch.index,
+                end: group.end,
+                anchor: extractAnchor(fullSnippet),
+                fingerprint: buildFingerprint(fullSnippet),
+                meta, 
+             });
+             continue;
+           }
+        }
+      }
+
+      // Default structural handling (no args or unhandled)
+      blocksParsed.push({
+        id: buildHash(`${structuralMatch.index}-${snippet.length}`),
+        type,
+        title: typeStr,
+        snippet,
+        start: structuralMatch.index,
+        end: structuralMatch.index + snippet.length,
+        anchor: extractAnchor(snippet),
+        fingerprint: buildFingerprint(snippet),
+        meta,
+      });
+      pos = structuralMatch.index + snippet.length;
+      continue;
+    }
+
     pos += 1;
   }
 
   return blocksParsed;
 };
+
+
 
 const findNextSpecial = (text: string, start: number) => {
   const tokens = ["$", "\\(", "\\ce{", "\\text", "\\textbf", "\\textit", "\\texttt", "\\underline", "\\emph"];
@@ -586,6 +698,29 @@ const parseInlines = (text: string, depth = 0): InlineContent[] => {
   while (i < text.length && iterations < maxIterations) {
     iterations += 1;
     const startI = i;
+
+    // Check for \\ line break - parse as special character ⏎ (simple text-based approach)
+    // This avoids inline void element complexity and cursor issues
+    if (text.startsWith("\\\\", i)) {
+      // Also handle \\[1em] style spacing - consume optional spacing arg
+      let endPos = i + 2;
+      if (text[endPos] === "[") {
+        const closeBracket = text.indexOf("]", endPos);
+        if (closeBracket > endPos) {
+          endPos = closeBracket + 1;
+        }
+      }
+      // Use ⏎ (U+23CE) as LaTeX line break marker - simple text, no cursor issues
+      result.push({ id: nanoid(), type: "text", content: "⏎" });
+      i = endPos;
+      // Skip a single optional newline immediately following \\ to prevent double-spacing
+      if (text[i] === "\n") {
+        i++;
+      } else if (text[i] === "\r" && text[i + 1] === "\n") {
+        i += 2;
+      }
+      continue;
+    }
 
     if (text[i] === "$") {
       const end = text.indexOf("$", i + 1);
@@ -713,8 +848,9 @@ const parseMetadata = (content: string) => {
 const entryToDocumentBlock = (entry: BlockEntry): DocumentBlock => {
   switch (entry.type) {
     case "heading": {
+      const command = entry.meta.headingCommand as HeadingContent['command'] | undefined;
       const level =
-        (entry.meta.headingCommand && HEADING_LEVELS[entry.meta.headingCommand]) || 1;
+        (command && HEADING_LEVELS[command]) || 1;
       return {
         id: entry.id,
         type: "heading",
@@ -722,6 +858,7 @@ const entryToDocumentBlock = (entry: BlockEntry): DocumentBlock => {
           level,
           title: entry.parsed?.title ?? entry.title ?? "",
           label: entry.anchor.kind === "label" ? entry.anchor.value : undefined,
+          command,
         },
       };
     }
@@ -852,7 +989,34 @@ const entryToDocumentBlock = (entry: BlockEntry): DocumentBlock => {
         },
       };
     }
-    case "raw":
+    case "pageBreak": {
+      return {
+        id: entry.id,
+        type: "pageBreak",
+        content: {
+          type: (entry.meta.envName === "clearpage" ? "clearpage" : "newpage") as "newpage" | "clearpage",
+        },
+      };
+    }
+    case "maketitle": {
+      return {
+        id: entry.id,
+        type: "maketitle",
+        content: {},
+      };
+    }
+    case "listoffigures": {
+       return { id: entry.id, type: "listoffigures", content: {} };
+    }
+    case "listoftables": {
+       return { id: entry.id, type: "listoftables", content: {} };
+    }
+    case "appendix": {
+       return { id: entry.id, type: "appendix", content: {} };
+    }
+    case "bibliography": {
+       return { id: entry.id, type: "bibliography", content: { file: entry.meta.optionalArg } };
+    }
     default: {
       return {
         id: entry.id,

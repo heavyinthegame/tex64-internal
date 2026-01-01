@@ -322,10 +322,15 @@ export const SimpleMathField = React.memo(function SimpleMathField({
       mathFieldRef.current.style.setProperty("--contains-highlight-background-color", "transparent")
       applySelectionBoldStyle(mathFieldRef.current)
       
-      // Auto-focus if requested
+      // Auto-focus if requested, preserving scroll position
       if (autoFocus) {
         requestAnimationFrame(() => {
+          // Save scroll position before focus
+          const scrollY = window.scrollY
+          const scrollX = window.scrollX
           mathFieldRef.current?.focus()
+          // Restore scroll position after focus (prevents unwanted scrolling)
+          window.scrollTo(scrollX, scrollY)
         })
       }
     }

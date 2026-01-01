@@ -2,7 +2,7 @@
  * Document Operations - Helper functions for manipulating document blocks
  */
 
-import type { Document, DocumentBlock, EditorState, MathEnvType } from './types';
+import type { Document, DocumentBlock, EditorState, MathEnvType, HeadingLevel, HeadingContent } from './types';
 import { nanoid } from 'nanoid';
 
 // ============================================================================
@@ -19,13 +19,24 @@ export function createParagraphBlock(text: string = ''): DocumentBlock {
   };
 }
 
-export function createHeadingBlock(level: 1 | 2 | 3 | 4 | 5 | 6, title: string): DocumentBlock {
+export function createHeadingBlock(level: HeadingLevel, title: string): DocumentBlock {
+  // Map level to command
+  const commandMap: Record<number, HeadingContent['command']> = {
+    0: 'chapter',
+    1: 'section',
+    2: 'subsection',
+    3: 'subsubsection',
+    4: 'paragraph',
+    5: 'subparagraph',
+    6: 'subparagraph',
+  }
   return {
     id: nanoid(),
     type: 'heading',
     content: {
       level,
-      title
+      title,
+      command: commandMap[level] || 'section',
     }
   };
 }
@@ -104,6 +115,22 @@ export function createMathEnvBlock(
       displayMath: undefined
     }
   }
+}
+
+export function createPageBreakBlock(type: 'newpage' | 'clearpage' = 'newpage'): DocumentBlock {
+  return {
+    id: nanoid(),
+    type: 'pageBreak',
+    content: { type }
+  };
+}
+
+export function createMaketitleBlock(): DocumentBlock {
+  return {
+    id: nanoid(),
+    type: 'maketitle',
+    content: {}
+  };
 }
 
 // ============================================================================

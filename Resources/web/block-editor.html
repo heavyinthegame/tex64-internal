@@ -10,6 +10,11 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      window.MathfieldElement = window.MathfieldElement || {};
+      window.MathfieldElement.fontsDirectory = "./mathlive/fonts";
+      window.MathfieldElement.soundsDirectory = "./mathlive/sounds";
+    </script>
     <script src="./mathlive/mathlive.min.js" onload="window.dispatchEvent(new Event('mathlive-ready'))" onerror="window.MATHLIVE_LOAD_ERROR = 'Script load failed'"></script>
     <script src="./block-editor.js"></script>
   </body>

@@ -13,12 +13,15 @@ import {
   createAbstractBlock,
   createFigureBlock,
   createTableBlock,
+  createPageBreakBlock,
+  createMaketitleBlock,
 } from "@/lib/document/operations"
 import type {
   Document as TexDocument,
   DocumentBlock,
   DocumentMetadata,
   HeadingLevel,
+  HeadingContent,
   MathEnvType,
   MathBlock,
   FigureBlock,
@@ -39,7 +42,9 @@ import { FigureBlockView } from "./blocks/FigureBlock"
 import { TableBlockView } from "./blocks/TableBlock"
 import { AbstractBlockView } from "./blocks/AbstractBlock"
 import { MathBlockView } from "./blocks/MathBlockView"
-import { Plus, FileText, Trash2, Copy, ArrowUp, ArrowDown, Type, Heading1, Heading2, Heading3, List, ListOrdered, Sigma, BookOpen, Code, Image, Table, ScrollText, CheckCircle, Lightbulb, MessageSquare } from "lucide-react"
+import { LayoutBlockView } from "./blocks/LayoutBlockView"
+import { RawBlockView } from "./blocks/RawBlockView"
+import { Plus, FileText, Trash2, Copy, ArrowUp, ArrowDown, Type, Heading1, Heading2, Heading3, List, ListOrdered, Sigma, BookOpen, Code, Image, Table, ScrollText, CheckCircle, Lightbulb, MessageSquare, Settings2, Check } from "lucide-react"
 import { nanoid } from "nanoid"
 
 type DocumentEditorProps = {
@@ -63,6 +68,8 @@ type BlockChromeProps = {
   onMoveDown?: () => void
   onChangeType?: (type: EditorStyle | string) => void
   children: ReactNode
+  isVoid?: boolean
+  onFocusRequest?: (e: React.MouseEvent) => void
 }
 
 const BlockChrome = React.memo(function BlockChrome({
@@ -76,6 +83,8 @@ const BlockChrome = React.memo(function BlockChrome({
   onMoveDown,
   onChangeType,
   children,
+  isVoid,
+  onFocusRequest,
 }: BlockChromeProps) {
   const [showContextMenu, setShowContextMenu] = useState(false)
   const [contextMenuPos, setContextMenuPos] = useState({ x: 0, y: 0 })
@@ -115,7 +124,13 @@ const BlockChrome = React.memo(function BlockChrome({
       case "abstract":
         return "bg-violet-50/70"
       case "toc":
-        return "bg-amber-50/70"
+      case "pageBreak":
+      case "maketitle":
+      case "listoffigures":
+      case "listoftables":
+      case "appendix":
+      case "bibliography":
+        return "bg-transparent"
       case "raw":
         return "bg-slate-50/70"
       default:
@@ -143,7 +158,19 @@ const BlockChrome = React.memo(function BlockChrome({
       case "abstract":
         return "bg-violet-500"
       case "toc":
+        return "bg-emerald-500"
+      case "listoffigures":
+        return "bg-sky-500"
+      case "listoftables":
+        return "bg-cyan-500"
+      case "bibliography":
         return "bg-amber-500"
+      case "maketitle":
+        return "bg-purple-500"
+      case "pageBreak":
+        return "bg-slate-400"
+      case "appendix":
+        return "bg-slate-500"
       default:
         return "bg-slate-400"
     }
@@ -161,16 +188,36 @@ const BlockChrome = React.memo(function BlockChrome({
     <>
       <div
         {...attributes}
+        onMouseDown={(e) => {
+          if (e.target === e.currentTarget || (isVoid && (e.target as HTMLElement).closest('[data-slate-element]'))) {
+             onFocusRequest?.(e)
+          }
+        }}
         onContextMenu={handleContextMenu}
         className={`relative group transition-all rounded-lg ${getBlockBgColor()}`}
       >
         <div
           className={`absolute left-0 top-0 bottom-0 w-1 rounded-l-lg transition-all ${getIndicatorColor()}`}
           contentEditable={false}
+          onMouseDown={(e) => {
+             e.stopPropagation()
+             onFocusRequest?.(e)
+          }}
         />
 
-        <div className="pl-4 pr-2 py-2 flex items-center gap-2">
-          <div className="flex-1 min-w-0">{children}</div>
+        <div 
+          className="pl-4 pr-2 py-2 flex items-center gap-2"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget || (e.target as HTMLElement).classList.contains('flex-1') || isVoid) {
+              onFocusRequest?.(e)
+            }
+          }}
+        >
+          <div className="flex-1 min-w-0" onMouseDown={e => {
+            if (e.target === e.currentTarget || isVoid) {
+               onFocusRequest?.(e)
+            }
+          }}>{children}</div>
           <button
             className="flex-shrink-0 p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all self-center opacity-0 group-hover:opacity-100"
             onClick={(e) => {
@@ -199,31 +246,39 @@ const BlockChrome = React.memo(function BlockChrome({
           >
             {/* Block Type Grid */}
             {onChangeType && (
-              <div className="grid grid-cols-4 gap-1 mb-2">
+              <div className="grid grid-cols-5 gap-1 mb-2">
                 {/* Row 1: Text/Headings */}
                 <button
-                  onClick={() => { onChangeType("heading1"); setShowContextMenu(false) }}
+                  onClick={() => { onChangeType("chapter"); setShowContextMenu(false) }}
                   className="flex flex-col items-center gap-0.5 p-1.5 rounded hover:bg-purple-50 text-purple-700"
-                  title="章 (H1)"
+                  title="章"
                 >
                   <Heading1 className="h-4 w-4" />
                   <span className="text-[9px]">章</span>
                 </button>
                 <button
-                  onClick={() => { onChangeType("heading2"); setShowContextMenu(false) }}
+                  onClick={() => { onChangeType("section"); setShowContextMenu(false) }}
                   className="flex flex-col items-center gap-0.5 p-1.5 rounded hover:bg-purple-50 text-purple-700"
-                  title="節 (H2)"
+                  title="節"
                 >
                   <Heading2 className="h-4 w-4" />
                   <span className="text-[9px]">節</span>
                 </button>
                 <button
-                  onClick={() => { onChangeType("heading3"); setShowContextMenu(false) }}
+                  onClick={() => { onChangeType("subsection"); setShowContextMenu(false) }}
                   className="flex flex-col items-center gap-0.5 p-1.5 rounded hover:bg-purple-50 text-purple-700"
-                  title="項 (H3)"
+                  title="項"
                 >
                   <Heading3 className="h-4 w-4" />
                   <span className="text-[9px]">項</span>
+                </button>
+                <button
+                  onClick={() => { onChangeType("subsubsection"); setShowContextMenu(false) }}
+                  className="flex flex-col items-center gap-0.5 p-1.5 rounded hover:bg-purple-50 text-purple-700"
+                  title="目"
+                >
+                  <Heading3 className="h-4 w-4" />
+                  <span className="text-[9px]">目</span>
                 </button>
                 <button
                   onClick={() => { onChangeType("paragraph"); setShowContextMenu(false) }}
@@ -417,7 +472,20 @@ export function DocumentEditor({
     }
 
     e.isVoid = (element) => {
-      return ["inline-math", "math-block", "raw", "figure", "table", "abstract", "toc"].includes(
+      return [
+        "inline-math",
+        "math-block",
+        "raw",
+        "figure",
+        "table",
+        "toc",
+        "pageBreak",
+        "maketitle",
+        "listoffigures",
+        "listoftables",
+        "appendix",
+        "bibliography"
+      ].includes(
         (element as SlateElement).type,
       )
         ? true
@@ -472,13 +540,19 @@ export function DocumentEditor({
         }
         return mathNode
       }
+      // soft-break is no longer an element - convert to newline character in text
+      if (inline.type === "soft-break") {
+        return { text: "\n" } as CustomText
+      }
+      // Handle regular text
+      const textInline = inline as Extract<InlineContent, { type: "text" }>
       const textNode: CustomText = {
-        id: inline.id,
-        text: inline.content,
-        bold: inline.formatting?.bold,
-        italic: inline.formatting?.italic,
-        underline: inline.formatting?.underline,
-        code: inline.formatting?.texttt,
+        id: textInline.id,
+        text: textInline.content,
+        bold: textInline.formatting?.bold,
+        italic: textInline.formatting?.italic,
+        underline: textInline.formatting?.underline,
+        code: textInline.formatting?.texttt,
       }
       return textNode
     })
@@ -610,6 +684,7 @@ export function DocumentEditor({
   const documentRef = useRef(document)
   const onChangeRef = useRef(onChange)
   const onSelectionChangeRef = useRef(onSelectionChange)
+  const isRemoteUpdatingRef = useRef(false)
 
   useEffect(() => {
     documentRef.current = document
@@ -630,8 +705,20 @@ export function DocumentEditor({
       return
     }
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setSlateValue(toSlate(document?.blocks || []))
-    setSlateKey((k) => k + 1)
+    // setSlateValue(toSlate(document?.blocks || []))
+    // setSlateKey((k) => k + 1)
+    
+    // Update content inplace without remounting to preserve scroll/focus
+    const nextValue = toSlate(document?.blocks || [])
+    isRemoteUpdatingRef.current = true
+    try {
+      Editor.withoutNormalizing(slateEditor, () => {
+        slateEditor.children = nextValue
+        slateEditor.onChange()
+      })
+    } finally {
+      isRemoteUpdatingRef.current = false
+    }
   }, [document?.blocks])
 
   useEffect(() => {
@@ -654,7 +741,7 @@ export function DocumentEditor({
         if (canUndo && onUndo) onUndo()
         return
       }
-      
+
       if (cmdOrCtrl && ((e.key === 'z' && e.shiftKey) || e.key === 'y')) {
         e.preventDefault()
         if (canRedo && onRedo) onRedo()
@@ -723,7 +810,7 @@ export function DocumentEditor({
     const numbers = new Map<string, string>()
     let currentChapter = 0
     let equationInChapter = 0
-    
+
     // Recursive function to assign chapter-based numbers
     const assignNumbers = (blocks: typeof document.blocks) => {
       blocks.forEach((block) => {
@@ -732,12 +819,12 @@ export function DocumentEditor({
           currentChapter += 1
           equationInChapter = 0 // Reset equation counter for new chapter
         }
-        
+
         if (block.type === "mathBlock") {
           equationInChapter += 1
           // Format: "章.番号" or just "番号" if no chapter yet
-          const numberStr = currentChapter > 0 
-            ? `${currentChapter}.${equationInChapter}` 
+          const numberStr = currentChapter > 0
+            ? `${currentChapter}.${equationInChapter}`
             : `${equationInChapter}`
           numbers.set(block.id, numberStr)
         } else if (block.type === "mathEnv" && block.content.children) {
@@ -745,7 +832,7 @@ export function DocumentEditor({
         }
       })
     }
-    
+
     assignNumbers(document.blocks)
     return numbers
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -771,8 +858,10 @@ export function DocumentEditor({
       if (!Array.isArray(value)) {
         return
       }
-      // Note: removed setSlateValue(value) - Slate manages its own state internally
-      // Calling setState was causing unnecessary React re-renders
+      if (isRemoteUpdatingRef.current) {
+        return
+      }
+      setSlateValue(value)
       const nextBlocks = fromSlate(value)
       const nextDoc = { ...documentRef.current, blocks: nextBlocks }
       documentRef.current = nextDoc
@@ -784,8 +873,13 @@ export function DocumentEditor({
         const [node, path] = blockEntry as [CustomElement, Path]
         setSelectedBlockId(node.id || null)
         if (node.type === "heading") {
-          const level = (node as { level?: number }).level || 1
-          setCurrentStyle(level === 1 ? "heading1" : level === 2 ? "heading2" : "heading3")
+          const command = (node as { command?: string }).command
+          if (command === "section" || command === "subsection" || command === "subsubsection") {
+            setCurrentStyle(command as EditorStyle)
+          } else {
+            const level = (node as { level?: number }).level || 1
+            setCurrentStyle(level === 1 ? "section" : level === 2 ? "subsection" : "subsubsection")
+          }
         } else if (node.type === "list") {
           setCurrentStyle(node.listType === "enumerate" ? "numbered" : "bullet")
         } else if (node.type === "list-item") {
@@ -852,15 +946,16 @@ export function DocumentEditor({
 
   const handleStyleChange = (style: EditorStyle | string) => {
     // If style is a strictly typed EditorStyle, update current style UI
-    if (["paragraph", "heading1", "heading2", "heading3", "bullet", "numbered"].includes(style)) {
+    if (["paragraph", "chapter", "section", "subsection", "subsubsection", "bullet", "numbered"].includes(style)) {
        setCurrentStyle(style as EditorStyle)
     }
 
     const entry = getSelectedBlockEntry()
     if (!entry) {
       // No selection - insert new block
-      if (style.startsWith("heading")) {
-        insertBlockNode(createHeadingBlock(style === "heading1" ? 1 : style === "heading2" ? 2 : 3, ""), {
+      if (style === "chapter" || style === "section" || style === "subsection" || style === "subsubsection") {
+        const level = style === "chapter" ? 0 : style === "section" ? 1 : style === "subsection" ? 2 : 3
+        insertBlockNode(createHeadingBlock(level as HeadingLevel, ""), {
           position: "afterSelection",
         })
       } else if (style === "bullet" || style === "numbered") {
@@ -880,7 +975,7 @@ export function DocumentEditor({
 
     const [, path] = entry
     const node = entry[0] as CustomElement
-    
+
     // --- Helper to get text content from node ---
     const getTextContent = (n: CustomElement): string => {
       if (n.type === "math-block") {
@@ -903,7 +998,7 @@ export function DocumentEditor({
 
       // 2. Elements
       const element = n as CustomElement
-      
+
       switch (element.type) {
         case "math-block":
           return element.latex || ""
@@ -911,9 +1006,11 @@ export function DocumentEditor({
           return element.latex || ""
         case "inline-math":
           return `$${element.latex || ""}$`
-        
+        case "soft-break":
+          return "\\\\"
+
         case "paragraph":
-        case "heading": 
+        case "heading":
         case "list-item":
           return element.children.map(child => getLatexContent(child)).join("")
 
@@ -965,11 +1062,11 @@ export function DocumentEditor({
       const text = getTextContent(node)
       // Remove old node and insert new list
       Transforms.removeNodes(slateEditor, { at: path })
-      
+
       // Create Block then convert to Slate Node to modify children
       const newListBlock = createListBlock(listType)
       const newListNode = toSlateNode(newListBlock) as unknown as ListElement
-      
+
       // Set the content of the first item
       // ListElement -> children: ListItemElement[] -> children: CustomText[]
       if (newListNode.children.length > 0 && newListNode.children[0].children.length > 0) {
@@ -981,10 +1078,11 @@ export function DocumentEditor({
     }
 
     // To Heading
-    if (style.startsWith("heading")) {
-      const level: HeadingLevel = style === "heading1" ? 1 : style === "heading2" ? 2 : 3
+    if (style === "chapter" || style === "section" || style === "subsection" || style === "subsubsection") {
+      const level: HeadingLevel = style === "chapter" ? 0 : style === "section" ? 1 : style === "subsection" ? 2 : 3
+      const command = style as HeadingContent['command']
       if (node.type === "heading") {
-         Transforms.setNodes<SlateElement>(slateEditor, { level } as Partial<CustomElement>, { at: path })
+         Transforms.setNodes<SlateElement>(slateEditor, { level, command } as Partial<CustomElement>, { at: path })
          return
       }
       // Convert to heading
@@ -1001,10 +1099,10 @@ export function DocumentEditor({
       if (node.type === "paragraph") return
       const text = getTextContent(node)
       Transforms.removeNodes(slateEditor, { at: path })
-      
+
       const newParaBlock = createParagraphBlock()
       const newParaNode = toSlateNode(newParaBlock) as unknown as ParagraphElement
-      
+
       // Set text
       if (newParaNode.children.length > 0) {
         const firstChild = newParaNode.children[0] as CustomText
@@ -1079,13 +1177,16 @@ export function DocumentEditor({
       case "paragraph":
         insertBlockNode(createParagraphBlock(), { position: "afterSelection" })
         return
-      case "heading1":
+      case "chapter":
+        insertBlockNode(createHeadingBlock(0, ""), { position: "afterSelection" })
+        return
+      case "section":
         insertBlockNode(createHeadingBlock(1, ""), { position: "afterSelection" })
         return
-      case "heading2":
+      case "subsection":
         insertBlockNode(createHeadingBlock(2, ""), { position: "afterSelection" })
         return
-      case "heading3":
+      case "subsubsection":
         insertBlockNode(createHeadingBlock(3, ""), { position: "afterSelection" })
         return
       case "list-bullet":
@@ -1116,6 +1217,12 @@ export function DocumentEditor({
       case "remark":
         insertBlockNode(createMathEnvBlock(type as MathEnvType, ""), { position: "afterSelection" })
         return
+      case "pageBreak":
+        insertBlockNode(createPageBreakBlock("newpage"), { position: "afterSelection" })
+        return
+      case "maketitle":
+        insertBlockNode(createMaketitleBlock(), { position: "afterSelection" })
+        return
       default:
         return
     }
@@ -1124,7 +1231,7 @@ export function DocumentEditor({
   const handleDeleteElement = useCallback(
     (element: SlateElement) => {
       const path = ReactEditor.findPath(slateEditor, element)
-      
+
       // Calculate focus candidate before deletion
       let focusPath: Path | null = null
       if (Path.hasPrevious(path)) {
@@ -1133,24 +1240,35 @@ export function DocumentEditor({
         // If no previous, check if there are siblings that will shift into this spot
         const parent = Node.parent(slateEditor, path)
         if (parent.children.length > 1) {
-             focusPath = path 
+             focusPath = path
         }
       }
 
       Transforms.removeNodes(slateEditor, { at: path })
 
-      if (focusPath) {
-         // Try to focus the end of the adjacent block
-         try {
+       if (focusPath) {
+          // Try to focus the end of the adjacent block
+          try {
              // We need to wait for React to update or just try selecting
              // Selecting end of void nodes (like math block) might be tricky, usually select the block itself
              Transforms.select(slateEditor, Editor.end(slateEditor, focusPath))
              ReactEditor.focus(slateEditor)
-         } catch(e) { 
-            // Fallback: just focus editor
-            ReactEditor.focus(slateEditor)
-         }
-      }
+          } catch(e) { 
+             // Fallback: Do NOT blindly focus editor (jumps to top).
+             // Try focusing the start of the editor if path resolution failed, but maybe better to do nothing?
+             // Or try finding the nearest block.
+             // If we can't focus the specific path, let's try to maintain current scroll by not forcing focus to 0.
+             // But we need input focus.
+             try {
+                // Try selecting the path itself (block selection) instead of end point
+                 Transforms.select(slateEditor, focusPath)
+                 ReactEditor.focus(slateEditor)
+             } catch (e2) {
+                 // Final fallback: focus editor but try to preserve selection if possible (unlikely here)
+                 ReactEditor.focus(slateEditor)
+             }
+          }
+       }
     },
     [slateEditor],
   )
@@ -1197,11 +1315,128 @@ export function DocumentEditor({
 
   const handleEditableKeyDown = useCallback(
     (event: React.KeyboardEvent) => {
-      // Enter key: insert soft break (newline) instead of splitting block
-      // Skip during IME composition (Japanese/Korean/Chinese input)
-      if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+      // Cmd+A / Ctrl+A: Select only the current block text
+      // User requested to disable full document selection ("creepy").
+      // Only select the current input field (block) if focused.
+      if ((event.metaKey || event.ctrlKey) && event.key === "a") {
         event.preventDefault()
-        slateEditor.insertText("\n")
+        
+        const selection = slateEditor.selection
+        if (!selection) return // If not focused/no selection, do nothing to disable global select
+
+        // Find the current block to select
+        const match = Editor.above(slateEditor, {
+          match: (n) => SlateElement.isElement(n) && Editor.isBlock(slateEditor, n),
+        })
+
+        if (match) {
+          const [, path] = match
+          Transforms.select(slateEditor, path)
+        }
+        return
+      }
+
+      // Arrow key handling: Skip over inline void elements (like inline-math)
+      // This prevents cursor from "entering" the void element and causing weird scrolling
+      if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+        const selection = slateEditor.selection
+        if (!selection || !Range.isCollapsed(selection)) return // Let default handle range selection
+
+        const isLeft = event.key === "ArrowLeft"
+        
+        // Check if we're about to move into an inline void element
+        const nextPoint = isLeft
+          ? Editor.before(slateEditor, selection.anchor, { unit: "offset" })
+          : Editor.after(slateEditor, selection.anchor, { unit: "offset" })
+
+        if (!nextPoint) return // At document boundary, let default handle
+
+        // Check if the node at nextPoint is an inline void
+        const [nextNode] = Editor.node(slateEditor, nextPoint)
+        
+        // If next position is inside an inline void, skip over it entirely
+        const inlineVoidEntry = Editor.above(slateEditor, {
+          at: nextPoint,
+          match: (n) =>
+            SlateElement.isElement(n) &&
+            slateEditor.isInline(n as SlateElement) &&
+            slateEditor.isVoid(n as SlateElement),
+        })
+
+        if (inlineVoidEntry) {
+          event.preventDefault()
+          const [, voidPath] = inlineVoidEntry
+
+          // Move cursor to the other side of the void element
+          const targetPoint = isLeft
+            ? Editor.before(slateEditor, voidPath)
+            : Editor.after(slateEditor, voidPath)
+
+          if (targetPoint) {
+            Transforms.select(slateEditor, targetPoint)
+          }
+          return
+        }
+      }
+
+      // Enter key behavior:
+      // - In paragraph/list-item: Insert \n character (soft line break, stays in same block)
+      // - In heading/void elements: Disabled (no line breaks allowed)
+      // - Always prevent Slate's default behavior of splitting blocks
+      if (event.key === "Enter") {
+        if (event.nativeEvent.isComposing) {
+          return
+        }
+        event.preventDefault()
+        event.stopPropagation()
+
+        // Find the current block
+        const selection = slateEditor.selection
+        if (!selection) return
+
+        const blockEntry = Editor.above(slateEditor, {
+          at: selection,
+          match: (n) => SlateElement.isElement(n) && Editor.isBlock(slateEditor, n),
+          mode: "lowest",
+        })
+
+        if (!blockEntry) return
+
+        const [block] = blockEntry
+        const blockType = (block as CustomElement).type
+
+        // Allow \n insertion only in paragraph and list-item
+        if (blockType === "paragraph" || blockType === "list-item") {
+          // First check if we're at an inline void element
+          // If so, move cursor after it before inserting newline
+          const inlineVoidEntry = Editor.above(slateEditor, {
+            at: selection,
+            match: (n) =>
+              SlateElement.isElement(n) &&
+              slateEditor.isInline(n as SlateElement) &&
+              slateEditor.isVoid(n as SlateElement),
+          })
+
+          if (inlineVoidEntry) {
+            // Move cursor to after the inline void element
+            const [, voidPath] = inlineVoidEntry
+            const afterVoid = Editor.after(slateEditor, voidPath)
+            if (afterVoid) {
+              Transforms.select(slateEditor, afterVoid)
+            }
+          }
+
+          // Collapse selection to ensure clean insert
+          if (!Range.isCollapsed(selection)) {
+            Transforms.collapse(slateEditor, { edge: "end" })
+          }
+
+          // Insert \n as plain text for editor-only line break
+          // This is different from soft-break (which represents LaTeX \\)
+          // \n is for visual editing only and will NOT be output as \\ in LaTeX
+          Transforms.insertText(slateEditor, "\n")
+        }
+        // For heading, void elements, and others: do nothing (Enter is disabled)
         return
       }
 
@@ -1260,16 +1495,14 @@ export function DocumentEditor({
       const path = ReactEditor.findPath(slateEditor, node)
       // Check if this block is selected or contains the selected block
       // Use selectedBlockId state for reactivity, plus path check for hierarchy
-      const isThisBlock = node.id === selectedBlockId
-      let containsSelection = false
+      let isSelected = node.id === selectedBlockId
       try {
         if (slateEditor.selection) {
-          containsSelection = Path.isAncestor(path, slateEditor.selection.anchor.path)
+          isSelected = isSelected || Path.isAncestor(path, slateEditor.selection.anchor.path)
         }
       } catch {
         // Selection invalid or path not found - ignore
       }
-      const isSelected = isThisBlock || containsSelection
       const mappedType: DocumentBlock["type"] =
         elementType === "math-block"
           ? "mathBlock"
@@ -1281,8 +1514,18 @@ export function DocumentEditor({
                 ? "columnBreak"
                 : (elementType as DocumentBlock["type"])
 
-      const selectBlock = () => {
+      const selectBlock = (e?: React.MouseEvent) => {
         setActiveTextEditor(editorInterface)
+        if (e) {
+          // If explicitly called via a background click request
+          ReactEditor.focus(slateEditor)
+          try {
+            const at = ReactEditor.findPath(slateEditor, node)
+            Transforms.select(slateEditor, Editor.end(slateEditor, at))
+          } catch (err) {
+            // Path might be invalid if node just unmounted
+          }
+        }
       }
 
       const changeType = (newStyle: EditorStyle | string) => {
@@ -1294,6 +1537,8 @@ export function DocumentEditor({
       if (elementType === "inline-math") {
         return <InlineMathElement {...props} />
       }
+
+      // soft-break is no longer an element - it's now ⏎ text
 
       if (elementType === "list-item") {
         let canDelete = true
@@ -1383,19 +1628,52 @@ export function DocumentEditor({
               onMoveUp={() => handleMoveElement(element as SlateElement, "up")}
               onMoveDown={() => handleMoveElement(element as SlateElement, "down")}
               onChangeType={changeType}
+              onFocusRequest={selectBlock}
             >
               <div className="flex flex-col gap-1">
                 <span contentEditable={false} className="inline-flex w-12 items-center justify-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
                   {t("editor.paragraphLabel")}
                 </span>
-                <p className="leading-relaxed text-slate-800">{children}</p>
+                <p className="inline-block w-auto max-w-full leading-relaxed text-slate-800">{children}</p>
               </div>
             </BlockChrome>
           )
         case "heading": {
           const level = (node as { level?: number }).level ?? 1
+          const command = (node as { command?: string }).command as HeadingContent['command'] | undefined
           const HeadingTag = `h${Math.min(level + 1, 6)}` as string
+          
+          // Japanese label based on command
+          const getJapaneseLabel = (cmd?: string) => {
+            switch (cmd) {
+              case 'part': return '部'
+              case 'chapter': return '章'
+              case 'section': return '節'
+              case 'subsection': return '項'
+              case 'subsubsection': return '目'
+              case 'paragraph': return '段落'
+              case 'subparagraph': return '小段落'
+              default: return '節' // default to 節 for unknown
+            }
+          }
+          
+          // Numbering prefix
+          const getNumberPrefix = (cmd?: string) => {
+            switch (cmd) {
+              case 'part': return '第'
+              case 'chapter': return '第'
+              case 'section': return '第'
+              case 'subsection': return '第'
+              case 'subsubsection': return '第'
+              default: return ''
+            }
+          }
+          
           const headingNumber = headingNumbers.get(node.id || "")
+          const japaneseLabel = getJapaneseLabel(command)
+          const numberPrefix = getNumberPrefix(command)
+          const showNumber = command !== 'paragraph' && command !== 'subparagraph'
+          
           const getHeadingClass = (lvl: number) => {
             const classes: Record<number, string> = {
               1: "text-3xl font-bold",
@@ -1418,11 +1696,12 @@ export function DocumentEditor({
               onMoveUp={() => handleMoveElement(element as SlateElement, "up")}
               onMoveDown={() => handleMoveElement(element as SlateElement, "down")}
               onChangeType={changeType}
+              onFocusRequest={selectBlock}
             >
               {createElement(
                 HeadingTag,
-                { className: `flex items-center gap-2 text-slate-900 ${getHeadingClass(level)}` },
-                headingNumber
+                { className: `inline-block w-auto max-w-full flex items-center gap-2 text-slate-900 ${getHeadingClass(level)}` },
+                headingNumber && showNumber
                   ? createElement(
                       "span",
                       {
@@ -1430,7 +1709,7 @@ export function DocumentEditor({
                           "inline-flex items-center justify-center rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700 flex-shrink-0 select-none",
                         contentEditable: false,
                       },
-                      `${level === 1 ? "第" : ""}${headingNumber}${level === 1 ? "章" : level === 2 ? "節" : level === 3 ? "項" : "目"}`,
+                      `${numberPrefix}${headingNumber}${japaneseLabel}`,
                     )
                   : null,
                 createElement("span", null, children),
@@ -1461,6 +1740,7 @@ export function DocumentEditor({
               onMoveUp={() => handleMoveElement(element as SlateElement, "up")}
               onMoveDown={() => handleMoveElement(element as SlateElement, "down")}
               onChangeType={changeType}
+              onFocusRequest={selectBlock}
             >
               <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
                 <div contentEditable={false} className="flex items-center justify-between px-3 py-2 bg-gradient-to-r from-slate-50 to-slate-100 border-b border-slate-200">
@@ -1518,6 +1798,8 @@ export function DocumentEditor({
               onMoveUp={() => handleMoveElement(element as SlateElement, "up")}
               onMoveDown={() => handleMoveElement(element as SlateElement, "down")}
               onChangeType={changeType}
+              onFocusRequest={selectBlock}
+              isVoid={true}
             >
               <div contentEditable={false}>
                 <MathBlockView
@@ -1569,6 +1851,7 @@ export function DocumentEditor({
               onMoveUp={() => handleMoveElement(element as SlateElement, "up")}
               onMoveDown={() => handleMoveElement(element as SlateElement, "down")}
               onChangeType={changeType}
+              onFocusRequest={selectBlock}
             >
               <div className="bg-slate-50 rounded-lg border border-slate-200 overflow-hidden w-full">
                 <div contentEditable={false} className="flex items-center gap-2 px-3 py-2 border-b border-slate-200 bg-slate-100/50 text-sm font-medium text-slate-700 select-none">
@@ -1623,6 +1906,8 @@ export function DocumentEditor({
               onMoveUp={() => handleMoveElement(element as SlateElement, "up")}
               onMoveDown={() => handleMoveElement(element as SlateElement, "down")}
               onChangeType={changeType}
+              onFocusRequest={selectBlock}
+              isVoid={true}
             >
               <div contentEditable={false}>
                 <FigureBlockView
@@ -1653,6 +1938,8 @@ export function DocumentEditor({
               onMoveUp={() => handleMoveElement(element as SlateElement, "up")}
               onMoveDown={() => handleMoveElement(element as SlateElement, "down")}
               onChangeType={changeType}
+              onFocusRequest={selectBlock}
+              isVoid={true}
             >
               <div contentEditable={false}>
                 <TableBlockView
@@ -1683,25 +1970,50 @@ export function DocumentEditor({
               onMoveUp={() => handleMoveElement(element as SlateElement, "up")}
               onMoveDown={() => handleMoveElement(element as SlateElement, "down")}
               onChangeType={changeType}
+              onFocusRequest={selectBlock}
             >
-              <div contentEditable={false}>
-                <AbstractBlockView
-                  key={block.id}
-                  block={block}
-                  onUpdate={(updates) =>
-                    replaceElementWithBlock(element as SlateElement, {
-                      ...block,
-                      ...(updates as Partial<AbstractBlock>),
-                    })
-                  }
-                />
+              <div className="flex flex-col gap-1">
+                <span contentEditable={false} className="inline-flex w-16 items-center justify-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-xs text-violet-600">
+                  概要
+                </span>
+                <p className="inline-block w-auto max-w-full leading-relaxed text-slate-800">{children}</p>
               </div>
-              {children}
             </BlockChrome>
           )
         }
-        case "raw": {
-          const block = fromSlateNode(node) as Extract<DocumentBlock, { type: "raw" }>
+
+        case "toc":
+        case "pageBreak":
+        case "maketitle":
+        case "listoffigures":
+        case "listoftables":
+        case "appendix":
+        case "bibliography":
+          // Layout blocks handle their own chrome/selection visually or via wrapper
+          return (
+             <BlockChrome
+              attributes={attributes}
+              elementType={element.type as any}
+              isSelected={isSelected}
+              onSelect={selectBlock}
+              onDelete={() => handleDeleteElement(element as SlateElement)}
+              onDuplicate={() => handleDuplicateElement(element as SlateElement)}
+              onMoveDown={() => handleMoveElement(element as SlateElement, "down")}
+              onChangeType={changeType}
+              onFocusRequest={selectBlock}
+              isVoid={true}
+            >
+              <div contentEditable={false}>
+                <LayoutBlockView 
+                   block={{ id: element.id as string, type: element.type as any, content: (element as any).content }} 
+                   isSelected={isSelected} 
+                />
+              </div>
+              <div className="hidden">{children}</div>
+            </BlockChrome>
+          )
+
+        case "raw":
           return (
             <BlockChrome
               attributes={attributes}
@@ -1713,49 +2025,14 @@ export function DocumentEditor({
               onMoveUp={() => handleMoveElement(element as SlateElement, "up")}
               onMoveDown={() => handleMoveElement(element as SlateElement, "down")}
               onChangeType={changeType}
+              onFocusRequest={selectBlock}
+              isVoid={true}
             >
-              <div contentEditable={false} className="rounded-lg border border-slate-300 overflow-hidden bg-slate-900">
-                <div className="flex items-center justify-between px-3 py-1.5 bg-slate-800 border-b border-slate-700">
-                  <span className="text-xs font-medium text-slate-400">LaTeX</span>
-                  <span className="text-xs text-slate-500">Raw</span>
-                </div>
-                <div className="p-3">
-                  <textarea
-                    className="w-full min-h-[120px] bg-transparent text-emerald-400 font-mono text-sm outline-none resize-y tex180-raw-input"
-                    value={block.content?.latex || ""}
-                    onChange={(event) => {
-                      replaceElementWithBlock(element as SlateElement, {
-                        ...block,
-                        content: { latex: event.target.value },
-                      })
-                    }}
-                    spellCheck={false}
-                  />
-                </div>
-              </div>
-              {children}
+              <RawBlockView element={element as any} isSelected={isSelected} />
+              <div className="hidden">{children}</div>
             </BlockChrome>
           )
-        }
-        case "toc":
-          return (
-            <BlockChrome
-              attributes={attributes}
-              elementType="toc"
-              isSelected={isSelected}
-              onSelect={selectBlock}
-              onDelete={() => handleDeleteElement(element as SlateElement)}
-              onDuplicate={() => handleDuplicateElement(element as SlateElement)}
-              onMoveUp={() => handleMoveElement(element as SlateElement, "up")}
-              onMoveDown={() => handleMoveElement(element as SlateElement, "down")}
-              onChangeType={changeType}
-            >
-              <div contentEditable={false} className="p-3 text-sm text-slate-600 bg-white border border-slate-200 rounded">
-                目次
-              </div>
-              {children}
-            </BlockChrome>
-          )
+
         default:
           return (
             <BlockChrome
@@ -1768,6 +2045,7 @@ export function DocumentEditor({
               onMoveUp={() => handleMoveElement(element as SlateElement, "up")}
               onMoveDown={() => handleMoveElement(element as SlateElement, "down")}
               onChangeType={changeType}
+              onFocusRequest={selectBlock}
             >
               <div className="p-3 border border-slate-200 rounded bg-white text-slate-500 text-sm">未対応のブロック</div>
               {children}
@@ -1855,7 +2133,7 @@ export function DocumentEditor({
               renderElement={renderElement}
               renderLeaf={renderLeaf}
               placeholder={t("editor.paragraph")}
-              className="space-y-3 outline-none"
+              className="space-y-3 outline-none whitespace-pre-wrap"
               onFocus={() => setActiveTextEditor(editorInterface)}
               onKeyDown={handleEditableKeyDown}
             />

@@ -171,7 +171,7 @@ export function AbstractBlockView({ block, onUpdate }: AbstractBlockViewProps) {
 
   return (
     <div 
-      className="bg-slate-50 rounded-lg cursor-text hover:bg-slate-100 transition-colors"
+      className="bg-slate-50 rounded-lg cursor-text"
       onClick={() => setIsEditing(true)}
       contentEditable={false}
     >

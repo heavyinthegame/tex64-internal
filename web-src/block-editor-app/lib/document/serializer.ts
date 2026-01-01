@@ -277,10 +277,20 @@ export function serializeBlock(block: DocumentBlock, docClass: string = 'article
 
     case 'toc':
       return '\\tableofcontents';
+
+    case 'pageBreak':
+      return serializePageBreak(block);
+
+    case 'maketitle':
+      return '\\maketitle';
       
     default:
       return '';
   }
+}
+
+function serializePageBreak(block: Extract<DocumentBlock, { type: 'pageBreak' }>): string {
+  return `\\${block.content.type}`;
 }
 
 function serializeHeading(level: HeadingLevel, title: string, label?: string, docClass: string = 'article'): string {
@@ -477,6 +487,13 @@ function serializeInlines(inlines: InlineContent[]): string {
     if (inline.type === 'text') {
       let text = inline.content;
       
+      // Convert editor-only line breaks (\n) to spaces
+      // These are for visual editing only, not LaTeX line breaks
+      text = text.replace(/\n/g, ' ');
+      
+      // Convert ⏎ (U+23CE) back to LaTeX line break \\
+      text = text.replace(/⏎/g, '\\\\');
+      
       if (inline.formatting) {
         if (inline.formatting.bold) text = `\\textbf{${text}}`;
         if (inline.formatting.italic) text = `\\textit{${text}}`;
@@ -495,6 +512,9 @@ function serializeInlines(inlines: InlineContent[]): string {
         return `$\\ce{${rawLatex.slice(4, -1)}}$`; 
       }
       return `$${wrapCjkInMath(rawLatex)}$`;
+    } else if (inline.type === 'soft-break') {
+      // LaTeX line break
+      return '\\\\';
     }
     
     return '';

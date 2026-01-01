@@ -9,24 +9,30 @@ export type InlineMathElement = {
   latex: string
   children: CustomText[]
 }
+export type SoftBreakElement = {
+  type: 'soft-break'
+  id?: string
+  children: CustomText[]
+}
 
 export type ParagraphElement = {
   type: 'paragraph'
   id?: string
-  children: (CustomText | InlineMathElement)[]
+  children: (CustomText | InlineMathElement | SoftBreakElement)[]
 }
 
 export type HeadingElement = {
   type: 'heading'
   id?: string
   level: number
-  children: (CustomText | InlineMathElement)[]
+  command?: 'part' | 'chapter' | 'section' | 'subsection' | 'subsubsection' | 'paragraph' | 'subparagraph'
+  children: (CustomText | InlineMathElement | SoftBreakElement)[]
 }
 
 export type ListItemElement = {
   type: 'list-item'
   id?: string
-  children: (CustomText | InlineMathElement)[]
+  children: (CustomText | InlineMathElement | SoftBreakElement)[]
 }
 
 export type ListElement = {
@@ -77,7 +83,7 @@ export type TableElement = {
 export type AbstractElement = {
   type: 'abstract'
   id?: string
-  children: (CustomText | InlineMathElement)[]
+  children: (CustomText | InlineMathElement | SoftBreakElement)[]
 }
 
 export type TocElement = {
@@ -116,6 +122,44 @@ export type ColumnBreakElement = {
   children: CustomText[]
 }
 
+export type PageBreakElement = {
+  type: 'pageBreak'
+  id?: string
+  content: { type: 'newpage' | 'clearpage' } // Slate elements usually don't nest content like this, but matching IDL
+  children: CustomText[]
+}
+
+export type MaketitleElement = {
+  type: 'maketitle'
+  id?: string
+  children: CustomText[]
+}
+
+export type ListOfFiguresElement = {
+  type: 'listoffigures'
+  id?: string
+  children: CustomText[]
+}
+
+export type ListOfTablesElement = {
+  type: 'listoftables'
+  id?: string
+  children: CustomText[]
+}
+
+export type AppendixElement = {
+  type: 'appendix'
+  id?: string
+  children: CustomText[]
+}
+
+export type BibliographyElement = {
+  type: 'bibliography'
+  id?: string
+  content: { file?: string }
+  children: CustomText[]
+}
+
 export type CustomElement =
   | ParagraphElement
   | HeadingElement
@@ -132,6 +176,13 @@ export type CustomElement =
   | SlideFrameElement
   | ColumnBreakElement
   | InlineMathElement
+  | SoftBreakElement
+  | PageBreakElement
+  | MaketitleElement
+  | ListOfFiguresElement
+  | ListOfTablesElement
+  | AppendixElement
+  | BibliographyElement
 
 export type FormattedText = {
   id?: string
