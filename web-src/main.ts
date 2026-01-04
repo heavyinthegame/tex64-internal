@@ -3,7 +3,14 @@ window.addEventListener("DOMContentLoaded", () => {
     document.body.classList.add("is-ready");
   });
 
-  type TabKey = "files" | "outline" | "blocks" | "git" | "search" | "settings";
+  type TabKey =
+    | "files"
+    | "outline"
+    | "blocks"
+    | "git"
+    | "project"
+    | "search"
+    | "settings";
   type CreateKind = "file" | "folder";
   type DragPayload = { path: string; kind: "file" | "dir" };
 
@@ -45,6 +52,13 @@ window.addEventListener("DOMContentLoaded", () => {
       desc: "変更ファイルの一覧を表示します。",
       hint: "更新で再取得します。",
     },
+    project: {
+      label: "プロジェクト",
+      outline: "プロジェクト設定",
+      title: "プロジェクト設定",
+      desc: "ワークスペース単位の設定を管理します。",
+      hint: "メインTeXや環境登録を管理します。",
+    },
     search: {
       label: "検索",
       outline: "検索結果",
@@ -55,9 +69,9 @@ window.addEventListener("DOMContentLoaded", () => {
     settings: {
       label: "設定",
       outline: "設定",
-      title: "設定",
-      desc: "最低限の設定を表示します。",
-      hint: "自動ビルドはここでも切替可能です。",
+      title: "エディタ設定",
+      desc: "エディタ共通の設定を表示します。",
+      hint: "プロジェクト設定は別タブにあります。",
     },
   };
 
@@ -68,6 +82,7 @@ window.addEventListener("DOMContentLoaded", () => {
   let diffModifiedModel: { setValue?: (value: string) => void; dispose?: () => void } | null =
     null;
   let monacoApi: Record<string, unknown> | null = null;
+  let workspaceRootKey: string | null = null;
   let quickInsertDecorations: string[] = [];
   let quickInsertWidget: {
     getId: () => string;
@@ -132,7 +147,6 @@ window.addEventListener("DOMContentLoaded", () => {
   const blockForms = Array.from(
     document.querySelectorAll<HTMLElement>(".block-form")
   );
-  const blockTarget = document.getElementById("block-target");
   let blockMathInput: HTMLElement | null = null;
   let blockMathInputFallback: { value: string } | null = null;
   const blockMathInputContainer = document.getElementById("block-math-input-container");
@@ -144,8 +158,6 @@ window.addEventListener("DOMContentLoaded", () => {
   const blockTableRaw = document.getElementById("block-table-raw");
   const blockTableRawInput = document.getElementById("block-table-raw-input");
   const blockInsertButton = document.getElementById("block-insert-button");
-  const blockFormatHint = document.getElementById("block-format-hint");
-  const blockTableFormatHint = document.getElementById("block-table-format-hint");
   const blocksPanelBody = document.querySelector<HTMLElement>(".blocks-panel");
   const isE2E = new URLSearchParams(window.location.search).get("e2e") === "1";
   if (isE2E) {
@@ -215,6 +227,8 @@ window.addEventListener("DOMContentLoaded", () => {
   const settingsRootSelect = document.getElementById("settings-root-select");
   const settingsRootAuto = document.getElementById("settings-root-auto");
   const settingsWorkspace = document.getElementById("settings-workspace");
+  const projectAlignEnvToggle = document.getElementById("project-align-env");
+  const editorAutoFormatToggle = document.getElementById("editor-auto-format");
   const envRegistryInput = document.getElementById("env-registry-input");
   const envRegistryKind = document.getElementById("env-registry-kind");
   const envRegistryAdd = document.getElementById("env-registry-add");
@@ -254,24 +268,11 @@ window.addEventListener("DOMContentLoaded", () => {
     if (blockTableRaw instanceof HTMLElement) {
       blockTableRaw.classList.toggle("is-active", mode === "raw");
     }
-    if (blockTableFormatHint instanceof HTMLElement) {
-      blockTableFormatHint.classList.toggle("is-hidden", mode !== "raw");
-    }
   };
 
   const setAutoDetectedUi = (enabled: boolean, lineNumber?: number) => {
     if (blocksPanelBody instanceof HTMLElement) {
       blocksPanelBody.classList.toggle("is-auto-detected", enabled);
-    }
-    if (blockFormatHint instanceof HTMLElement) {
-      blockFormatHint.classList.toggle("is-hidden", !enabled);
-    }
-    if (blockTarget instanceof HTMLElement) {
-      if (enabled && typeof lineNumber === "number") {
-        setText(blockTarget, `自動判定: 行 ${lineNumber}`);
-      } else {
-        setText(blockTarget, "自動判定: 未検出");
-      }
     }
   };
 
@@ -360,6 +361,46 @@ window.addEventListener("DOMContentLoaded", () => {
 
   const CUSTOM_ENV_STORAGE_KEY = "tex180.custom-env-registry";
   const DISABLED_ENV_STORAGE_KEY = "tex180.disabled-env-registry";
+  const getEnvRegistryStorageKey = (baseKey: string) =>
+    workspaceRootKey ? `${baseKey}.${workspaceRootKey}` : baseKey;
+  const readEnvRegistryStorage = (baseKey: string) => {
+    if (typeof localStorage === "undefined") {
+      return null;
+    }
+    if (!workspaceRootKey) {
+      return localStorage.getItem(baseKey);
+    }
+    const projectKey = `${baseKey}.${workspaceRootKey}`;
+    const projectValue = localStorage.getItem(projectKey);
+    if (projectValue !== null) {
+      return projectValue;
+    }
+    const fallbackValue = localStorage.getItem(baseKey);
+    if (fallbackValue !== null) {
+      try {
+        localStorage.setItem(projectKey, fallbackValue);
+      } catch {
+        // ignore storage failures
+      }
+      return fallbackValue;
+    }
+    return null;
+  };
+  const writeEnvRegistryStorage = (baseKey: string, value: string | null) => {
+    if (typeof localStorage === "undefined") {
+      return;
+    }
+    const key = getEnvRegistryStorageKey(baseKey);
+    try {
+      if (value === null) {
+        localStorage.removeItem(key);
+      } else {
+        localStorage.setItem(key, value);
+      }
+    } catch {
+      // ignore storage failures
+    }
+  };
   let customEnvRegistry: LatexEnvRegistryEntry[] = [];
   let disabledEnvNames = new Set<string>();
   let MATH_ENV_NAMES = new Set<string>();
@@ -486,9 +527,7 @@ window.addEventListener("DOMContentLoaded", () => {
     try {
       disabledEnvNames = new Set(
         parseDisabledEnvRegistry(
-          typeof localStorage === "undefined"
-            ? null
-            : localStorage.getItem(DISABLED_ENV_STORAGE_KEY)
+          readEnvRegistryStorage(DISABLED_ENV_STORAGE_KEY)
         )
       );
     } catch {
@@ -497,16 +536,10 @@ window.addEventListener("DOMContentLoaded", () => {
   };
 
   const saveDisabledEnvRegistry = () => {
-    try {
-      if (typeof localStorage !== "undefined") {
-        localStorage.setItem(
-          DISABLED_ENV_STORAGE_KEY,
-          JSON.stringify(Array.from(disabledEnvNames))
-        );
-      }
-    } catch {
-      // ignore storage failures
-    }
+    writeEnvRegistryStorage(
+      DISABLED_ENV_STORAGE_KEY,
+      JSON.stringify(Array.from(disabledEnvNames))
+    );
   };
 
   const isEnvDisabled = (name: string) => disabledEnvNames.has(name);
@@ -545,9 +578,7 @@ window.addEventListener("DOMContentLoaded", () => {
     loadDisabledEnvRegistry();
     try {
       customEnvRegistry = parseCustomEnvRegistry(
-        typeof localStorage === "undefined"
-          ? null
-          : localStorage.getItem(CUSTOM_ENV_STORAGE_KEY)
+        readEnvRegistryStorage(CUSTOM_ENV_STORAGE_KEY)
       );
     } catch {
       customEnvRegistry = [];
@@ -558,26 +589,14 @@ window.addEventListener("DOMContentLoaded", () => {
   const setCustomEnvRegistry = (value: unknown) => {
     customEnvRegistry = buildCustomEnvRegistry(value);
     rebuildEnvRegistry();
-    try {
-      if (typeof localStorage !== "undefined") {
-        localStorage.setItem(CUSTOM_ENV_STORAGE_KEY, JSON.stringify(value));
-      }
-    } catch {
-      // ignore storage failures
-    }
+    writeEnvRegistryStorage(CUSTOM_ENV_STORAGE_KEY, JSON.stringify(value));
     handleEnvRegistryUpdate(false);
   };
 
   const clearCustomEnvRegistry = () => {
     customEnvRegistry = [];
     rebuildEnvRegistry();
-    try {
-      if (typeof localStorage !== "undefined") {
-        localStorage.removeItem(CUSTOM_ENV_STORAGE_KEY);
-      }
-    } catch {
-      // ignore storage failures
-    }
+    writeEnvRegistryStorage(CUSTOM_ENV_STORAGE_KEY, null);
     handleEnvRegistryUpdate(false);
   };
 
@@ -1144,7 +1163,8 @@ window.addEventListener("DOMContentLoaded", () => {
       getVersionId?: () => number;
     },
     force = false,
-    allowTabSwitch = true
+    allowTabSwitch = true,
+    cursorLineNumber?: number
   ) => {
     if (!force && !shouldUpdateDetectedBlock(detected)) {
       return;
@@ -1181,7 +1201,13 @@ window.addEventListener("DOMContentLoaded", () => {
       setTableEditMode("raw");
       setTableRawValue(detectedInner);
     }
-    highlightDetectedBlock(detected.start, detected.end);
+    highlightDetectedBlock(
+      detected.start,
+      detected.end,
+      activeBlockContext,
+      detected.type,
+      cursorLineNumber
+    );
   };
 
   const clearDetectedBlockState = () => {
@@ -1223,9 +1249,16 @@ window.addEventListener("DOMContentLoaded", () => {
     const offset = model.getOffsetAt(position);
     const detected = detectLatexBlockAtOffset(text, offset);
     const force = options?.force ?? false;
-    const allowTabSwitch = options?.allowTabSwitch ?? true;
+    const allowTabSwitch = options?.allowTabSwitch ?? false;
     if (detected) {
-      applyDetectedBlock(detected, text, model, force, allowTabSwitch);
+      applyDetectedBlock(
+        detected,
+        text,
+        model,
+        force,
+        allowTabSwitch,
+        position?.lineNumber
+      );
       return detected;
     }
     clearDetectedBlockState();
@@ -1238,12 +1271,18 @@ window.addEventListener("DOMContentLoaded", () => {
       clearTimeout(blockDetectionDebounceTimer);
     }
     blockDetectionDebounceTimer = setTimeout(() => {
-      syncDetectedBlockAtPosition(position);
+      syncDetectedBlockAtPosition(position, { allowTabSwitch: false });
     }, 150);
   };
 
   let blockHighlightDecorations: string[] = [];
-  const highlightDetectedBlock = (start: number, end: number) => {
+  const highlightDetectedBlock = (
+    start: number,
+    end: number,
+    context: BlockContext | null,
+    type: BlockType,
+    cursorLineNumber?: number
+  ) => {
     if (!monacoEditor) return;
     const editor = monacoEditor as {
       getModel?: () => {
@@ -1253,10 +1292,24 @@ window.addEventListener("DOMContentLoaded", () => {
     };
     const model = editor.getModel?.();
     if (!model) return;
-    const startPos = model.getPositionAt(start);
-    const endPos = model.getPositionAt(end);
-    blockHighlightDecorations = editor.deltaDecorations(blockHighlightDecorations, [
-      {
+    let highlightStart = start;
+    let highlightEnd = start;
+    let showInline = false;
+    if (type === "math" && context) {
+      const innerStart = start + context.prefix.length;
+      const innerEnd = end - context.suffix.length;
+      if (innerEnd > innerStart) {
+        highlightStart = innerStart;
+        highlightEnd = innerEnd;
+        showInline = true;
+      }
+    }
+    const startPos = model.getPositionAt(highlightStart);
+    const endPos = model.getPositionAt(highlightEnd);
+    const glyphLine = cursorLineNumber ?? startPos.lineNumber;
+    const decorations: Array<{ range: unknown; options: Record<string, unknown> }> = [];
+    if (showInline) {
+      decorations.push({
         range: {
           startLineNumber: startPos.lineNumber,
           startColumn: startPos.column,
@@ -1264,13 +1317,25 @@ window.addEventListener("DOMContentLoaded", () => {
           endColumn: endPos.column,
         },
         options: {
-          className: "detected-block-highlight",
-          isWholeLine: true,
-          linesDecorationsClassName: "detected-block-line",
-          glyphMarginClassName: "detected-block-glyph",
+          inlineClassName: "detected-block-highlight",
         },
+      });
+    }
+    decorations.push({
+      range: {
+        startLineNumber: glyphLine,
+        startColumn: 1,
+        endLineNumber: glyphLine,
+        endColumn: 1,
       },
-    ]);
+      options: {
+        glyphMarginClassName: "detected-block-glyph",
+      },
+    });
+    blockHighlightDecorations = editor.deltaDecorations(
+      blockHighlightDecorations,
+      decorations
+    );
   };
 
   const clearBlockHighlight = () => {
@@ -1394,7 +1459,20 @@ window.addEventListener("DOMContentLoaded", () => {
       }) => void;
       tex180UpdateGit?: (payload: { entries: GitEntry[]; message?: string }) => void;
       tex180OpenFileResult?: (payload: { path: string; content?: string; error?: string }) => void;
-      tex180SaveResult?: (payload: { path: string; ok: boolean; error?: string }) => void;
+      tex180SaveResult?: (payload: {
+        path: string;
+        ok: boolean;
+        error?: string;
+        content?: string;
+        formatError?: string;
+      }) => void;
+      tex180FormatResult?: (payload: {
+        path: string;
+        ok: boolean;
+        content?: string;
+        error?: string;
+        source?: string;
+      }) => void;
       tex180RenameResult?: (payload: {
         oldPath: string;
         newPath: string;
@@ -1423,7 +1501,6 @@ window.addEventListener("DOMContentLoaded", () => {
   let workspaceFiles: string[] = [];
   let workspaceFolders: string[] = [];
   let workspaceName = "ワークスペース未選択";
-  let workspaceRootKey: string | null = null;
   let rootFilePath: string | null = null;
   let rootSource: RootSource = "auto";
   let launcherTemplate: LauncherTemplate = "paper";
@@ -1460,7 +1537,12 @@ window.addEventListener("DOMContentLoaded", () => {
   let pendingBlockApply: PendingBlockApply | null = null;
   let tableEditMode: "grid" | "raw" = "grid";
   let autoBuildEnabled = false;
+  let projectAlignEnvEnabled = true;
+  let autoFormatEnabled = true;
   let autoBuildPending = false;
+  let formatInFlight = false;
+  let formatPending = false;
+  let formatWarningShown = false;
   let searchResultsData: SearchResult[] = [];
   let searchMessage = "検索結果はここに表示します。";
   let lastSearchQuery = "";
@@ -3362,6 +3444,184 @@ window.addEventListener("DOMContentLoaded", () => {
     return ["\\\\[", trimmed, "\\\\]", ""].join("\n");
   };
 
+  const normalizeLineEndings = (value: string) => value.replace(/\r\n?/g, "\n");
+
+  const getLineIndent = (line: string) => {
+    const match = line.match(/^[ \t]*/);
+    return match ? match[0] : "";
+  };
+
+  const stripIndent = (line: string, count: number) => {
+    if (count <= 0) {
+      return line;
+    }
+    let index = 0;
+    let removed = 0;
+    while (index < line.length && removed < count) {
+      const char = line[index];
+      if (char !== " " && char !== "\t") {
+        break;
+      }
+      index += 1;
+      removed += 1;
+    }
+    return line.slice(index);
+  };
+
+  const detectIndentUnit = (lines: string[], baseIndent: string) => {
+    if (baseIndent.includes("\t")) {
+      return "\t";
+    }
+    for (const line of lines) {
+      const indent = getLineIndent(line);
+      if (indent.includes("\t")) {
+        return "\t";
+      }
+    }
+    const indents = lines
+      .filter((line) => line.trim().length > 0)
+      .map((line) => getLineIndent(line).length)
+      .filter((length) => length > 0);
+    if (indents.length === 0) {
+      return "  ";
+    }
+    const sorted = Array.from(new Set(indents)).sort((a, b) => a - b);
+    let minDiff = Infinity;
+    for (let i = 1; i < sorted.length; i += 1) {
+      const diff = sorted[i] - sorted[i - 1];
+      if (diff > 0) {
+        minDiff = Math.min(minDiff, diff);
+      }
+    }
+    const unit = minDiff !== Infinity ? minDiff : sorted[0];
+    return " ".repeat(unit);
+  };
+
+  const normalizeLinesForInsert = (lines: string[], baseIndent: string) => {
+    const nonEmpty = lines.filter((line) => line.trim().length > 0);
+    if (nonEmpty.length === 0) {
+      return lines;
+    }
+    let minIndent = Infinity;
+    nonEmpty.forEach((line) => {
+      minIndent = Math.min(minIndent, getLineIndent(line).length);
+    });
+    const stripped = lines.map((line) => {
+      if (line.trim().length === 0) {
+        return line;
+      }
+      return stripIndent(line, minIndent);
+    });
+    return stripped.map((line, index) => {
+      if (index === 0 || line.trim().length === 0) {
+        return line;
+      }
+      return baseIndent + line;
+    });
+  };
+
+  const isDisplayWrapperPair = (firstLine: string, lastLine: string) => {
+    const first = firstLine.trim();
+    const last = lastLine.trim();
+    if (first === "\\[" && last === "\\]") {
+      return true;
+    }
+    if (first === "$$" && last === "$$") {
+      return true;
+    }
+    return false;
+  };
+
+  const formatBlockLinesForInsert = (
+    lines: string[],
+    baseIndent: string,
+    indentUnit: string
+  ) => {
+    const firstNonEmpty = lines.findIndex((line) => line.trim().length > 0);
+    if (firstNonEmpty === -1) {
+      return lines;
+    }
+    let lastNonEmpty = -1;
+    for (let i = lines.length - 1; i >= 0; i -= 1) {
+      if (lines[i].trim().length > 0) {
+        lastNonEmpty = i;
+        break;
+      }
+    }
+    if (lastNonEmpty === -1 || lastNonEmpty === firstNonEmpty) {
+      return normalizeLinesForInsert(lines, baseIndent);
+    }
+    const onlyBlankBefore = lines
+      .slice(0, firstNonEmpty)
+      .every((line) => line.trim().length === 0);
+    const onlyBlankAfter = lines
+      .slice(lastNonEmpty + 1)
+      .every((line) => line.trim().length === 0);
+    if (!onlyBlankBefore || !onlyBlankAfter) {
+      return normalizeLinesForInsert(lines, baseIndent);
+    }
+    const firstLine = lines[firstNonEmpty].trim();
+    const lastLine = lines[lastNonEmpty].trim();
+    const isEnvPair =
+      firstLine.startsWith("\\begin{") && lastLine.startsWith("\\end{");
+    const isDisplayPair = isDisplayWrapperPair(firstLine, lastLine);
+    if (!isEnvPair && !isDisplayPair) {
+      return normalizeLinesForInsert(lines, baseIndent);
+    }
+    const innerLines = lines.slice(firstNonEmpty + 1, lastNonEmpty);
+    const innerNonEmpty = innerLines.filter((line) => line.trim().length > 0);
+    let innerMinIndent = 0;
+    if (innerNonEmpty.length > 0) {
+      innerMinIndent = innerNonEmpty.reduce((min, line) => {
+        return Math.min(min, getLineIndent(line).length);
+      }, Infinity);
+      if (!Number.isFinite(innerMinIndent)) {
+        innerMinIndent = 0;
+      }
+    }
+    return lines.map((line, index) => {
+      if (line.trim().length === 0) {
+        return line;
+      }
+      const prefix = index === 0 ? "" : baseIndent;
+      if (index === firstNonEmpty || index === lastNonEmpty) {
+        return prefix + line.trimStart();
+      }
+      if (index > firstNonEmpty && index < lastNonEmpty) {
+        const stripped = stripIndent(line, innerMinIndent);
+        return prefix + indentUnit + stripped;
+      }
+      return prefix + line.trimStart();
+    });
+  };
+
+  const formatSnippetForInsert = (
+    snippet: string,
+    model: { getLineContent?: (lineNumber: number) => string } | undefined,
+    position: { lineNumber: number; column: number } | null,
+    options?: { alignEnv?: boolean }
+  ) => {
+    if (!position || !model?.getLineContent) {
+      return snippet;
+    }
+    const lineContent = model.getLineContent(position.lineNumber);
+    const prefix = lineContent.slice(0, Math.max(0, position.column - 1));
+    if (prefix.trim().length > 0) {
+      return snippet;
+    }
+    const normalized = normalizeLineEndings(snippet);
+    if (!normalized.includes("\n")) {
+      return snippet;
+    }
+    const lines = normalized.split("\n");
+    const indentUnit = detectIndentUnit(lines, prefix);
+    const formattedLines = options?.alignEnv
+      ? formatBlockLinesForInsert(lines, prefix, indentUnit)
+      : normalizeLinesForInsert(lines, prefix);
+    const result = formattedLines.join("\n");
+    return normalized.endsWith("\n") ? result + "\n" : result;
+  };
+
   const parseTableSize = () => {
     const rows =
       blockTableRows instanceof HTMLInputElement
@@ -3696,6 +3956,15 @@ window.addEventListener("DOMContentLoaded", () => {
     return `tex180.autoBuild.${workspaceRootKey}`;
   };
 
+  const editorAutoFormatKey = "tex180.editor.autoFormat";
+
+  const projectAlignEnvKey = () => {
+    if (!workspaceRootKey) {
+      return null;
+    }
+    return `tex180.project.alignEnv.${workspaceRootKey}`;
+  };
+
   const updateAutoBuildUI = () => {
     if (autoBuildButton instanceof HTMLButtonElement) {
       autoBuildButton.disabled = false;
@@ -3705,6 +3974,20 @@ window.addEventListener("DOMContentLoaded", () => {
     if (settingsAutoBuildButton instanceof HTMLButtonElement) {
       settingsAutoBuildButton.textContent = autoBuildEnabled ? "ON" : "OFF";
       settingsAutoBuildButton.classList.toggle("is-on", autoBuildEnabled);
+    }
+  };
+
+  const updateProjectAlignEnvUI = () => {
+    if (projectAlignEnvToggle instanceof HTMLButtonElement) {
+      projectAlignEnvToggle.textContent = projectAlignEnvEnabled ? "ON" : "OFF";
+      projectAlignEnvToggle.classList.toggle("is-on", projectAlignEnvEnabled);
+    }
+  };
+
+  const updateEditorAutoFormatUI = () => {
+    if (editorAutoFormatToggle instanceof HTMLButtonElement) {
+      editorAutoFormatToggle.textContent = autoFormatEnabled ? "ON" : "OFF";
+      editorAutoFormatToggle.classList.toggle("is-on", autoFormatEnabled);
     }
   };
 
@@ -3719,12 +4002,40 @@ window.addEventListener("DOMContentLoaded", () => {
     updateAutoBuildUI();
   };
 
+  const loadProjectAlignEnvState = () => {
+    const key = projectAlignEnvKey();
+    if (!key) {
+      projectAlignEnvEnabled = true;
+      updateProjectAlignEnvUI();
+      return;
+    }
+    projectAlignEnvEnabled = localStorage.getItem(key) !== "false";
+    updateProjectAlignEnvUI();
+  };
+
+  const loadEditorAutoFormatState = () => {
+    autoFormatEnabled = localStorage.getItem(editorAutoFormatKey) !== "false";
+    updateEditorAutoFormatUI();
+  };
+
   const saveAutoBuildState = () => {
     const key = autoBuildKey();
     if (!key) {
       return;
     }
     localStorage.setItem(key, autoBuildEnabled ? "true" : "false");
+  };
+
+  const saveProjectAlignEnvState = () => {
+    const key = projectAlignEnvKey();
+    if (!key) {
+      return;
+    }
+    localStorage.setItem(key, projectAlignEnvEnabled ? "true" : "false");
+  };
+
+  const saveEditorAutoFormatState = () => {
+    localStorage.setItem(editorAutoFormatKey, autoFormatEnabled ? "true" : "false");
   };
 
   const toggleAutoBuild = () => {
@@ -3735,6 +4046,18 @@ window.addEventListener("DOMContentLoaded", () => {
     }
     saveAutoBuildState();
     updateAutoBuildUI();
+  };
+
+  const toggleProjectAlignEnv = () => {
+    projectAlignEnvEnabled = !projectAlignEnvEnabled;
+    saveProjectAlignEnvState();
+    updateProjectAlignEnvUI();
+  };
+
+  const toggleEditorAutoFormat = () => {
+    autoFormatEnabled = !autoFormatEnabled;
+    saveEditorAutoFormatState();
+    updateEditorAutoFormatUI();
   };
 
   const openStateKey = () => {
@@ -4436,6 +4759,52 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   };
 
+  const applyFormattedContent = (
+    path: string,
+    content: string,
+    options?: { updateSaved?: boolean }
+  ) => {
+    if (!monacoEditor) {
+      return;
+    }
+    const editor = monacoEditor as {
+      getValue?: () => string;
+      setValue?: (value: string) => void;
+      saveViewState?: () => unknown;
+      restoreViewState?: (state: unknown) => void;
+    };
+    const entry = monacoModels.get(path);
+    const currentValue = entry?.model.getValue() ?? editor.getValue?.() ?? "";
+    const viewState = editor.saveViewState?.();
+    if (currentValue !== content) {
+      isApplyingFile = true;
+      if (entry?.model.setValue) {
+        entry.model.setValue(content);
+      } else if (editor.setValue) {
+        editor.setValue(content);
+      }
+      isApplyingFile = false;
+      if (viewState && editor.restoreViewState) {
+        editor.restoreViewState(viewState);
+      }
+    }
+    if (options?.updateSaved) {
+      if (entry) {
+        entry.savedContent = content;
+      }
+      if (currentFilePath === path) {
+        currentFileSavedContent = content;
+      }
+    }
+    const savedContent =
+      (currentFilePath === path ? currentFileSavedContent : entry?.savedContent) ??
+      entry?.savedContent ??
+      content;
+    updateDirtyState(path, content, savedContent);
+    updateBreadcrumbs();
+    renderFileTree();
+  };
+
   const requestOpenFile = (path: string, force = false) => {
     if (currentFilePath === path) {
       return false;
@@ -4486,7 +4855,15 @@ window.addEventListener("DOMContentLoaded", () => {
     const content = editor.getValue();
     return new Promise<boolean>((resolve, reject) => {
       pendingSave = { path: currentFilePath as string, content, resolve, reject };
-      const ok = postToNative({ type: "saveFile", path: currentFilePath, content });
+      const shouldFormat =
+        autoFormatEnabled && currentFilePath?.toLowerCase().endsWith(".tex");
+      const ok = postToNative({
+        type: "saveFile",
+        path: currentFilePath,
+        content,
+        format: shouldFormat,
+        formatSource: "save",
+      });
       if (!ok) {
         pendingSave = null;
         reject("ネイティブ連携が利用できません。");
@@ -4503,6 +4880,41 @@ window.addEventListener("DOMContentLoaded", () => {
         saveCurrentFileInternal().then(resolve).catch(reject);
       });
     });
+  };
+
+  const requestFormatCurrentFile = (source: string) => {
+    if (!autoFormatEnabled) {
+      return;
+    }
+    if (!currentFilePath || !currentFilePath.toLowerCase().endsWith(".tex")) {
+      return;
+    }
+    if (!monacoEditor) {
+      return;
+    }
+    if (formatInFlight) {
+      formatPending = true;
+      return;
+    }
+    const editor = monacoEditor as { getValue: () => string };
+    const content = editor.getValue();
+    formatInFlight = true;
+    const ok = postToNative({
+      type: "formatFile",
+      path: currentFilePath,
+      content,
+      source,
+    });
+    if (!ok) {
+      formatInFlight = false;
+      formatPending = false;
+      if (!formatWarningShown) {
+        formatWarningShown = true;
+        updateIssues(1, "整形のリクエストに失敗しました。", "info", [
+          { severity: "warning", message: "整形のリクエストに失敗しました。" },
+        ]);
+      }
+    }
   };
 
   const normalizeInputPath = (value: string) => {
@@ -5009,9 +5421,12 @@ window.addEventListener("DOMContentLoaded", () => {
       (currentFilePath && currentFilePath.endsWith(".tex")
         ? currentFilePath
         : undefined);
-    const payload: { type: string; mainFile?: string } = { type: "build" };
+    const payload: { type: string; mainFile?: string; format?: boolean } = { type: "build" };
     if (mainFile) {
       payload.mainFile = mainFile;
+    }
+    if (autoFormatEnabled) {
+      payload.format = true;
     }
     if (postToNative(payload)) {
       setBuildState("building");
@@ -5106,6 +5521,10 @@ window.addEventListener("DOMContentLoaded", () => {
     renderGitStatus();
     autoBuildPending = false;
     loadAutoBuildState();
+    loadEditorAutoFormatState();
+    loadProjectAlignEnvState();
+    loadEnvRegistryState();
+    handleEnvRegistryUpdate(false);
     renderRootSelector();
     requestInitialOpen();
   };
@@ -5144,10 +5563,19 @@ window.addEventListener("DOMContentLoaded", () => {
     applyFileContent(payload.path, content, content);
   };
 
-  const handleSaveResult = (payload: { path: string; ok: boolean; error?: string }) => {
+  const handleSaveResult = (payload: {
+    path: string;
+    ok: boolean;
+    error?: string;
+    content?: string;
+    formatError?: string;
+  }) => {
     let savedContent: string | null = null;
     if (pendingSave && pendingSave.path === payload.path) {
       if (payload.ok) {
+        if (payload.content) {
+          pendingSave.content = payload.content;
+        }
         savedContent = pendingSave.content;
         pendingSave.resolve(true);
       } else {
@@ -5172,7 +5600,9 @@ window.addEventListener("DOMContentLoaded", () => {
       if (savedContent !== null) {
         currentFileSavedContent = savedContent;
       }
-      if (monacoEditor && currentFileSavedContent !== null) {
+      if (payload.content) {
+        applyFormattedContent(payload.path, payload.content, { updateSaved: true });
+      } else if (monacoEditor && currentFileSavedContent !== null) {
         const editor = monacoEditor as { getValue: () => string };
         const currentValue = editor.getValue();
         updateDirtyState(payload.path, currentValue, currentFileSavedContent);
@@ -5182,11 +5612,41 @@ window.addEventListener("DOMContentLoaded", () => {
     } else {
       isDirty = currentFilePath ? dirtyFiles.has(currentFilePath) : false;
     }
+    if (payload.formatError && !formatWarningShown) {
+      formatWarningShown = true;
+      updateIssues(1, payload.formatError, "info", [
+        { severity: "warning", message: payload.formatError },
+      ]);
+    }
     updateBreadcrumbs();
     renderFileTree();
     if (autoBuildEnabled && autoBuildPending && currentFilePath?.endsWith(".tex")) {
       autoBuildPending = false;
       startBuild();
+    }
+  };
+
+  const handleFormatResult = (payload: {
+    path: string;
+    ok: boolean;
+    content?: string;
+    error?: string;
+    source?: string;
+  }) => {
+    formatInFlight = false;
+    if (!payload.ok) {
+      if (!formatWarningShown) {
+        formatWarningShown = true;
+        updateIssues(1, payload.error ?? "整形に失敗しました。", "info", [
+          { severity: "warning", message: payload.error ?? "整形に失敗しました。" },
+        ]);
+      }
+    } else if (typeof payload.content === "string") {
+      applyFormattedContent(payload.path, payload.content, { updateSaved: false });
+    }
+    if (formatPending) {
+      formatPending = false;
+      requestFormatCurrentFile(payload.source ?? "auto");
     }
   };
 
@@ -5343,6 +5803,7 @@ window.addEventListener("DOMContentLoaded", () => {
   renderSearchResults();
   renderGitStatus();
   renderRootSelector();
+  loadEditorAutoFormatState();
   updateIssues(0, "ビルド結果はここに要約します。", "info", []);
   updateLauncherTemplate(launcherTemplate);
   if (!workspaceRootKey) {
@@ -5588,6 +6049,25 @@ window.addEventListener("DOMContentLoaded", () => {
     editor.addContentWidget(quickInsertWidget);
   };
 
+  const resetDiffEditor = () => {
+    diffOriginalModel?.dispose?.();
+    diffModifiedModel?.dispose?.();
+    diffOriginalModel = null;
+    diffModifiedModel = null;
+    if (diffEditor) {
+      const diffEditorAny = diffEditor as {
+        setModel?: (model: { original: unknown; modified: unknown } | null) => void;
+        dispose?: () => void;
+      };
+      diffEditorAny.setModel?.(null);
+      diffEditorAny.dispose?.();
+      diffEditor = null;
+    }
+    if (blockDiffContainer instanceof HTMLElement) {
+      blockDiffContainer.innerHTML = "";
+    }
+  };
+
   const showDiffModal = (original: string, modified: string, lineOffset = 0) => {
     if (!monacoApi) return;
     const monacoApiAny = monacoApi as {
@@ -5637,7 +6117,6 @@ window.addEventListener("DOMContentLoaded", () => {
 
     renderDiffHeader();
     renderDiffSummary(original, modified);
-    applyDiffLineNumberOffset(lineOffset, original, modified);
 
     const diffEditorAny = diffEditor as {
       setModel?: (model: { original: unknown; modified: unknown }) => void;
@@ -5652,6 +6131,7 @@ window.addEventListener("DOMContentLoaded", () => {
       original: diffOriginalModel,
       modified: diffModifiedModel,
     });
+    applyDiffLineNumberOffset(lineOffset, original, modified);
     if (isE2E) {
       (window as {
         __tex180LastDiff?: { original: string; modified: string; lineOffset: number };
@@ -5675,6 +6155,7 @@ window.addEventListener("DOMContentLoaded", () => {
     if (diffFileName instanceof HTMLElement) {
       diffFileName.textContent = "";
     }
+    resetDiffEditor();
   };
 
   const startBlockPreview = (
@@ -5722,6 +6203,7 @@ window.addEventListener("DOMContentLoaded", () => {
         getValue: () => string;
         getPositionAt?: (offset: number) => { lineNumber: number; column: number };
         getOffsetAt?: (pos: { lineNumber: number; column: number }) => number;
+        getLineContent?: (lineNumber: number) => string;
       };
     };
     const monacoApiAny = monacoApi as {
@@ -5734,6 +6216,8 @@ window.addEventListener("DOMContentLoaded", () => {
     const mode: BlockApplyMode =
       applyPayload?.mode ?? (detectedBlockSnapshot ? "detected" : "new");
 
+    let snippet = draft.snippet;
+    let insertPosition: { lineNumber: number; column: number } | null = null;
     if (mode === "detected") {
       const snapshot = applyPayload?.detectedSnapshot ?? detectedBlockSnapshot;
       if (!snapshot || !model?.getPositionAt) {
@@ -5759,20 +6243,25 @@ window.addEventListener("DOMContentLoaded", () => {
         endPos.column
       );
     } else {
-      const position = applyPayload?.insertPosition ?? editor.getPosition?.();
-      const insertAt = position ?? quickInsertTarget;
+      insertPosition = applyPayload?.insertPosition ?? editor.getPosition?.();
+      const insertAt = insertPosition ?? quickInsertTarget;
       range = new monacoApiAny.Range(
         insertAt.lineNumber,
         insertAt.column,
         insertAt.lineNumber,
         insertAt.column
       );
+      if (!applyPayload) {
+        snippet = formatSnippetForInsert(snippet, model, insertPosition, {
+          alignEnv: projectAlignEnvEnabled,
+        });
+      }
     }
 
     editor.executeEdits("block-insert", [
       {
         range,
-        text: draft.snippet,
+        text: snippet,
         forceMoveMarkers: true,
       },
     ]);
@@ -5894,6 +6383,7 @@ window.addEventListener("DOMContentLoaded", () => {
       setText(quickInsertHint, "確定しました。⌘Zで取り消せます。");
     }
     closeQuickInsert();
+    requestFormatCurrentFile("quickInsert");
   };
 
   if (quickInsertButton instanceof HTMLButtonElement) {
@@ -5943,12 +6433,54 @@ window.addEventListener("DOMContentLoaded", () => {
     blockInsertButton.addEventListener("click", () => {
       const editorForDetect = monacoEditor as {
         getPosition?: () => { lineNumber: number; column: number } | null;
+        getModel?: () => {
+          getOffsetAt?: (pos: { lineNumber: number; column: number }) => number;
+          getVersionId?: () => number;
+        };
       };
       const detectPosition = editorForDetect?.getPosition?.() ?? null;
-      if (!detectedBlockSnapshot && detectPosition) {
+      const model = editorForDetect?.getModel?.();
+      const shouldResync =
+        !detectedBlockSnapshot ||
+        !detectPosition ||
+        !model?.getOffsetAt ||
+        (() => {
+          const offset = model.getOffsetAt(detectPosition);
+          if (
+            offset < detectedBlockSnapshot.start ||
+            offset >= detectedBlockSnapshot.end
+          ) {
+            return true;
+          }
+          if (
+            typeof model.getVersionId === "function" &&
+            detectedBlockSnapshot.modelVersion !== model.getVersionId()
+          ) {
+            return true;
+          }
+          return false;
+        })();
+      if (detectPosition && shouldResync) {
         syncDetectedBlockAtPosition(detectPosition, { force: true });
       }
       const draft = getBlockDraft();
+      if (!draft) return;
+
+      const mode: BlockApplyMode = detectedBlockSnapshot ? "detected" : "new";
+
+      const editor = monacoEditor as {
+        getPosition?: () => { lineNumber: number; column: number } | null;
+        getModel?: () => { getLineContent?: (lineNumber: number) => string };
+      };
+      const insertPosition = mode === "new" ? editor.getPosition?.() ?? null : null;
+      const formattedSnippet =
+        mode === "new"
+          ? formatSnippetForInsert(draft.snippet, editor.getModel?.(), insertPosition, {
+              alignEnv: projectAlignEnvEnabled,
+            })
+          : draft.snippet;
+      const resolvedDraft = { ...draft, snippet: formattedSnippet };
+
       if (isE2E) {
         (window as {
           __tex180LastDraft?: {
@@ -5958,20 +6490,14 @@ window.addEventListener("DOMContentLoaded", () => {
           };
         }).__tex180LastDraft = {
           formula: getMathInputValue(),
-          snippet: draft ? draft.snippet : null,
+          snippet: resolvedDraft.snippet,
           detectedSnippet: detectedBlockSnapshot?.snippet ?? null,
         };
       }
-      if (!draft) return;
-
-      const mode: BlockApplyMode = detectedBlockSnapshot ? "detected" : "new";
-
-      const editor = monacoEditor as { getPosition?: () => { lineNumber: number; column: number } | null };
-      const insertPosition = mode === "new" ? editor.getPosition?.() ?? null : null;
 
       pendingBlockApply = {
         mode,
-        draft,
+        draft: resolvedDraft,
         detectedSnapshot: mode === "detected" ? detectedBlockSnapshot : null,
         insertPosition,
       };
@@ -5999,16 +6525,16 @@ window.addEventListener("DOMContentLoaded", () => {
 
       if (contextForDiff) {
         const originalInner = getInnerContent(contextForDiff, { trim: false });
-        const draftContext = parseBlockContext(draft.snippet);
+        const draftContext = parseBlockContext(resolvedDraft.snippet);
         const modifiedInner = getInnerContent(draftContext, { trim: false });
         showDiffModal(originalInner, modifiedInner, lineOffset);
       } else {
         const originalSnippet =
           mode === "detected" ? detectedBlockSnapshot?.snippet ?? "" : "";
-        showDiffModal(originalSnippet, draft.snippet, lineOffset);
+        showDiffModal(originalSnippet, resolvedDraft.snippet, lineOffset);
       }
 
-      currentBlockDraft = draft;
+      currentBlockDraft = resolvedDraft;
     });
   }
   if (diffModalSubmit instanceof HTMLButtonElement) {
@@ -6020,6 +6546,7 @@ window.addEventListener("DOMContentLoaded", () => {
       blockPreviewActive = false;
       pendingBlockApply = null;
       currentBlockDraft = null;
+      requestFormatCurrentFile("blockInsert");
     });
   }
 
@@ -6079,6 +6606,18 @@ window.addEventListener("DOMContentLoaded", () => {
   if (settingsAutoBuildButton instanceof HTMLButtonElement) {
     settingsAutoBuildButton.addEventListener("click", () => {
       toggleAutoBuild();
+    });
+  }
+
+  if (projectAlignEnvToggle instanceof HTMLButtonElement) {
+    projectAlignEnvToggle.addEventListener("click", () => {
+      toggleProjectAlignEnv();
+    });
+  }
+
+  if (editorAutoFormatToggle instanceof HTMLButtonElement) {
+    editorAutoFormatToggle.addEventListener("click", () => {
+      toggleEditorAutoFormat();
     });
   }
 
@@ -6474,6 +7013,10 @@ window.addEventListener("DOMContentLoaded", () => {
     handleSaveResult(payload);
   };
 
+  bridgeWindow.tex180FormatResult = (payload) => {
+    handleFormatResult(payload);
+  };
+
   bridgeWindow.tex180RenameResult = (payload) => {
     handleRenameResult(payload);
   };
@@ -6543,6 +7086,17 @@ window.addEventListener("DOMContentLoaded", () => {
           path: string;
           ok: boolean;
           error?: string;
+          content?: string;
+          formatError?: string;
+        });
+        break;
+      case "formatResult":
+        bridgeWindow.tex180FormatResult?.(message.payload as {
+          path: string;
+          ok: boolean;
+          content?: string;
+          error?: string;
+          source?: string;
         });
         break;
       case "renameResult":
@@ -6579,6 +7133,13 @@ window.addEventListener("DOMContentLoaded", () => {
     onError: () => void
   ) => void) & { config: (options: RequireConfig) => void };
 
+  type MonacoTheme = {
+    base: string;
+    inherit: boolean;
+    rules: unknown[];
+    colors: Record<string, string>;
+  };
+
   type MonacoWindow = Window &
     typeof globalThis & {
       MonacoEnvironment?: { getWorkerUrl: () => string };
@@ -6586,6 +7147,8 @@ window.addEventListener("DOMContentLoaded", () => {
       monaco?: {
         editor?: {
           create: (el: HTMLElement, options: Record<string, unknown>) => unknown;
+          defineTheme?: (name: string, theme: MonacoTheme) => void;
+          setTheme?: (name: string) => void;
         };
         languages?: {
           register?: (config: { id: string }) => void;
@@ -6636,10 +7199,61 @@ window.addEventListener("DOMContentLoaded", () => {
 
       monacoApi = monacoWindow.monaco as Record<string, unknown>;
       registerCompletionProvider(monacoWindow.monaco);
+      const themeName = "tex180-steel";
+      const themeColors: Record<string, string> = {
+        "editor.background": "#15111C",
+        "editor.foreground": "#D8D2E2",
+        "editorLineNumber.foreground": "#6D6578",
+        "editorLineNumber.activeForeground": "#B8AEC8",
+        "editorCursor.foreground": "#C9AEE6",
+        "editor.selectionBackground": "#2C2436",
+        "editor.inactiveSelectionBackground": "#231E2A",
+        "editor.selectionHighlightBackground": "rgba(154, 107, 197, 0.22)",
+        "editor.lineHighlightBackground": "#1A1522",
+        "editor.lineHighlightBorder": "#2A2234",
+        "editorIndentGuide.background": "#2A2335",
+        "editorIndentGuide.activeBackground": "#3A3046",
+        "editorWhitespace.foreground": "#2A2533",
+        "editorGutter.background": "#15111C",
+        "editorWidget.background": "#1A1522",
+        "editorWidget.border": "#2B2436",
+        "editorHoverWidget.background": "#1A1522",
+        "editorHoverWidget.border": "#2B2436",
+        "editorSuggestWidget.background": "#1A1522",
+        "editorSuggestWidget.border": "#2B2436",
+        "editorSuggestWidget.foreground": "#D8D2E2",
+        "editorSuggestWidget.selectedBackground": "rgba(154, 107, 197, 0.2)",
+        "editorSuggestWidget.highlightForeground": "#C9AEE6",
+        "editorBracketMatch.background": "rgba(201, 174, 230, 0.22)",
+        "editorBracketMatch.border": "#C9AEE6",
+        "editor.findMatchBackground": "rgba(201, 174, 230, 0.2)",
+        "editor.findMatchHighlightBackground": "rgba(201, 174, 230, 0.14)",
+        "editor.findRangeHighlightBackground": "rgba(201, 174, 230, 0.1)",
+        "editor.wordHighlightBackground": "rgba(201, 174, 230, 0.14)",
+        "editor.wordHighlightStrongBackground": "rgba(201, 174, 230, 0.22)",
+        "editorError.foreground": "#D5B06A",
+        "editorError.border": "#D5B06A",
+        "editorOverviewRuler.errorForeground": "rgba(213, 176, 106, 0.6)",
+        "editorMarkerNavigationError.background": "rgba(213, 176, 106, 0.2)",
+        "editorGutter.errorForeground": "#D5B06A",
+        "editorWarning.foreground": "#B88A52",
+        "editorInfo.foreground": "#B59BCC",
+        "scrollbarSlider.background": "rgba(201, 174, 230, 0.14)",
+        "scrollbarSlider.hoverBackground": "rgba(201, 174, 230, 0.24)",
+        "scrollbarSlider.activeBackground": "rgba(201, 174, 230, 0.32)",
+        "editorRuler.foreground": "#2A2234",
+      };
+      monacoWindow.monaco.editor.defineTheme?.(themeName, {
+        base: "vs-dark",
+        inherit: true,
+        rules: [],
+        colors: themeColors,
+      });
+      monacoWindow.monaco.editor.setTheme?.(themeName);
       const editor = monacoWindow.monaco.editor.create(editorHost, {
         value: "",
         language: "latex",
-        theme: "vs-dark",
+        theme: themeName,
         automaticLayout: true,
         glyphMargin: true,
         minimap: { enabled: false },
@@ -6649,6 +7263,11 @@ window.addEventListener("DOMContentLoaded", () => {
         lineHeight: 20,
         scrollBeyondLastLine: false,
         wordWrap: "off",
+        wordBasedSuggestions: "off",
+        quickSuggestions: false,
+        suggestOnTriggerCharacters: true,
+        occurrencesHighlight: false,
+        selectionHighlight: false,
       }) as {
         onDidChangeModelContent: (listener: () => void) => void;
         onDidChangeCursorPosition?: (listener: (event: { position: { lineNumber: number; column: number } }) => void) => void;

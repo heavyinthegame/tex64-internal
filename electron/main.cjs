@@ -3,6 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
 const { BuildService } = require("./services/build.cjs");
+const FormatterService = require("./services/formatter.cjs");
 const { GitService } = require("./services/git.cjs");
 const { IndexerService } = require("./services/indexer.cjs");
 const { PDFWindowManager } = require("./services/pdf.cjs");
@@ -15,10 +16,12 @@ const isE2E = process.env.TEX180_E2E === "1";
 
 const workspace = new WorkspaceManager();
 const buildService = new BuildService();
+const formatterService = new FormatterService();
 const indexerService = new IndexerService();
 const searchService = new SearchService();
 const gitService = new GitService();
 const pdfWindowManager = new PDFWindowManager();
+let formatWarningShown = false;
 
 const createMainWindow = () => {
   const preloadPath = path.join(__dirname, "preload.cjs");
@@ -225,7 +228,7 @@ ipcMain.on("tex180", (_event, message) => {
     return;
   }
   if (type === "build") {
-    handleBuild(message.mainFile);
+    handleBuild(message.mainFile, { format: message.format });
     return;
   }
   if (type === "openFile") {
@@ -233,7 +236,14 @@ ipcMain.on("tex180", (_event, message) => {
     return;
   }
   if (type === "saveFile") {
-    handleSaveFile(message.path, message.content);
+    handleSaveFile(message.path, message.content, {
+      format: message.format,
+      formatSource: message.formatSource,
+    });
+    return;
+  }
+  if (type === "formatFile") {
+    handleFormatFile(message.path, message.content, message.source);
     return;
   }
   if (type === "createFile") {
@@ -354,7 +364,7 @@ const handleCreateProject = async (template) => {
   sendLauncherStatus({ isBusy: false, message: null });
 };
 
-const handleBuild = async (mainFile) => {
+const handleBuild = async (mainFile, options = {}) => {
   sendBuildState("building", "ビルド中...");
   sendIssues(0, "ビルド中...", "info", []);
   const rootPath = ensureWorkspace();
@@ -369,6 +379,17 @@ const handleBuild = async (mainFile) => {
     (mainFile && mainFile.trim() ? mainFile : null) ||
     rootInfo?.path ||
     "main.tex";
+  if (options.format && typeof targetFile === "string" && targetFile.endsWith(".tex")) {
+    const formatResult = await formatterService
+      .formatFile(rootPath, targetFile)
+      .catch((error) => ({ ok: false, error: error?.message ?? String(error) }));
+    if (!formatResult.ok && !formatWarningShown) {
+      formatWarningShown = true;
+      sendIssues(1, formatResult.error ?? "整形に失敗しました。", "info", [
+        { severity: "warning", message: formatResult.error ?? "整形に失敗しました。", line: null },
+      ]);
+    }
+  }
   const result = await buildService.build(rootPath, targetFile);
   if (result.kind === "busy") {
     sendBuildState("building", "ビルド中...");
@@ -421,7 +442,7 @@ const handleOpenFile = async (relativePath) => {
   }
 };
 
-const handleSaveFile = async (relativePath, content) => {
+const handleSaveFile = async (relativePath, content, options = {}) => {
   const rootPath = ensureWorkspace();
   if (!rootPath) {
     sendToRenderer("saveResult", {
@@ -433,13 +454,91 @@ const handleSaveFile = async (relativePath, content) => {
   }
   await updateWorkspaceIfNeeded(rootPath);
   try {
-    await workspace.writeFile(relativePath, content ?? "");
-    sendToRenderer("saveResult", { path: relativePath, ok: true });
+    const shouldFormat =
+      options.format === true &&
+      typeof relativePath === "string" &&
+      relativePath.toLowerCase().endsWith(".tex");
+    let finalContent = content ?? "";
+    let formatError = null;
+    if (shouldFormat) {
+      const formatResult = await formatterService
+        .formatContent(rootPath, relativePath, finalContent)
+        .catch((error) => ({ ok: false, error: error?.message ?? String(error) }));
+      if (formatResult.ok && typeof formatResult.content === "string") {
+        finalContent = formatResult.content;
+      } else {
+        formatError = formatResult.error ?? "整形に失敗しました。";
+        if (!formatWarningShown) {
+          formatWarningShown = true;
+          sendIssues(1, formatError, "info", [
+            { severity: "warning", message: formatError, line: null },
+          ]);
+        }
+      }
+    }
+    await workspace.writeFile(relativePath, finalContent);
+    sendToRenderer("saveResult", {
+      path: relativePath,
+      ok: true,
+      content: shouldFormat ? finalContent : undefined,
+      formatError: formatError ?? undefined,
+    });
     if (workspace.isIndexTarget(relativePath)) {
       requestIndex(rootPath);
     }
   } catch (error) {
     sendToRenderer("saveResult", { path: relativePath, ok: false, error: error.message });
+  }
+};
+
+const handleFormatFile = async (relativePath, content, source) => {
+  const rootPath = ensureWorkspace();
+  if (!rootPath) {
+    sendToRenderer("formatResult", {
+      path: relativePath,
+      ok: false,
+      error: "ワークスペースが選択されていません。",
+      source,
+    });
+    return;
+  }
+  await updateWorkspaceIfNeeded(rootPath);
+  try {
+    const result = await formatterService
+      .formatContent(rootPath, relativePath, content ?? "")
+      .catch((error) => ({ ok: false, error: error?.message ?? String(error) }));
+    if (!result.ok) {
+      if (!formatWarningShown) {
+        formatWarningShown = true;
+        sendIssues(1, result.error ?? "整形に失敗しました。", "info", [
+          {
+            severity: "warning",
+            message: result.error ?? "整形に失敗しました。",
+            line: null,
+          },
+        ]);
+      }
+      sendToRenderer("formatResult", {
+        path: relativePath,
+        ok: false,
+        error: result.error ?? "整形に失敗しました。",
+        source,
+      });
+      return;
+    }
+    sendToRenderer("formatResult", {
+      path: relativePath,
+      ok: true,
+      content: result.content ?? content ?? "",
+      source,
+    });
+  } catch (error) {
+    sendToRenderer("formatResult", {
+      path: relativePath,
+      ok: false,
+      error: error.message,
+      source,
+    });
   }
 };
 

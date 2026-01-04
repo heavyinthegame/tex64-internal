@@ -12,8 +12,8 @@ test("main tex selection toggles manual and auto detection", async () => {
     .catch(() => false);
   const { electronApp, page } = await openWorkspaceApp();
   try {
-    await page.click('.tab[data-tab="settings"]');
-    await page.waitForSelector('.panel[data-panel="settings"].is-active');
+    await page.click('.tab[data-tab="project"]');
+    await page.waitForSelector('.panel[data-panel="project"].is-active');
     await page.waitForFunction(() => {
       const select = document.getElementById("settings-root-select");
       return select instanceof HTMLSelectElement && select.options.length > 1;

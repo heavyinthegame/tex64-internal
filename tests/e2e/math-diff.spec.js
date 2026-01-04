@@ -241,3 +241,56 @@ test("diff preview and insertion preserve wrappers and handle mismatch/new inser
     await electronApp.close();
   }
 });
+
+test("diff preview updates after cancel on second open", async () => {
+  test.setTimeout(90000);
+  const { electronApp, page } = await openEditor();
+  try {
+    const content = [
+      "Inline $alpha+1$ test.",
+      "Inline $beta+2$ test.",
+    ].join("\n");
+    await setEditorContent(page, content);
+
+    await moveCursorTo(page, "alpha");
+    await waitForAutoDetected(page, true, "alpha");
+    await setMathFieldValue(page, "alpha+3");
+    await page.click("#block-insert-button");
+    await page.waitForSelector("#diff-modal.is-open");
+    await page.waitForFunction(
+      () => window.__tex180LastDiff?.modified?.includes("alpha+3"),
+      { timeout: 8000 }
+    );
+    const firstDiff = await page.evaluate(() => window.__tex180LastDiff);
+    const firstValues = await getDiffEditorValues(page);
+    expect(firstDiff?.original ?? "").toContain("alpha+1");
+    expect(firstDiff?.modified ?? "").toContain("alpha+3");
+    expect(firstValues?.modified ?? "").toContain("alpha+3");
+    await page.click("#diff-modal-cancel");
+    await page.waitForFunction(
+      () => !document.getElementById("diff-modal")?.classList.contains("is-open")
+    );
+
+    await moveCursorTo(page, "beta");
+    await waitForAutoDetected(page, true, "beta");
+    await page.waitForFunction(
+      () => window.__tex180GetMathInputValue?.()?.includes("beta"),
+      { timeout: 8000 }
+    );
+    await setMathFieldValue(page, "beta+5");
+    await page.click("#block-insert-button");
+    await page.waitForSelector("#diff-modal.is-open");
+    await page.waitForFunction(
+      () => window.__tex180LastDiff?.modified?.includes("beta+5"),
+      { timeout: 8000 }
+    );
+    const secondDiff = await page.evaluate(() => window.__tex180LastDiff);
+    const secondValues = await getDiffEditorValues(page);
+    expect(secondDiff?.original ?? "").toContain("beta+2");
+    expect(secondDiff?.modified ?? "").toContain("beta+5");
+    expect(secondValues?.modified ?? "").toContain("beta+5");
+    await page.click("#diff-modal-cancel");
+  } finally {
+    await electronApp.close();
+  }
+});

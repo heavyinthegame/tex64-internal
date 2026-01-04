@@ -125,7 +125,6 @@ Main → Renderer（tex180:message type）:
 ## 7. ビルド/生成物
 - `npm run web:build`:
   - `web-src/main.ts` → `Resources/web/main.js`
-  - `web-src/block-editor-app/*` → `Resources/web/block-editor.js` / `Resources/web/block-editor.css`（現状未使用だが生成物は残る）
 
 ## 8. 主要ファイルマップ
 - `Resources/web/index.html` — メインUI構造
@@ -149,11 +148,13 @@ Main → Renderer（tex180:message type）:
 
 ユーザーメモ（設計指針）以下はタスクでもあります
 
-プロジェクトごとの設定と、エディタで共通の設定は分ける　プロジェクト設定はサイドバーの一番下　エディタの設定は現在の設定欄
+
 pdfファイルや画像等のファイルもエディタで開けるようにする(latexのプロジェクトに標準のファイルは入れる)それ以外は、非対応ファイルですという表示にして、検索除外
 検索のUIおかしい
 自動ビルド周りの機能を考える
 ファイルツリーの保存ボタン何
 ブロック編集の問題
 git
-
+設定充実
+長い数式
+コンパイル

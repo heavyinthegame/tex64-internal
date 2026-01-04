@@ -1,16 +1,39 @@
 :root {
   color-scheme: dark;
-  --bg: #1c2129;
-  --bg-accent: #232a34;
-  --panel: #20252d;
-  --panel-strong: #1f242c;
-  --panel-border: #2b3440;
-  --text: #e5e9f0;
-  --muted: #9aa3ad;
-  --accent: #4aa8ff;
-  --accent-soft: rgba(74, 168, 255, 0.18);
-  --status: #1f2a35;
-  --shadow: none;
+  --bg: #0E0B12;
+  --bg-accent: #14101A;
+  --panel: #18131F;
+  --panel-strong: #1D1726;
+  --panel-muted: #1A1522;
+  --panel-header: #211A2B;
+  --panel-border: #2B2436;
+  --panel-border-strong: #352D42;
+  --control-bg: #2B2436;
+  --control-border: #3A3148;
+  --input-bg: #1A1522;
+  --input-bg-strong: #15111C;
+  --input-border: #2E273A;
+  --input-border-strong: #3A3148;
+  --text: #E8E4ED;
+  --text-soft: #D2CBDD;
+  --muted: #9B92A8;
+  --accent: #9A6BC5;
+  --accent-strong: #C9AEE6;
+  --accent-soft: rgba(154, 107, 197, 0.18);
+  --accent-soft-strong: rgba(201, 174, 230, 0.2);
+  --focus-ring: rgba(201, 174, 230, 0.6);
+  --warning: #B88A52;
+  --warning-soft: rgba(184, 138, 82, 0.2);
+  --warning-faint: rgba(184, 138, 82, 0.08);
+  --warning-border: rgba(184, 138, 82, 0.45);
+  --warning-text: #E1C38E;
+  --danger: #D5B06A;
+  --danger-soft: rgba(213, 176, 106, 0.2);
+  --danger-faint: rgba(213, 176, 106, 0.08);
+  --danger-border: rgba(213, 176, 106, 0.5);
+  --danger-text: #F1D9A3;
+  --status: #14101A;
+  --shadow: 0 1px 0 rgba(255, 255, 255, 0.04), 0 16px 32px rgba(0, 0, 0, 0.45);
   --radius: 6px;
   --sidebar-width: 52px;
   --sidebar-panel-width: calc((100vw - var(--sidebar-width) - 4px) / 2);
@@ -33,9 +56,10 @@ body {
   min-height: 100vh;
   background-color: var(--bg);
   background-image:
-    radial-gradient(circle at 10% 0%, rgba(74, 168, 255, 0.08), transparent 45%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 35%),
-    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.02) 0 1px, transparent 1px 12px);
+    radial-gradient(circle at 12% 0%, rgba(154, 107, 197, 0.12), transparent 46%),
+    radial-gradient(circle at 85% 18%, rgba(201, 174, 230, 0.04), transparent 48%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 38%),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.012) 0 1px, transparent 1px 14px);
   color: var(--text);
   font-family: "Hiragino Sans", "Avenir Next", "Yu Gothic", "Hiragino Kaku Gothic ProN", sans-serif;
   letter-spacing: 0.01em;
@@ -58,6 +82,7 @@ body.is-ready {
   transition: opacity 0.4s ease;
   position: relative;
   overflow: hidden;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 32%);
 }
 
 body.is-ready .app {
@@ -71,9 +96,9 @@ body.is-ready .app {
   place-items: center;
   padding: 32px;
   background:
-    radial-gradient(circle at 12% 8%, rgba(90, 160, 255, 0.32), transparent 42%),
-    radial-gradient(circle at 88% 92%, rgba(74, 168, 255, 0.18), transparent 45%),
-    linear-gradient(145deg, #1c222b, #0f1318 60%);
+    radial-gradient(circle at 14% 10%, rgba(154, 107, 197, 0.18), transparent 46%),
+    radial-gradient(circle at 86% 92%, rgba(201, 174, 230, 0.05), transparent 50%),
+    linear-gradient(150deg, var(--bg), #07080B 60%);
   z-index: 20;
 }
 
@@ -109,9 +134,9 @@ body.has-launcher .app {
   gap: 20px;
   padding: 32px;
   border-radius: 22px;
-  background: rgba(26, 32, 40, 0.86);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.35);
+  background: rgba(15, 18, 23, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 26px 54px rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(18px);
 }
 
@@ -139,7 +164,7 @@ body.has-launcher .app {
 
 .launcher-divider {
   height: 1px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .launcher-template {
@@ -159,8 +184,8 @@ body.has-launcher .app {
   gap: 6px;
   padding: 4px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(15, 19, 24, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(12, 15, 19, 0.7);
 }
 
 .launcher-template-button {
@@ -174,7 +199,7 @@ body.has-launcher .app {
 }
 
 .launcher-template-button.is-active {
-  background: rgba(74, 168, 255, 0.22);
+  background: var(--accent-soft-strong);
   color: var(--text);
 }
 
@@ -184,8 +209,8 @@ body.has-launcher .app {
 }
 
 .launcher-action {
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(20, 26, 34, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(14, 17, 22, 0.82);
   color: var(--text);
   text-align: left;
   padding: 14px 16px;
@@ -197,8 +222,8 @@ body.has-launcher .app {
 }
 
 .launcher-action.primary {
-  border-color: rgba(74, 168, 255, 0.4);
-  background: linear-gradient(135deg, rgba(74, 168, 255, 0.4), rgba(46, 110, 186, 0.35));
+  border-color: rgba(201, 174, 230, 0.45);
+  background: linear-gradient(135deg, rgba(201, 174, 230, 0.3), rgba(154, 107, 197, 0.28));
 }
 
 .launcher-action:disabled {
@@ -277,7 +302,7 @@ body.has-launcher .app {
   height: 8px;
   border-radius: 999px;
   background: var(--accent);
-  box-shadow: 0 0 0 4px rgba(74, 168, 255, 0.18);
+  box-shadow: 0 0 0 4px rgba(154, 107, 197, 0.18);
 }
 
 .brand-name {
@@ -296,8 +321,8 @@ body.has-launcher .app {
 }
 
 .pill {
-  border: 1px solid #38424f;
-  background: #27303b;
+  border: 1px solid var(--control-border);
+  background: var(--control-bg);
   color: var(--text);
   padding: 4px 10px;
   border-radius: 5px;
@@ -316,8 +341,8 @@ body.has-launcher .app {
 }
 
 .pill.is-busy {
-  border-color: rgba(74, 168, 255, 0.6);
-  background: rgba(74, 168, 255, 0.18);
+  border-color: rgba(154, 107, 197, 0.6);
+  background: rgba(154, 107, 197, 0.18);
 }
 
 .main {
@@ -343,14 +368,14 @@ body.has-launcher .app {
   flex-direction: column;
   justify-content: space-between;
   padding: 4px 2px;
-  background: var(--panel-strong);
+  background: linear-gradient(180deg, var(--panel-strong) 0%, var(--bg) 100%);
   border-right: 1px solid var(--panel-border);
 }
 
 .sidebar-panel {
   display: grid;
   grid-template-rows: 1fr;
-  background: #1b2129;
+  background: linear-gradient(180deg, var(--panel-muted) 0%, var(--panel) 100%);
   border-right: 1px solid var(--panel-border);
   min-height: 0;
   overflow: hidden;
@@ -373,7 +398,7 @@ body.has-launcher .app {
   justify-content: space-between;
   padding: 0 10px;
   border-bottom: 1px solid var(--panel-border);
-  background: #1f262f;
+  background: linear-gradient(180deg, var(--panel-header) 0%, var(--panel) 100%);
   font-size: 11px;
   color: var(--muted);
 }
@@ -399,8 +424,8 @@ body.has-launcher .app {
 }
 
 .panel-button {
-  border: 1px solid #38424f;
-  background: #27303b;
+  border: 1px solid var(--control-border);
+  background: var(--control-bg);
   color: var(--text);
   padding: 2px 8px;
   border-radius: 5px;
@@ -466,8 +491,8 @@ body.has-launcher .app {
 }
 
 .block-toggle-button {
-  border: 1px solid #38424f;
-  background: #27303b;
+  border: 1px solid var(--control-border);
+  background: var(--control-bg);
   color: var(--muted);
   padding: 2px 8px;
   border-radius: 5px;
@@ -477,26 +502,8 @@ body.has-launcher .app {
 
 .block-toggle-button.is-active {
   color: var(--text);
-  border-color: rgba(74, 168, 255, 0.5);
-  background: rgba(74, 168, 255, 0.12);
-}
-
-.block-target {
-  font-size: 10px;
-  color: var(--muted);
-  max-width: 140px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.block-format-hint {
-  font-size: 10px;
-  color: var(--muted);
-}
-
-.block-format-hint.is-hidden {
-  display: none;
+  border-color: rgba(154, 107, 197, 0.5);
+  background: rgba(154, 107, 197, 0.12);
 }
 
 .block-textarea {
@@ -515,14 +522,6 @@ body.has-launcher .app {
 
 .block-table-grid.is-hidden {
   display: none;
-}
-
-.blocks-panel.is-auto-detected .block-toggle {
-  display: none;
-}
-
-.blocks-panel.is-auto-detected .block-target {
-  max-width: 100%;
 }
 
 .block-form {
@@ -549,10 +548,10 @@ body.has-launcher .app {
 .block-math-preview {
   display: grid;
   gap: 6px;
-  border: 1px solid #2b3440;
+  border: 1px solid var(--panel-border);
   border-radius: 10px;
   padding: 8px 10px 10px;
-  background: #141a22;
+  background: var(--input-bg);
 }
 
 .block-math-preview-label {
@@ -593,9 +592,9 @@ body.has-launcher .app {
 
 .block-input {
   width: 100%;
-  background: #141a22;
+  background: var(--input-bg);
   color: var(--text);
-  border: 1px solid #2b3440;
+  border: 1px solid var(--input-border);
   border-radius: 6px;
   padding: 6px 8px;
   font-size: 12px;
@@ -603,7 +602,7 @@ body.has-launcher .app {
 }
 
 .block-math-input {
-  background: #0c141d;
+  background: var(--input-bg-strong);
   border-radius: 10px;
   padding: 10px 12px;
   font-size: 16px;
@@ -612,7 +611,7 @@ body.has-launcher .app {
 }
 
 .block-input:focus {
-  outline: 2px solid rgba(74, 168, 255, 0.4);
+  outline: 2px solid rgba(154, 107, 197, 0.4);
   outline-offset: 1px;
 }
 
@@ -622,14 +621,14 @@ math-field.block-input {
 }
 
 math-field.block-input:focus-within {
-  outline: 2px solid rgba(74, 168, 255, 0.4);
+  outline: 2px solid rgba(154, 107, 197, 0.4);
   outline-offset: 1px;
 }
 
 math-field.block-math-input {
   min-height: 72px;
   --caret-color: var(--accent);
-  --selection-color: rgba(74, 168, 255, 0.4);
+  --selection-color: rgba(154, 107, 197, 0.4);
   --selection-background-color: transparent;
 }
 
@@ -644,13 +643,13 @@ math-field.block-math-field {
   padding: 18px;
   font-size: 20px;
   line-height: 1.5;
-  background: #0c141d;
-  color: #eef3fb;
-  border: 1px solid #3a4a5e;
+  background: var(--input-bg-strong);
+  color: var(--text);
+  border: 1px solid var(--input-border);
   border-radius: 10px;
-  --caret-color: #5bc2ff;
-  --selection-color: #f8fbff;
-  --selection-background-color: rgba(110, 195, 255, 0.7);
+  --caret-color: var(--accent-strong);
+  --selection-color: var(--text);
+  --selection-background-color: rgba(154, 107, 197, 0.35);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
   overflow-x: auto;
   overflow-y: hidden;
@@ -659,8 +658,8 @@ math-field.block-math-field {
 
 .block-math-input-container {
   min-height: 120px;
-  border: 1px solid #2f3c4d;
-  background: #0c141d;
+  border: 1px solid var(--panel-border);
+  background: var(--input-bg-strong);
   border-radius: 10px;
   display: flex;
   align-items: center;
@@ -673,13 +672,13 @@ math-field.block-math-field {
 math-field.block-math-field:focus,
 math-field.block-math-field:focus-within,
 math-field.block-math-field.is-focused {
-  border-color: #5bc2ff;
+  border-color: var(--accent-strong);
   outline: none;
-  box-shadow: 0 0 0 2px rgba(110, 195, 255, 0.3);
+  box-shadow: 0 0 0 2px rgba(154, 107, 197, 0.3);
 }
 
 math-field.block-math-field::placeholder {
-  color: #8fb3d4;
+  color: #7F9BB2;
 }
 
 .block-math-hint {
@@ -728,16 +727,16 @@ math-field.block-math-field::placeholder {
 
 .search-input {
   flex: 1;
-  background: #141a22;
+  background: var(--input-bg);
   color: var(--text);
-  border: 1px solid #2b3440;
+  border: 1px solid var(--input-border);
   border-radius: 6px;
   padding: 6px 8px;
   font-size: 11px;
 }
 
 .search-input:focus {
-  outline: 2px solid rgba(74, 168, 255, 0.4);
+  outline: 2px solid rgba(154, 107, 197, 0.4);
   outline-offset: 1px;
 }
 
@@ -753,8 +752,8 @@ math-field.block-math-field::placeholder {
 }
 
 .search-item {
-  border: 1px solid #2f3a48;
-  background: #1f2630;
+  border: 1px solid var(--panel-border-strong);
+  background: var(--panel-strong);
   color: var(--text);
   font-size: 11px;
   padding: 5px 8px;
@@ -766,7 +765,7 @@ math-field.block-math-field::placeholder {
 }
 
 .search-item:hover {
-  border-color: rgba(74, 168, 255, 0.35);
+  border-color: rgba(154, 107, 197, 0.35);
 }
 
 .search-item-meta {
@@ -792,8 +791,8 @@ math-field.block-math-field::placeholder {
 }
 
 .git-item {
-  border: 1px solid #2f3a48;
-  background: #1f2630;
+  border: 1px solid var(--panel-border-strong);
+  background: var(--panel-strong);
   color: var(--text);
   font-size: 11px;
   padding: 6px 8px;
@@ -819,8 +818,8 @@ math-field.block-math-field::placeholder {
   gap: 10px;
   padding: 10px;
   border-radius: 8px;
-  border: 1px solid #2b3440;
-  background: #1f2630;
+  border: 1px solid var(--panel-border);
+  background: var(--panel-strong);
 }
 
 .settings-group-title {
@@ -861,9 +860,9 @@ math-field.block-math-field::placeholder {
 .settings-select {
   width: 100%;
   min-width: 0;
-  background: #141a22;
+  background: var(--input-bg);
   color: var(--text);
-  border: 1px solid #2b3440;
+  border: 1px solid var(--input-border);
   border-radius: 6px;
   padding: 6px 8px;
   font-size: 11px;
@@ -872,17 +871,17 @@ math-field.block-math-field::placeholder {
 .settings-path {
   color: var(--text);
   font-size: 11px;
-  background: #141a22;
-  border: 1px solid #2b3440;
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
   border-radius: 6px;
   padding: 6px 8px;
   word-break: break-all;
 }
 
 .settings-toggle {
-  background: #141a22;
+  background: var(--input-bg);
   color: var(--text);
-  border: 1px solid #2b3440;
+  border: 1px solid var(--input-border);
   border-radius: 999px;
   padding: 4px 10px;
   font-size: 11px;
@@ -892,7 +891,7 @@ math-field.block-math-field::placeholder {
 
 .settings-toggle.is-on {
   background: var(--accent-soft);
-  border-color: rgba(74, 168, 255, 0.5);
+  border-color: rgba(154, 107, 197, 0.5);
   color: var(--text);
 }
 
@@ -901,8 +900,8 @@ math-field.block-math-field::placeholder {
   gap: 10px;
   padding: 10px;
   border-radius: 8px;
-  border: 1px solid #2b3440;
-  background: #141a22;
+  border: 1px solid var(--panel-border);
+  background: var(--input-bg);
 }
 
 .env-registry-add {
@@ -914,9 +913,9 @@ math-field.block-math-field::placeholder {
 
 .env-registry-input,
 .env-registry-select {
-  background: #0f141c;
+  background: var(--input-bg-strong);
   color: var(--text);
-  border: 1px solid #2b3440;
+  border: 1px solid var(--input-border);
   border-radius: 6px;
   padding: 6px 8px;
   font-size: 11px;
@@ -959,8 +958,8 @@ math-field.block-math-field::placeholder {
   align-items: center;
   padding: 6px 8px;
   border-radius: 8px;
-  border: 1px solid #2b3440;
-  background: #1b222c;
+  border: 1px solid var(--panel-border);
+  background: var(--panel-muted);
 }
 
 .env-registry-label {
@@ -985,15 +984,15 @@ math-field.block-math-field::placeholder {
   font-size: 9px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #fbbf24;
-  background: rgba(251, 191, 36, 0.18);
+  color: var(--warning);
+  background: var(--warning-soft);
   border-radius: 999px;
   padding: 2px 6px;
 }
 
 .env-registry-flag.is-custom {
-  color: #93c5fd;
-  background: rgba(59, 130, 246, 0.2);
+  color: var(--accent-strong);
+  background: var(--accent-soft-strong);
 }
 
 .env-registry-spacer {
@@ -1054,8 +1053,8 @@ math-field.block-math-field::placeholder {
 }
 
 .outline-item {
-  border: 1px solid #2f3a48;
-  background: #1f2630;
+  border: 1px solid var(--panel-border-strong);
+  background: var(--panel-strong);
   color: var(--text);
   font-size: 11px;
   padding: 6px 8px;
@@ -1067,16 +1066,16 @@ math-field.block-math-field::placeholder {
 }
 
 .outline-item:hover {
-  border-color: rgba(74, 168, 255, 0.35);
+  border-color: rgba(154, 107, 197, 0.35);
 }
 
 .outline-item[data-kind="todo"] {
-  border-color: rgba(255, 174, 61, 0.45);
-  background: rgba(255, 174, 61, 0.08);
+  border-color: var(--warning-border);
+  background: var(--warning-faint);
 }
 
 .outline-item[data-kind="figure"] {
-  border-color: rgba(74, 168, 255, 0.35);
+  border-color: rgba(154, 107, 197, 0.35);
 }
 
 .outline-item[data-kind="table"] {
@@ -1114,13 +1113,13 @@ math-field.block-math-field::placeholder {
 }
 
 .file-tree.is-drop-target {
-  outline: 1px dashed rgba(74, 168, 255, 0.5);
+  outline: 1px dashed rgba(154, 107, 197, 0.5);
   outline-offset: -4px;
-  background: rgba(74, 168, 255, 0.06);
+  background: rgba(154, 107, 197, 0.06);
 }
 
 .file-folder-children.is-drop-target {
-  background: rgba(74, 168, 255, 0.08);
+  background: rgba(154, 107, 197, 0.08);
   border-radius: 6px;
 }
 
@@ -1146,13 +1145,13 @@ math-field.block-math-field::placeholder {
 }
 
 .file-folder summary.is-selected {
-  background: rgba(74, 168, 255, 0.12);
+  background: rgba(154, 107, 197, 0.12);
   color: var(--text);
 }
 
 .file-folder summary.is-drop-target {
-  background: rgba(74, 168, 255, 0.2);
-  border: 1px dashed rgba(74, 168, 255, 0.5);
+  background: rgba(154, 107, 197, 0.2);
+  border: 1px dashed rgba(154, 107, 197, 0.5);
 }
 
 .file-folder summary::-webkit-details-marker {
@@ -1186,7 +1185,7 @@ math-field.block-math-field::placeholder {
   top: 0;
   bottom: 0;
   width: 1px;
-  background: rgba(86, 184, 255, 0.18);
+  background: var(--accent-soft);
 }
 
 .file-item {
@@ -1212,7 +1211,7 @@ math-field.block-math-field::placeholder {
   top: 50%;
   width: 10px;
   height: 1px;
-  background: rgba(86, 184, 255, 0.22);
+  background: var(--accent-soft-strong);
   transform: translateY(-50%);
   pointer-events: none;
 }
@@ -1223,13 +1222,13 @@ math-field.block-math-field::placeholder {
 }
 
 .file-item.is-active {
-  background: rgba(74, 168, 255, 0.12);
-  border-color: rgba(74, 168, 255, 0.35);
+  background: rgba(154, 107, 197, 0.12);
+  border-color: rgba(154, 107, 197, 0.35);
 }
 
 .file-item.is-drop-target {
-  background: rgba(74, 168, 255, 0.18);
-  border-color: rgba(74, 168, 255, 0.45);
+  background: rgba(154, 107, 197, 0.18);
+  border-color: rgba(154, 107, 197, 0.45);
   border-style: dashed;
 }
 
@@ -1289,7 +1288,7 @@ math-field.block-math-field::placeholder {
 
 .tab.is-active {
   color: var(--text);
-  background: rgba(74, 168, 255, 0.08);
+  background: rgba(154, 107, 197, 0.08);
 }
 
 .tab:hover {
@@ -1298,7 +1297,7 @@ math-field.block-math-field::placeholder {
 }
 
 .tab:focus-visible {
-  outline: 2px solid rgba(74, 168, 255, 0.5);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -1317,7 +1316,7 @@ math-field.block-math-field::placeholder {
   display: grid;
   grid-template-rows: auto 1fr;
   min-height: 0;
-  background: #1c2129;
+  background: linear-gradient(180deg, var(--bg-accent) 0%, var(--bg) 35%);
   position: relative;
 }
 
@@ -1326,7 +1325,7 @@ math-field.block-math-field::placeholder {
   align-items: center;
   justify-content: space-between;
   padding: 0 12px;
-  background: #20252d;
+  background: var(--panel);
   border-bottom: 1px solid var(--panel-border);
 }
 
@@ -1336,7 +1335,7 @@ math-field.block-math-field::placeholder {
   gap: 8px;
   padding: 4px 8px;
   min-height: 28px;
-  background: #1a2028;
+  background: var(--bg-accent);
   border-bottom: 1px solid var(--panel-border);
 }
 
@@ -1370,7 +1369,7 @@ math-field.block-math-field::placeholder {
   align-items: center;
   gap: 6px;
   border: 1px solid transparent;
-  background: #1f2630;
+  background: var(--panel-strong);
   color: var(--text);
   border-radius: 6px;
   padding: 4px 8px;
@@ -1379,8 +1378,8 @@ math-field.block-math-field::placeholder {
 }
 
 .editor-tab.is-active {
-  border-color: rgba(74, 168, 255, 0.5);
-  background: #222b35;
+  border-color: rgba(154, 107, 197, 0.5);
+  background: var(--panel-header);
 }
 
 .editor-tab-label {
@@ -1423,7 +1422,7 @@ math-field.block-math-field::placeholder {
 
 .editor-surface {
   position: relative;
-  background: #1c2129;
+  background: var(--bg);
   min-height: 0;
   overflow: hidden;
 }
@@ -1432,9 +1431,9 @@ math-field.block-math-field::placeholder {
   display: none;
   gap: 6px;
   padding: 6px;
-  border: 1px solid #223041;
+  border: 1px solid var(--panel-border);
   border-radius: 10px;
-  background: linear-gradient(180deg, #0f1924 0%, #0b1118 100%);
+  background: linear-gradient(180deg, var(--bg-accent) 0%, var(--bg) 100%);
   box-shadow:
     0 -14px 28px rgba(0, 0, 0, 0.45),
     inset 0 1px 0 rgba(255, 255, 255, 0.03);
@@ -1451,7 +1450,7 @@ math-field.block-math-field::placeholder {
   justify-content: space-between;
   gap: 8px;
   padding-bottom: 4px;
-  border-bottom: 1px solid rgba(91, 194, 255, 0.12);
+  border-bottom: 1px solid rgba(201, 174, 230, 0.12);
 }
 
 .math-keyboard-controls {
@@ -1462,10 +1461,10 @@ math-field.block-math-field::placeholder {
 }
 
 .math-keyboard-shift {
-  border: 1px solid #2b3a4c;
+  border: 1px solid var(--control-border);
   border-radius: 999px;
-  background: #141e2a;
-  color: #b7c6d4;
+  background: var(--control-bg);
+  color: var(--text-soft);
   font-size: 10px;
   text-transform: none;
   letter-spacing: 0.08em;
@@ -1475,16 +1474,16 @@ math-field.block-math-field::placeholder {
 }
 
 .math-keyboard-shift.is-active {
-  background: #5bc2ff;
-  border-color: #5bc2ff;
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
   color: #0b1117;
   box-shadow:
-    0 8px 18px rgba(91, 194, 255, 0.25),
+    0 8px 18px rgba(201, 174, 230, 0.25),
     inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
 
 .math-keyboard-shift:focus-visible {
-  outline: 2px solid rgba(86, 184, 255, 0.6);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -1492,7 +1491,7 @@ math-field.block-math-field::placeholder {
   font-size: 10px;
   text-transform: none;
   letter-spacing: 0.12em;
-  color: #c2cbd6;
+  color: var(--text-soft);
 }
 
 .math-keyboard-tabs {
@@ -1503,8 +1502,8 @@ math-field.block-math-field::placeholder {
   justify-content: flex-start;
   padding: 4px;
   border-radius: 8px;
-  background: #0f1a26;
-  border: 1px solid #223244;
+  background: var(--panel-muted);
+  border: 1px solid var(--panel-border);
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -1516,8 +1515,8 @@ math-field.block-math-field::placeholder {
 .math-keyboard-tab {
   border: 1px solid transparent;
   border-radius: 999px;
-  background: #141f2b;
-  color: #b3c0cc;
+  background: var(--panel-strong);
+  color: var(--muted);
   font-size: 10px;
   padding: 4px 10px;
   cursor: pointer;
@@ -1525,10 +1524,10 @@ math-field.block-math-field::placeholder {
 }
 
 .math-keyboard-tab.is-active {
-  color: #f1f7ff;
-  border-color: rgba(91, 194, 255, 0.7);
-  background: rgba(91, 194, 255, 0.22);
-  box-shadow: inset 0 0 0 1px rgba(91, 194, 255, 0.2);
+  color: var(--text);
+  border-color: rgba(201, 174, 230, 0.7);
+  background: var(--accent-soft-strong);
+  box-shadow: inset 0 0 0 1px rgba(201, 174, 230, 0.2);
 }
 
 .math-keyboard-grid {
@@ -1541,14 +1540,14 @@ math-field.block-math-field::placeholder {
   overflow-x: hidden;
   padding: 4px;
   border-radius: 8px;
-  background: #0f1822;
-  border: 1px solid #223041;
+  background: var(--bg-accent);
+  border: 1px solid var(--panel-border);
   scrollbar-gutter: stable;
 }
 
 .math-keyboard-divider {
   height: 1px;
-  background: linear-gradient(90deg, transparent, #2b3a4a, transparent);
+  background: linear-gradient(90deg, transparent, var(--panel-border-strong), transparent);
   opacity: 0.9;
 }
 
@@ -1556,7 +1555,7 @@ math-field.block-math-field::placeholder {
   font-size: 10px;
   text-transform: none;
   letter-spacing: 0.12em;
-  color: #c2cbd6;
+  color: var(--text-soft);
 }
 
 .math-keyboard-fixed-grid {
@@ -1566,15 +1565,15 @@ math-field.block-math-field::placeholder {
   align-content: start;
   padding: 4px;
   border-radius: 8px;
-  background: #0f1822;
-  border: 1px solid #223041;
+  background: var(--bg-accent);
+  border: 1px solid var(--panel-border);
 }
 
 .math-keyboard-key {
-  border: 1px solid #2b3a4c;
+  border: 1px solid var(--control-border);
   border-radius: 7px;
-  background: linear-gradient(180deg, #1b2633 0%, #101720 100%);
-  color: #e9f0f7;
+  background: linear-gradient(180deg, var(--panel-header) 0%, var(--input-bg-strong) 100%);
+  color: var(--text);
   font-size: 13px;
   padding: 5px 4px;
   text-align: center;
@@ -1611,8 +1610,8 @@ math-field.block-math-field::placeholder {
 /* .math-keyboard-math .ML__latex rule removed */
 
 .math-keyboard-key:hover {
-  border-color: rgba(91, 194, 255, 0.6);
-  background: linear-gradient(180deg, #223042 0%, #131c27 100%);
+  border-color: rgba(201, 174, 230, 0.6);
+  background: linear-gradient(180deg, #22303A 0%, #11161C 100%);
   transform: translateY(-1px);
 }
 
@@ -1624,7 +1623,7 @@ math-field.block-math-field::placeholder {
 }
 
 .math-keyboard-key:focus-visible {
-  outline: 2px solid rgba(86, 184, 255, 0.55);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -1671,8 +1670,8 @@ math-field.block-math-field::placeholder {
 
 .editor-placeholder .hint {
   font-size: 12px;
-  color: #c9d1d9;
-  background: #27303b;
+  color: var(--text-soft);
+  background: var(--control-bg);
   border-radius: 999px;
   padding: 6px 12px;
   display: inline-block;
@@ -1690,8 +1689,8 @@ body.has-editor .editor-placeholder {
   width: 280px;
   padding: 12px;
   border-radius: 10px;
-  background: #1f2630;
-  border: 1px solid #2f3a48;
+  background: var(--panel-strong);
+  border: 1px solid var(--panel-border-strong);
   box-shadow: 0 16px 32px rgba(5, 10, 16, 0.45);
   opacity: 0;
   transform: translateY(-6px);
@@ -1726,9 +1725,9 @@ body.has-editor .editor-placeholder {
 .quick-input {
   width: 100%;
   min-height: 96px;
-  background: #141a22;
+  background: var(--input-bg);
   color: var(--text);
-  border: 1px solid #2b3440;
+  border: 1px solid var(--input-border);
   border-radius: 8px;
   padding: 8px;
   font-size: 12px;
@@ -1737,7 +1736,7 @@ body.has-editor .editor-placeholder {
 }
 
 .quick-input:focus {
-  outline: 2px solid rgba(74, 168, 255, 0.4);
+  outline: 2px solid rgba(154, 107, 197, 0.4);
   outline-offset: 1px;
 }
 
@@ -1759,8 +1758,8 @@ body.has-editor .editor-placeholder {
 }
 
 .quick-button {
-  border: 1px solid #38424f;
-  background: #27303b;
+  border: 1px solid var(--control-border);
+  background: var(--control-bg);
   color: var(--text);
   padding: 6px 12px;
   border-radius: 6px;
@@ -1769,8 +1768,8 @@ body.has-editor .editor-placeholder {
 }
 
 .quick-button.primary {
-  border-color: rgba(74, 168, 255, 0.6);
-  background: rgba(74, 168, 255, 0.18);
+  border-color: rgba(154, 107, 197, 0.6);
+  background: rgba(154, 107, 197, 0.18);
 }
 
 .quick-button.ghost {
@@ -1784,13 +1783,13 @@ body.has-editor .editor-placeholder {
 }
 
 .pill.is-active {
-  border-color: rgba(74, 168, 255, 0.6);
-  background: rgba(74, 168, 255, 0.18);
+  border-color: rgba(154, 107, 197, 0.6);
+  background: rgba(154, 107, 197, 0.18);
   color: var(--text);
 }
 
 .monaco-editor .quick-insert-line {
-  background: rgba(74, 168, 255, 0.14);
+  background: rgba(154, 107, 197, 0.14);
 }
 
 .monaco-editor .quick-insert-glyph {
@@ -1806,7 +1805,7 @@ body.has-editor .editor-placeholder {
   height: 6px;
   border-radius: 999px;
   background: var(--accent);
-  box-shadow: 0 0 0 4px rgba(74, 168, 255, 0.2);
+  box-shadow: 0 0 0 4px rgba(154, 107, 197, 0.2);
 }
 
 .quick-insert-preview {
@@ -1815,7 +1814,7 @@ body.has-editor .editor-placeholder {
   padding: 8px 10px;
   border-radius: 10px;
   background: rgba(31, 38, 48, 0.96);
-  border: 1px dashed rgba(74, 168, 255, 0.5);
+  border: 1px dashed rgba(154, 107, 197, 0.5);
   color: #dbe6ff;
   max-width: 420px;
   pointer-events: none;
@@ -1962,8 +1961,8 @@ body.has-editor .editor-placeholder {
 }
 
 .diff-summary-item.is-del {
-  background: rgba(236, 90, 90, 0.2);
-  color: #ffb1b1;
+  background: var(--danger-soft);
+  color: var(--danger-text);
 }
 
 .modal-subtitle {
@@ -2005,9 +2004,9 @@ body.has-editor .editor-placeholder {
 
 .modal-input {
   width: 100%;
-  background: #10161d;
+  background: var(--input-bg-strong);
   color: var(--text);
-  border: 1px solid #313b48;
+  border: 1px solid var(--input-border-strong);
   border-radius: 8px;
   padding: 10px 12px;
   font-size: 13px;
@@ -2015,8 +2014,8 @@ body.has-editor .editor-placeholder {
 
 .modal-input:focus {
   outline: none;
-  border-color: rgba(74, 168, 255, 0.6);
-  box-shadow: 0 0 0 1px rgba(74, 168, 255, 0.25);
+  border-color: rgba(154, 107, 197, 0.6);
+  box-shadow: 0 0 0 1px rgba(154, 107, 197, 0.25);
 }
 
 .modal-help {
@@ -2026,7 +2025,7 @@ body.has-editor .editor-placeholder {
 }
 
 .modal-help.is-error {
-  color: #ff8a8a;
+  color: var(--danger);
 }
 
 .modal-actions {
@@ -2054,8 +2053,8 @@ body.has-editor .editor-placeholder {
   min-width: 220px;
   padding: 6px;
   border-radius: 10px;
-  background: #1a2028;
-  border: 1px solid #2b3440;
+  background: var(--bg-accent);
+  border: 1px solid var(--panel-border);
   box-shadow: 0 18px 34px rgba(0, 0, 0, 0.35);
   display: grid;
   gap: 2px;
@@ -2078,11 +2077,11 @@ body.has-editor .editor-placeholder {
 }
 
 .context-menu-item:hover {
-  background: rgba(74, 168, 255, 0.12);
+  background: rgba(154, 107, 197, 0.12);
 }
 
 .context-menu-item.is-danger {
-  color: #ff8a8a;
+  color: var(--danger);
 }
 
 .context-menu-item:disabled {
@@ -2126,7 +2125,7 @@ body.has-editor .editor-placeholder {
 }
 
 .issues-count {
-  background: rgba(74, 168, 255, 0.2);
+  background: rgba(154, 107, 197, 0.2);
   color: var(--accent);
   border-radius: 999px;
   padding: 1px 6px;
@@ -2142,16 +2141,16 @@ body.has-editor .editor-placeholder {
 }
 
 .issues-bar[data-status="error"] .issues-count {
-  background: rgba(239, 68, 68, 0.2);
-  color: #fca5a5;
+  background: var(--danger-soft);
+  color: var(--danger-text);
 }
 
 .issues-bar[data-status="error"] .issues-hint {
-  color: #f7b5b5;
+  color: var(--danger-text);
 }
 
 .issues-bar[data-status="info"] .issues-count {
-  background: rgba(74, 168, 255, 0.2);
+  background: rgba(154, 107, 197, 0.2);
   color: var(--accent);
 }
 
@@ -2161,7 +2160,7 @@ body.has-editor .editor-placeholder {
   right: 0;
   bottom: var(--issues-height);
   height: 260px;
-  background: #111827;
+  background: var(--panel);
   border-top: 1px solid var(--panel-border);
   box-shadow: 0 -16px 30px rgba(5, 10, 16, 0.45);
   opacity: 0;
@@ -2188,19 +2187,19 @@ body.has-editor .editor-placeholder {
   justify-content: space-between;
   padding: 0 14px;
   font-size: 12px;
-  color: #cbd5f5;
+  color: var(--text-soft);
   border-bottom: 1px solid var(--panel-border);
-  background: #0f172a;
+  background: var(--panel-strong);
 }
 
 .issues-panel-title {
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #e2e8f0;
+  color: var(--text);
 }
 
 .issues-close {
-  border: 1px solid #38424f;
+  border: 1px solid var(--control-border);
   background: transparent;
   color: var(--muted);
   padding: 2px 8px;
@@ -2217,7 +2216,7 @@ body.has-editor .editor-placeholder {
 .issues-empty {
   padding: 16px;
   font-size: 12px;
-  color: #9aa7bd;
+  color: var(--muted);
 }
 
 .issues-list {
@@ -2231,32 +2230,32 @@ body.has-editor .editor-placeholder {
 
 .issue-item {
   text-align: left;
-  border: 1px solid #283244;
+  border: 1px solid var(--panel-border-strong);
   border-left-width: 3px;
   border-radius: 10px;
-  background: #0f172a;
+  background: var(--bg-accent);
   padding: 10px 12px;
   display: grid;
   gap: 6px;
-  color: #e2e8f0;
+  color: var(--text);
   cursor: pointer;
   transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
 }
 
 .issue-item:hover {
   border-color: rgba(148, 163, 184, 0.6);
-  background: #111e34;
+  background: var(--panel-muted);
   transform: translateY(-1px);
 }
 
 .issue-item[data-severity="error"] {
-  border-left-color: #f87171;
-  background: rgba(248, 113, 113, 0.08);
+  border-left-color: var(--danger);
+  background: var(--danger-faint);
 }
 
 .issue-item[data-severity="warning"] {
-  border-left-color: #fbbf24;
-  background: rgba(251, 191, 36, 0.08);
+  border-left-color: var(--warning);
+  background: var(--warning-faint);
 }
 
 .issue-header {
@@ -2264,7 +2263,7 @@ body.has-editor .editor-placeholder {
   align-items: center;
   gap: 8px;
   font-size: 11px;
-  color: #94a3b8;
+  color: var(--muted);
 }
 
 .issue-badge {
@@ -2279,54 +2278,46 @@ body.has-editor .editor-placeholder {
 }
 
 .issue-badge-error {
-  background: rgba(248, 113, 113, 0.18);
-  color: #fecaca;
+  background: var(--danger-soft);
+  color: var(--danger-text);
 }
 
 .issue-badge-warning {
-  background: rgba(251, 191, 36, 0.2);
-  color: #fde68a;
+  background: var(--warning-soft);
+  color: var(--warning-text);
 }
 
 .issue-location {
-  color: #a2c3ff;
+  color: var(--accent-strong);
   font-family: "SF Mono", Menlo, monospace;
 }
 
 .issue-message {
   font-size: 12px;
   line-height: 1.5;
-  color: #f1f5f9;
+  color: var(--text);
 }
 
 .issue-hintline {
   font-size: 10px;
-  color: #94a3b8;
+  color: var(--muted);
 }
 
 .monaco-editor .issue-line-highlight {
-  background: rgba(248, 113, 113, 0.12);
+  background: var(--danger-faint);
 }
 
 .monaco-editor .issue-line-warning {
-  background: rgba(251, 191, 36, 0.12);
+  background: rgba(184, 138, 82, 0.12);
 }
 
 .monaco-editor .jump-line-highlight {
-  background: rgba(74, 168, 255, 0.16);
+  background: rgba(154, 107, 197, 0.16);
 }
 
 .monaco-editor .detected-block-highlight {
-  background: linear-gradient(
-    90deg,
-    rgba(91, 194, 255, 0.22),
-    rgba(91, 194, 255, 0.08)
-  );
-  box-shadow: inset 0 0 0 1px rgba(91, 194, 255, 0.18);
-}
-
-.monaco-editor .detected-block-line {
-  border-left: 3px solid rgba(91, 194, 255, 0.7);
+  background: rgba(201, 174, 230, 0.18);
+  border-radius: 3px;
 }
 
 .monaco-editor .detected-block-glyph {
@@ -2341,8 +2332,7 @@ body.has-editor .editor-placeholder {
   width: 6px;
   height: 6px;
   border-radius: 999px;
-  background: rgba(91, 194, 255, 0.9);
-  box-shadow: 0 0 0 4px rgba(91, 194, 255, 0.25);
+  background: rgba(201, 174, 230, 0.9);
 }
 @media (max-width: 720px) {
   .topbar {

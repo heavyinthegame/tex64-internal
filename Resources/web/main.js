@@ -32,6 +32,13 @@ window.addEventListener("DOMContentLoaded", () => {
             desc: "変更ファイルの一覧を表示します。",
             hint: "更新で再取得します。",
         },
+        project: {
+            label: "プロジェクト",
+            outline: "プロジェクト設定",
+            title: "プロジェクト設定",
+            desc: "ワークスペース単位の設定を管理します。",
+            hint: "メインTeXや環境登録を管理します。",
+        },
         search: {
             label: "検索",
             outline: "検索結果",
@@ -42,9 +49,9 @@ window.addEventListener("DOMContentLoaded", () => {
         settings: {
             label: "設定",
             outline: "設定",
-            title: "設定",
-            desc: "最低限の設定を表示します。",
-            hint: "自動ビルドはここでも切替可能です。",
+            title: "エディタ設定",
+            desc: "エディタ共通の設定を表示します。",
+            hint: "プロジェクト設定は別タブにあります。",
         },
     };
     let monacoEditor = null;
@@ -52,6 +59,7 @@ window.addEventListener("DOMContentLoaded", () => {
     let diffOriginalModel = null;
     let diffModifiedModel = null;
     let monacoApi = null;
+    let workspaceRootKey = null;
     let quickInsertDecorations = [];
     let quickInsertWidget = null;
     let quickInsertWidgetNode = null;
@@ -101,7 +109,6 @@ window.addEventListener("DOMContentLoaded", () => {
     const saveFileButton = document.getElementById("save-file-button");
     const blockToggleButtons = Array.from(document.querySelectorAll(".block-toggle-button"));
     const blockForms = Array.from(document.querySelectorAll(".block-form"));
-    const blockTarget = document.getElementById("block-target");
     let blockMathInput = null;
     let blockMathInputFallback = null;
     const blockMathInputContainer = document.getElementById("block-math-input-container");
@@ -113,8 +120,6 @@ window.addEventListener("DOMContentLoaded", () => {
     const blockTableRaw = document.getElementById("block-table-raw");
     const blockTableRawInput = document.getElementById("block-table-raw-input");
     const blockInsertButton = document.getElementById("block-insert-button");
-    const blockFormatHint = document.getElementById("block-format-hint");
-    const blockTableFormatHint = document.getElementById("block-table-format-hint");
     const blocksPanelBody = document.querySelector(".blocks-panel");
     const isE2E = new URLSearchParams(window.location.search).get("e2e") === "1";
     if (isE2E) {
@@ -146,6 +151,8 @@ window.addEventListener("DOMContentLoaded", () => {
     const settingsRootSelect = document.getElementById("settings-root-select");
     const settingsRootAuto = document.getElementById("settings-root-auto");
     const settingsWorkspace = document.getElementById("settings-workspace");
+    const projectAlignEnvToggle = document.getElementById("project-align-env");
+    const editorAutoFormatToggle = document.getElementById("editor-auto-format");
     const envRegistryInput = document.getElementById("env-registry-input");
     const envRegistryKind = document.getElementById("env-registry-kind");
     const envRegistryAdd = document.getElementById("env-registry-add");
@@ -183,24 +190,10 @@ window.addEventListener("DOMContentLoaded", () => {
         if (blockTableRaw instanceof HTMLElement) {
             blockTableRaw.classList.toggle("is-active", mode === "raw");
         }
-        if (blockTableFormatHint instanceof HTMLElement) {
-            blockTableFormatHint.classList.toggle("is-hidden", mode !== "raw");
-        }
     };
     const setAutoDetectedUi = (enabled, lineNumber) => {
         if (blocksPanelBody instanceof HTMLElement) {
             blocksPanelBody.classList.toggle("is-auto-detected", enabled);
-        }
-        if (blockFormatHint instanceof HTMLElement) {
-            blockFormatHint.classList.toggle("is-hidden", !enabled);
-        }
-        if (blockTarget instanceof HTMLElement) {
-            if (enabled && typeof lineNumber === "number") {
-                setText(blockTarget, `自動判定: 行 ${lineNumber}`);
-            }
-            else {
-                setText(blockTarget, "自動判定: 未検出");
-            }
         }
     };
     let currentDetectedBlock = null;
@@ -263,6 +256,48 @@ window.addEventListener("DOMContentLoaded", () => {
     ];
     const CUSTOM_ENV_STORAGE_KEY = "tex180.custom-env-registry";
     const DISABLED_ENV_STORAGE_KEY = "tex180.disabled-env-registry";
+    const getEnvRegistryStorageKey = (baseKey) => workspaceRootKey ? `${baseKey}.${workspaceRootKey}` : baseKey;
+    const readEnvRegistryStorage = (baseKey) => {
+        if (typeof localStorage === "undefined") {
+            return null;
+        }
+        if (!workspaceRootKey) {
+            return localStorage.getItem(baseKey);
+        }
+        const projectKey = `${baseKey}.${workspaceRootKey}`;
+        const projectValue = localStorage.getItem(projectKey);
+        if (projectValue !== null) {
+            return projectValue;
+        }
+        const fallbackValue = localStorage.getItem(baseKey);
+        if (fallbackValue !== null) {
+            try {
+                localStorage.setItem(projectKey, fallbackValue);
+            }
+            catch {
+                // ignore storage failures
+            }
+            return fallbackValue;
+        }
+        return null;
+    };
+    const writeEnvRegistryStorage = (baseKey, value) => {
+        if (typeof localStorage === "undefined") {
+            return;
+        }
+        const key = getEnvRegistryStorageKey(baseKey);
+        try {
+            if (value === null) {
+                localStorage.removeItem(key);
+            }
+            else {
+                localStorage.setItem(key, value);
+            }
+        }
+        catch {
+            // ignore storage failures
+        }
+    };
     let customEnvRegistry = [];
     let disabledEnvNames = new Set();
     let MATH_ENV_NAMES = new Set();
@@ -365,23 +400,14 @@ window.addEventListener("DOMContentLoaded", () => {
     };
     const loadDisabledEnvRegistry = () => {
         try {
-            disabledEnvNames = new Set(parseDisabledEnvRegistry(typeof localStorage === "undefined"
-                ? null
-                : localStorage.getItem(DISABLED_ENV_STORAGE_KEY)));
+            disabledEnvNames = new Set(parseDisabledEnvRegistry(readEnvRegistryStorage(DISABLED_ENV_STORAGE_KEY)));
         }
         catch {
             disabledEnvNames = new Set();
         }
     };
     const saveDisabledEnvRegistry = () => {
-        try {
-            if (typeof localStorage !== "undefined") {
-                localStorage.setItem(DISABLED_ENV_STORAGE_KEY, JSON.stringify(Array.from(disabledEnvNames)));
-            }
-        }
-        catch {
-            // ignore storage failures
-        }
+        writeEnvRegistryStorage(DISABLED_ENV_STORAGE_KEY, JSON.stringify(Array.from(disabledEnvNames)));
     };
     const isEnvDisabled = (name) => disabledEnvNames.has(name);
     const rebuildEnvRegistry = () => {
@@ -417,9 +443,7 @@ window.addEventListener("DOMContentLoaded", () => {
     const loadEnvRegistryState = () => {
         loadDisabledEnvRegistry();
         try {
-            customEnvRegistry = parseCustomEnvRegistry(typeof localStorage === "undefined"
-                ? null
-                : localStorage.getItem(CUSTOM_ENV_STORAGE_KEY));
+            customEnvRegistry = parseCustomEnvRegistry(readEnvRegistryStorage(CUSTOM_ENV_STORAGE_KEY));
         }
         catch {
             customEnvRegistry = [];
@@ -429,27 +453,13 @@ window.addEventListener("DOMContentLoaded", () => {
     const setCustomEnvRegistry = (value) => {
         customEnvRegistry = buildCustomEnvRegistry(value);
         rebuildEnvRegistry();
-        try {
-            if (typeof localStorage !== "undefined") {
-                localStorage.setItem(CUSTOM_ENV_STORAGE_KEY, JSON.stringify(value));
-            }
-        }
-        catch {
-            // ignore storage failures
-        }
+        writeEnvRegistryStorage(CUSTOM_ENV_STORAGE_KEY, JSON.stringify(value));
         handleEnvRegistryUpdate(false);
     };
     const clearCustomEnvRegistry = () => {
         customEnvRegistry = [];
         rebuildEnvRegistry();
-        try {
-            if (typeof localStorage !== "undefined") {
-                localStorage.removeItem(CUSTOM_ENV_STORAGE_KEY);
-            }
-        }
-        catch {
-            // ignore storage failures
-        }
+        writeEnvRegistryStorage(CUSTOM_ENV_STORAGE_KEY, null);
         handleEnvRegistryUpdate(false);
     };
     loadEnvRegistryState();
@@ -910,7 +920,7 @@ window.addEventListener("DOMContentLoaded", () => {
         currentDetectedBlock.start !== detected.start ||
         currentDetectedBlock.end !== detected.end ||
         currentDetectedBlock.fullMatch !== detected.fullMatch;
-    const applyDetectedBlock = (detected, text, model, force = false, allowTabSwitch = true) => {
+    const applyDetectedBlock = (detected, text, model, force = false, allowTabSwitch = true, cursorLineNumber) => {
         var _a;
         if (!force && !shouldUpdateDetectedBlock(detected)) {
             return;
@@ -946,7 +956,7 @@ window.addEventListener("DOMContentLoaded", () => {
             setTableEditMode("raw");
             setTableRawValue(detectedInner);
         }
-        highlightDetectedBlock(detected.start, detected.end);
+        highlightDetectedBlock(detected.start, detected.end, activeBlockContext, detected.type, cursorLineNumber);
     };
     const clearDetectedBlockState = () => {
         if (!currentDetectedBlock) {
@@ -977,9 +987,9 @@ window.addEventListener("DOMContentLoaded", () => {
         const offset = model.getOffsetAt(position);
         const detected = detectLatexBlockAtOffset(text, offset);
         const force = (_b = options === null || options === void 0 ? void 0 : options.force) !== null && _b !== void 0 ? _b : false;
-        const allowTabSwitch = (_c = options === null || options === void 0 ? void 0 : options.allowTabSwitch) !== null && _c !== void 0 ? _c : true;
+        const allowTabSwitch = (_c = options === null || options === void 0 ? void 0 : options.allowTabSwitch) !== null && _c !== void 0 ? _c : false;
         if (detected) {
-            applyDetectedBlock(detected, text, model, force, allowTabSwitch);
+            applyDetectedBlock(detected, text, model, force, allowTabSwitch, position === null || position === void 0 ? void 0 : position.lineNumber);
             return detected;
         }
         clearDetectedBlockState();
@@ -992,11 +1002,11 @@ window.addEventListener("DOMContentLoaded", () => {
             clearTimeout(blockDetectionDebounceTimer);
         }
         blockDetectionDebounceTimer = setTimeout(() => {
-            syncDetectedBlockAtPosition(position);
+            syncDetectedBlockAtPosition(position, { allowTabSwitch: false });
         }, 150);
     };
     let blockHighlightDecorations = [];
-    const highlightDetectedBlock = (start, end) => {
+    const highlightDetectedBlock = (start, end, context, type, cursorLineNumber) => {
         var _a;
         if (!monacoEditor)
             return;
@@ -1004,10 +1014,24 @@ window.addEventListener("DOMContentLoaded", () => {
         const model = (_a = editor.getModel) === null || _a === void 0 ? void 0 : _a.call(editor);
         if (!model)
             return;
-        const startPos = model.getPositionAt(start);
-        const endPos = model.getPositionAt(end);
-        blockHighlightDecorations = editor.deltaDecorations(blockHighlightDecorations, [
-            {
+        let highlightStart = start;
+        let highlightEnd = start;
+        let showInline = false;
+        if (type === "math" && context) {
+            const innerStart = start + context.prefix.length;
+            const innerEnd = end - context.suffix.length;
+            if (innerEnd > innerStart) {
+                highlightStart = innerStart;
+                highlightEnd = innerEnd;
+                showInline = true;
+            }
+        }
+        const startPos = model.getPositionAt(highlightStart);
+        const endPos = model.getPositionAt(highlightEnd);
+        const glyphLine = cursorLineNumber !== null && cursorLineNumber !== void 0 ? cursorLineNumber : startPos.lineNumber;
+        const decorations = [];
+        if (showInline) {
+            decorations.push({
                 range: {
                     startLineNumber: startPos.lineNumber,
                     startColumn: startPos.column,
@@ -1015,13 +1039,22 @@ window.addEventListener("DOMContentLoaded", () => {
                     endColumn: endPos.column,
                 },
                 options: {
-                    className: "detected-block-highlight",
-                    isWholeLine: true,
-                    linesDecorationsClassName: "detected-block-line",
-                    glyphMarginClassName: "detected-block-glyph",
+                    inlineClassName: "detected-block-highlight",
                 },
+            });
+        }
+        decorations.push({
+            range: {
+                startLineNumber: glyphLine,
+                startColumn: 1,
+                endLineNumber: glyphLine,
+                endColumn: 1,
             },
-        ]);
+            options: {
+                glyphMarginClassName: "detected-block-glyph",
+            },
+        });
+        blockHighlightDecorations = editor.deltaDecorations(blockHighlightDecorations, decorations);
     };
     const clearBlockHighlight = () => {
         if (!monacoEditor)
@@ -1092,7 +1125,6 @@ window.addEventListener("DOMContentLoaded", () => {
     let workspaceFiles = [];
     let workspaceFolders = [];
     let workspaceName = "ワークスペース未選択";
-    let workspaceRootKey = null;
     let rootFilePath = null;
     let rootSource = "auto";
     let launcherTemplate = "paper";
@@ -1122,7 +1154,12 @@ window.addEventListener("DOMContentLoaded", () => {
     let pendingBlockApply = null;
     let tableEditMode = "grid";
     let autoBuildEnabled = false;
+    let projectAlignEnvEnabled = true;
+    let autoFormatEnabled = true;
     let autoBuildPending = false;
+    let formatInFlight = false;
+    let formatPending = false;
+    let formatWarningShown = false;
     let searchResultsData = [];
     let searchMessage = "検索結果はここに表示します。";
     let lastSearchQuery = "";
@@ -2864,6 +2901,166 @@ window.addEventListener("DOMContentLoaded", () => {
         // Default to Display Math \[ ... \] as before
         return ["\\\\[", trimmed, "\\\\]", ""].join("\n");
     };
+    const normalizeLineEndings = (value) => value.replace(/\r\n?/g, "\n");
+    const getLineIndent = (line) => {
+        const match = line.match(/^[ \t]*/);
+        return match ? match[0] : "";
+    };
+    const stripIndent = (line, count) => {
+        if (count <= 0) {
+            return line;
+        }
+        let index = 0;
+        let removed = 0;
+        while (index < line.length && removed < count) {
+            const char = line[index];
+            if (char !== " " && char !== "\t") {
+                break;
+            }
+            index += 1;
+            removed += 1;
+        }
+        return line.slice(index);
+    };
+    const detectIndentUnit = (lines, baseIndent) => {
+        if (baseIndent.includes("\t")) {
+            return "\t";
+        }
+        for (const line of lines) {
+            const indent = getLineIndent(line);
+            if (indent.includes("\t")) {
+                return "\t";
+            }
+        }
+        const indents = lines
+            .filter((line) => line.trim().length > 0)
+            .map((line) => getLineIndent(line).length)
+            .filter((length) => length > 0);
+        if (indents.length === 0) {
+            return "  ";
+        }
+        const sorted = Array.from(new Set(indents)).sort((a, b) => a - b);
+        let minDiff = Infinity;
+        for (let i = 1; i < sorted.length; i += 1) {
+            const diff = sorted[i] - sorted[i - 1];
+            if (diff > 0) {
+                minDiff = Math.min(minDiff, diff);
+            }
+        }
+        const unit = minDiff !== Infinity ? minDiff : sorted[0];
+        return " ".repeat(unit);
+    };
+    const normalizeLinesForInsert = (lines, baseIndent) => {
+        const nonEmpty = lines.filter((line) => line.trim().length > 0);
+        if (nonEmpty.length === 0) {
+            return lines;
+        }
+        let minIndent = Infinity;
+        nonEmpty.forEach((line) => {
+            minIndent = Math.min(minIndent, getLineIndent(line).length);
+        });
+        const stripped = lines.map((line) => {
+            if (line.trim().length === 0) {
+                return line;
+            }
+            return stripIndent(line, minIndent);
+        });
+        return stripped.map((line, index) => {
+            if (index === 0 || line.trim().length === 0) {
+                return line;
+            }
+            return baseIndent + line;
+        });
+    };
+    const isDisplayWrapperPair = (firstLine, lastLine) => {
+        const first = firstLine.trim();
+        const last = lastLine.trim();
+        if (first === "\\[" && last === "\\]") {
+            return true;
+        }
+        if (first === "$$" && last === "$$") {
+            return true;
+        }
+        return false;
+    };
+    const formatBlockLinesForInsert = (lines, baseIndent, indentUnit) => {
+        const firstNonEmpty = lines.findIndex((line) => line.trim().length > 0);
+        if (firstNonEmpty === -1) {
+            return lines;
+        }
+        let lastNonEmpty = -1;
+        for (let i = lines.length - 1; i >= 0; i -= 1) {
+            if (lines[i].trim().length > 0) {
+                lastNonEmpty = i;
+                break;
+            }
+        }
+        if (lastNonEmpty === -1 || lastNonEmpty === firstNonEmpty) {
+            return normalizeLinesForInsert(lines, baseIndent);
+        }
+        const onlyBlankBefore = lines
+            .slice(0, firstNonEmpty)
+            .every((line) => line.trim().length === 0);
+        const onlyBlankAfter = lines
+            .slice(lastNonEmpty + 1)
+            .every((line) => line.trim().length === 0);
+        if (!onlyBlankBefore || !onlyBlankAfter) {
+            return normalizeLinesForInsert(lines, baseIndent);
+        }
+        const firstLine = lines[firstNonEmpty].trim();
+        const lastLine = lines[lastNonEmpty].trim();
+        const isEnvPair = firstLine.startsWith("\\begin{") && lastLine.startsWith("\\end{");
+        const isDisplayPair = isDisplayWrapperPair(firstLine, lastLine);
+        if (!isEnvPair && !isDisplayPair) {
+            return normalizeLinesForInsert(lines, baseIndent);
+        }
+        const innerLines = lines.slice(firstNonEmpty + 1, lastNonEmpty);
+        const innerNonEmpty = innerLines.filter((line) => line.trim().length > 0);
+        let innerMinIndent = 0;
+        if (innerNonEmpty.length > 0) {
+            innerMinIndent = innerNonEmpty.reduce((min, line) => {
+                return Math.min(min, getLineIndent(line).length);
+            }, Infinity);
+            if (!Number.isFinite(innerMinIndent)) {
+                innerMinIndent = 0;
+            }
+        }
+        return lines.map((line, index) => {
+            if (line.trim().length === 0) {
+                return line;
+            }
+            const prefix = index === 0 ? "" : baseIndent;
+            if (index === firstNonEmpty || index === lastNonEmpty) {
+                return prefix + line.trimStart();
+            }
+            if (index > firstNonEmpty && index < lastNonEmpty) {
+                const stripped = stripIndent(line, innerMinIndent);
+                return prefix + indentUnit + stripped;
+            }
+            return prefix + line.trimStart();
+        });
+    };
+    const formatSnippetForInsert = (snippet, model, position, options) => {
+        if (!position || !(model === null || model === void 0 ? void 0 : model.getLineContent)) {
+            return snippet;
+        }
+        const lineContent = model.getLineContent(position.lineNumber);
+        const prefix = lineContent.slice(0, Math.max(0, position.column - 1));
+        if (prefix.trim().length > 0) {
+            return snippet;
+        }
+        const normalized = normalizeLineEndings(snippet);
+        if (!normalized.includes("\n")) {
+            return snippet;
+        }
+        const lines = normalized.split("\n");
+        const indentUnit = detectIndentUnit(lines, prefix);
+        const formattedLines = (options === null || options === void 0 ? void 0 : options.alignEnv)
+            ? formatBlockLinesForInsert(lines, prefix, indentUnit)
+            : normalizeLinesForInsert(lines, prefix);
+        const result = formattedLines.join("\n");
+        return normalized.endsWith("\n") ? result + "\n" : result;
+    };
     const parseTableSize = () => {
         const rows = blockTableRows instanceof HTMLInputElement
             ? Number.parseInt(blockTableRows.value, 10)
@@ -3167,6 +3364,13 @@ window.addEventListener("DOMContentLoaded", () => {
         }
         return `tex180.autoBuild.${workspaceRootKey}`;
     };
+    const editorAutoFormatKey = "tex180.editor.autoFormat";
+    const projectAlignEnvKey = () => {
+        if (!workspaceRootKey) {
+            return null;
+        }
+        return `tex180.project.alignEnv.${workspaceRootKey}`;
+    };
     const updateAutoBuildUI = () => {
         if (autoBuildButton instanceof HTMLButtonElement) {
             autoBuildButton.disabled = false;
@@ -3176,6 +3380,18 @@ window.addEventListener("DOMContentLoaded", () => {
         if (settingsAutoBuildButton instanceof HTMLButtonElement) {
             settingsAutoBuildButton.textContent = autoBuildEnabled ? "ON" : "OFF";
             settingsAutoBuildButton.classList.toggle("is-on", autoBuildEnabled);
+        }
+    };
+    const updateProjectAlignEnvUI = () => {
+        if (projectAlignEnvToggle instanceof HTMLButtonElement) {
+            projectAlignEnvToggle.textContent = projectAlignEnvEnabled ? "ON" : "OFF";
+            projectAlignEnvToggle.classList.toggle("is-on", projectAlignEnvEnabled);
+        }
+    };
+    const updateEditorAutoFormatUI = () => {
+        if (editorAutoFormatToggle instanceof HTMLButtonElement) {
+            editorAutoFormatToggle.textContent = autoFormatEnabled ? "ON" : "OFF";
+            editorAutoFormatToggle.classList.toggle("is-on", autoFormatEnabled);
         }
     };
     const loadAutoBuildState = () => {
@@ -3188,12 +3404,36 @@ window.addEventListener("DOMContentLoaded", () => {
         autoBuildEnabled = localStorage.getItem(key) === "true";
         updateAutoBuildUI();
     };
+    const loadProjectAlignEnvState = () => {
+        const key = projectAlignEnvKey();
+        if (!key) {
+            projectAlignEnvEnabled = true;
+            updateProjectAlignEnvUI();
+            return;
+        }
+        projectAlignEnvEnabled = localStorage.getItem(key) !== "false";
+        updateProjectAlignEnvUI();
+    };
+    const loadEditorAutoFormatState = () => {
+        autoFormatEnabled = localStorage.getItem(editorAutoFormatKey) !== "false";
+        updateEditorAutoFormatUI();
+    };
     const saveAutoBuildState = () => {
         const key = autoBuildKey();
         if (!key) {
             return;
         }
         localStorage.setItem(key, autoBuildEnabled ? "true" : "false");
+    };
+    const saveProjectAlignEnvState = () => {
+        const key = projectAlignEnvKey();
+        if (!key) {
+            return;
+        }
+        localStorage.setItem(key, projectAlignEnvEnabled ? "true" : "false");
+    };
+    const saveEditorAutoFormatState = () => {
+        localStorage.setItem(editorAutoFormatKey, autoFormatEnabled ? "true" : "false");
     };
     const toggleAutoBuild = () => {
         autoBuildEnabled = !autoBuildEnabled;
@@ -3203,6 +3443,16 @@ window.addEventListener("DOMContentLoaded", () => {
         }
         saveAutoBuildState();
         updateAutoBuildUI();
+    };
+    const toggleProjectAlignEnv = () => {
+        projectAlignEnvEnabled = !projectAlignEnvEnabled;
+        saveProjectAlignEnvState();
+        updateProjectAlignEnvUI();
+    };
+    const toggleEditorAutoFormat = () => {
+        autoFormatEnabled = !autoFormatEnabled;
+        saveEditorAutoFormatState();
+        updateEditorAutoFormatUI();
     };
     const openStateKey = () => {
         if (!workspaceRootKey) {
@@ -3873,6 +4123,41 @@ window.addEventListener("DOMContentLoaded", () => {
             setTreeFocus(false);
         }
     };
+    const applyFormattedContent = (path, content, options) => {
+        var _a, _b, _c, _d, _e, _f;
+        if (!monacoEditor) {
+            return;
+        }
+        const editor = monacoEditor;
+        const entry = monacoModels.get(path);
+        const currentValue = (_c = (_a = entry === null || entry === void 0 ? void 0 : entry.model.getValue()) !== null && _a !== void 0 ? _a : (_b = editor.getValue) === null || _b === void 0 ? void 0 : _b.call(editor)) !== null && _c !== void 0 ? _c : "";
+        const viewState = (_d = editor.saveViewState) === null || _d === void 0 ? void 0 : _d.call(editor);
+        if (currentValue !== content) {
+            isApplyingFile = true;
+            if (entry === null || entry === void 0 ? void 0 : entry.model.setValue) {
+                entry.model.setValue(content);
+            }
+            else if (editor.setValue) {
+                editor.setValue(content);
+            }
+            isApplyingFile = false;
+            if (viewState && editor.restoreViewState) {
+                editor.restoreViewState(viewState);
+            }
+        }
+        if (options === null || options === void 0 ? void 0 : options.updateSaved) {
+            if (entry) {
+                entry.savedContent = content;
+            }
+            if (currentFilePath === path) {
+                currentFileSavedContent = content;
+            }
+        }
+        const savedContent = (_f = (_e = (currentFilePath === path ? currentFileSavedContent : entry === null || entry === void 0 ? void 0 : entry.savedContent)) !== null && _e !== void 0 ? _e : entry === null || entry === void 0 ? void 0 : entry.savedContent) !== null && _f !== void 0 ? _f : content;
+        updateDirtyState(path, content, savedContent);
+        updateBreadcrumbs();
+        renderFileTree();
+    };
     const requestOpenFile = (path, force = false) => {
         if (currentFilePath === path) {
             return false;
@@ -3919,7 +4204,14 @@ window.addEventListener("DOMContentLoaded", () => {
         const content = editor.getValue();
         return new Promise((resolve, reject) => {
             pendingSave = { path: currentFilePath, content, resolve, reject };
-            const ok = postToNative({ type: "saveFile", path: currentFilePath, content });
+            const shouldFormat = autoFormatEnabled && (currentFilePath === null || currentFilePath === void 0 ? void 0 : currentFilePath.toLowerCase().endsWith(".tex"));
+            const ok = postToNative({
+                type: "saveFile",
+                path: currentFilePath,
+                content,
+                format: shouldFormat,
+                formatSource: "save",
+            });
             if (!ok) {
                 pendingSave = null;
                 reject("ネイティブ連携が利用できません。");
@@ -3935,6 +4227,40 @@ window.addEventListener("DOMContentLoaded", () => {
                 saveCurrentFileInternal().then(resolve).catch(reject);
             });
         });
+    };
+    const requestFormatCurrentFile = (source) => {
+        if (!autoFormatEnabled) {
+            return;
+        }
+        if (!currentFilePath || !currentFilePath.toLowerCase().endsWith(".tex")) {
+            return;
+        }
+        if (!monacoEditor) {
+            return;
+        }
+        if (formatInFlight) {
+            formatPending = true;
+            return;
+        }
+        const editor = monacoEditor;
+        const content = editor.getValue();
+        formatInFlight = true;
+        const ok = postToNative({
+            type: "formatFile",
+            path: currentFilePath,
+            content,
+            source,
+        });
+        if (!ok) {
+            formatInFlight = false;
+            formatPending = false;
+            if (!formatWarningShown) {
+                formatWarningShown = true;
+                updateIssues(1, "整形のリクエストに失敗しました。", "info", [
+                    { severity: "warning", message: "整形のリクエストに失敗しました。" },
+                ]);
+            }
+        }
     };
     const normalizeInputPath = (value) => {
         return value.trim().replace(/\\/g, "/").replace(/^\/+/, "");
@@ -4392,6 +4718,9 @@ window.addEventListener("DOMContentLoaded", () => {
         if (mainFile) {
             payload.mainFile = mainFile;
         }
+        if (autoFormatEnabled) {
+            payload.format = true;
+        }
         if (postToNative(payload)) {
             setBuildState("building");
             updateIssues(0, "ビルドを開始します。", "info", []);
@@ -4478,6 +4807,10 @@ window.addEventListener("DOMContentLoaded", () => {
         renderGitStatus();
         autoBuildPending = false;
         loadAutoBuildState();
+        loadEditorAutoFormatState();
+        loadProjectAlignEnvState();
+        loadEnvRegistryState();
+        handleEnvRegistryUpdate(false);
         renderRootSelector();
         requestInitialOpen();
     };
@@ -4507,6 +4840,9 @@ window.addEventListener("DOMContentLoaded", () => {
         let savedContent = null;
         if (pendingSave && pendingSave.path === payload.path) {
             if (payload.ok) {
+                if (payload.content) {
+                    pendingSave.content = payload.content;
+                }
                 savedContent = pendingSave.content;
                 pendingSave.resolve(true);
             }
@@ -4532,7 +4868,10 @@ window.addEventListener("DOMContentLoaded", () => {
             if (savedContent !== null) {
                 currentFileSavedContent = savedContent;
             }
-            if (monacoEditor && currentFileSavedContent !== null) {
+            if (payload.content) {
+                applyFormattedContent(payload.path, payload.content, { updateSaved: true });
+            }
+            else if (monacoEditor && currentFileSavedContent !== null) {
                 const editor = monacoEditor;
                 const currentValue = editor.getValue();
                 updateDirtyState(payload.path, currentValue, currentFileSavedContent);
@@ -4544,11 +4883,36 @@ window.addEventListener("DOMContentLoaded", () => {
         else {
             isDirty = currentFilePath ? dirtyFiles.has(currentFilePath) : false;
         }
+        if (payload.formatError && !formatWarningShown) {
+            formatWarningShown = true;
+            updateIssues(1, payload.formatError, "info", [
+                { severity: "warning", message: payload.formatError },
+            ]);
+        }
         updateBreadcrumbs();
         renderFileTree();
         if (autoBuildEnabled && autoBuildPending && (currentFilePath === null || currentFilePath === void 0 ? void 0 : currentFilePath.endsWith(".tex"))) {
             autoBuildPending = false;
             startBuild();
+        }
+    };
+    const handleFormatResult = (payload) => {
+        var _a, _b, _c;
+        formatInFlight = false;
+        if (!payload.ok) {
+            if (!formatWarningShown) {
+                formatWarningShown = true;
+                updateIssues(1, (_a = payload.error) !== null && _a !== void 0 ? _a : "整形に失敗しました。", "info", [
+                    { severity: "warning", message: (_b = payload.error) !== null && _b !== void 0 ? _b : "整形に失敗しました。" },
+                ]);
+            }
+        }
+        else if (typeof payload.content === "string") {
+            applyFormattedContent(payload.path, payload.content, { updateSaved: false });
+        }
+        if (formatPending) {
+            formatPending = false;
+            requestFormatCurrentFile((_c = payload.source) !== null && _c !== void 0 ? _c : "auto");
         }
     };
     const handleRenameResult = (payload) => {
@@ -4710,6 +5074,7 @@ window.addEventListener("DOMContentLoaded", () => {
     renderSearchResults();
     renderGitStatus();
     renderRootSelector();
+    loadEditorAutoFormatState();
     updateIssues(0, "ビルド結果はここに要約します。", "info", []);
     updateLauncherTemplate(launcherTemplate);
     if (!workspaceRootKey) {
@@ -4898,6 +5263,22 @@ window.addEventListener("DOMContentLoaded", () => {
         };
         editor.addContentWidget(quickInsertWidget);
     };
+    const resetDiffEditor = () => {
+        var _a, _b, _c, _d;
+        (_a = diffOriginalModel === null || diffOriginalModel === void 0 ? void 0 : diffOriginalModel.dispose) === null || _a === void 0 ? void 0 : _a.call(diffOriginalModel);
+        (_b = diffModifiedModel === null || diffModifiedModel === void 0 ? void 0 : diffModifiedModel.dispose) === null || _b === void 0 ? void 0 : _b.call(diffModifiedModel);
+        diffOriginalModel = null;
+        diffModifiedModel = null;
+        if (diffEditor) {
+            const diffEditorAny = diffEditor;
+            (_c = diffEditorAny.setModel) === null || _c === void 0 ? void 0 : _c.call(diffEditorAny, null);
+            (_d = diffEditorAny.dispose) === null || _d === void 0 ? void 0 : _d.call(diffEditorAny);
+            diffEditor = null;
+        }
+        if (blockDiffContainer instanceof HTMLElement) {
+            blockDiffContainer.innerHTML = "";
+        }
+    };
     const showDiffModal = (original, modified, lineOffset = 0) => {
         var _a, _b, _c, _d, _e, _f, _g, _h;
         if (!monacoApi)
@@ -4938,7 +5319,6 @@ window.addEventListener("DOMContentLoaded", () => {
         }
         renderDiffHeader();
         renderDiffSummary(original, modified);
-        applyDiffLineNumberOffset(lineOffset, original, modified);
         const diffEditorAny = diffEditor;
         (_f = diffOriginalModel === null || diffOriginalModel === void 0 ? void 0 : diffOriginalModel.dispose) === null || _f === void 0 ? void 0 : _f.call(diffOriginalModel);
         (_g = diffModifiedModel === null || diffModifiedModel === void 0 ? void 0 : diffModifiedModel.dispose) === null || _g === void 0 ? void 0 : _g.call(diffModifiedModel);
@@ -4948,6 +5328,7 @@ window.addEventListener("DOMContentLoaded", () => {
             original: diffOriginalModel,
             modified: diffModifiedModel,
         });
+        applyDiffLineNumberOffset(lineOffset, original, modified);
         if (isE2E) {
             window.__tex180LastDiff = { original, modified, lineOffset };
             window.__tex180DiffEditor = diffEditor;
@@ -4967,6 +5348,7 @@ window.addEventListener("DOMContentLoaded", () => {
         if (diffFileName instanceof HTMLElement) {
             diffFileName.textContent = "";
         }
+        resetDiffEditor();
     };
     const startBlockPreview = (snippet, target) => {
         // Deprecated flow but kept for compatibility logic if needed
@@ -5003,6 +5385,8 @@ window.addEventListener("DOMContentLoaded", () => {
         let range;
         const model = (_b = editor.getModel) === null || _b === void 0 ? void 0 : _b.call(editor);
         const mode = (_c = applyPayload === null || applyPayload === void 0 ? void 0 : applyPayload.mode) !== null && _c !== void 0 ? _c : (detectedBlockSnapshot ? "detected" : "new");
+        let snippet = draft.snippet;
+        let insertPosition = null;
         if (mode === "detected") {
             const snapshot = (_d = applyPayload === null || applyPayload === void 0 ? void 0 : applyPayload.detectedSnapshot) !== null && _d !== void 0 ? _d : detectedBlockSnapshot;
             if (!snapshot || !(model === null || model === void 0 ? void 0 : model.getPositionAt)) {
@@ -5024,14 +5408,19 @@ window.addEventListener("DOMContentLoaded", () => {
             range = new monacoApiAny.Range(startPos.lineNumber, startPos.column, endPos.lineNumber, endPos.column);
         }
         else {
-            const position = (_e = applyPayload === null || applyPayload === void 0 ? void 0 : applyPayload.insertPosition) !== null && _e !== void 0 ? _e : (_f = editor.getPosition) === null || _f === void 0 ? void 0 : _f.call(editor);
-            const insertAt = position !== null && position !== void 0 ? position : quickInsertTarget;
+            insertPosition = (_e = applyPayload === null || applyPayload === void 0 ? void 0 : applyPayload.insertPosition) !== null && _e !== void 0 ? _e : (_f = editor.getPosition) === null || _f === void 0 ? void 0 : _f.call(editor);
+            const insertAt = insertPosition !== null && insertPosition !== void 0 ? insertPosition : quickInsertTarget;
             range = new monacoApiAny.Range(insertAt.lineNumber, insertAt.column, insertAt.lineNumber, insertAt.column);
+            if (!applyPayload) {
+                snippet = formatSnippetForInsert(snippet, model, insertPosition, {
+                    alignEnv: projectAlignEnvEnabled,
+                });
+            }
         }
         editor.executeEdits("block-insert", [
             {
                 range,
-                text: draft.snippet,
+                text: snippet,
                 forceMoveMarkers: true,
             },
         ]);
@@ -5120,6 +5509,7 @@ window.addEventListener("DOMContentLoaded", () => {
             setText(quickInsertHint, "確定しました。⌘Zで取り消せます。");
         }
         closeQuickInsert();
+        requestFormatCurrentFile("quickInsert");
     };
     if (quickInsertButton instanceof HTMLButtonElement) {
         quickInsertButton.addEventListener("click", () => {
@@ -5162,35 +5552,57 @@ window.addEventListener("DOMContentLoaded", () => {
     });
     if (blockInsertButton instanceof HTMLElement) {
         blockInsertButton.addEventListener("click", () => {
-            var _a, _b, _c, _d, _e, _f, _g, _h, _j;
+            var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
             const editorForDetect = monacoEditor;
             const detectPosition = (_b = (_a = editorForDetect === null || editorForDetect === void 0 ? void 0 : editorForDetect.getPosition) === null || _a === void 0 ? void 0 : _a.call(editorForDetect)) !== null && _b !== void 0 ? _b : null;
-            if (!detectedBlockSnapshot && detectPosition) {
+            const model = (_c = editorForDetect === null || editorForDetect === void 0 ? void 0 : editorForDetect.getModel) === null || _c === void 0 ? void 0 : _c.call(editorForDetect);
+            const shouldResync = !detectedBlockSnapshot ||
+                !detectPosition ||
+                !(model === null || model === void 0 ? void 0 : model.getOffsetAt) ||
+                (() => {
+                    const offset = model.getOffsetAt(detectPosition);
+                    if (offset < detectedBlockSnapshot.start ||
+                        offset >= detectedBlockSnapshot.end) {
+                        return true;
+                    }
+                    if (typeof model.getVersionId === "function" &&
+                        detectedBlockSnapshot.modelVersion !== model.getVersionId()) {
+                        return true;
+                    }
+                    return false;
+                })();
+            if (detectPosition && shouldResync) {
                 syncDetectedBlockAtPosition(detectPosition, { force: true });
             }
             const draft = getBlockDraft();
-            if (isE2E) {
-                window.__tex180LastDraft = {
-                    formula: getMathInputValue(),
-                    snippet: draft ? draft.snippet : null,
-                    detectedSnippet: (_c = detectedBlockSnapshot === null || detectedBlockSnapshot === void 0 ? void 0 : detectedBlockSnapshot.snippet) !== null && _c !== void 0 ? _c : null,
-                };
-            }
             if (!draft)
                 return;
             const mode = detectedBlockSnapshot ? "detected" : "new";
             const editor = monacoEditor;
             const insertPosition = mode === "new" ? (_e = (_d = editor.getPosition) === null || _d === void 0 ? void 0 : _d.call(editor)) !== null && _e !== void 0 ? _e : null : null;
+            const formattedSnippet = mode === "new"
+                ? formatSnippetForInsert(draft.snippet, (_f = editor.getModel) === null || _f === void 0 ? void 0 : _f.call(editor), insertPosition, {
+                    alignEnv: projectAlignEnvEnabled,
+                })
+                : draft.snippet;
+            const resolvedDraft = { ...draft, snippet: formattedSnippet };
+            if (isE2E) {
+                window.__tex180LastDraft = {
+                    formula: getMathInputValue(),
+                    snippet: resolvedDraft.snippet,
+                    detectedSnippet: (_g = detectedBlockSnapshot === null || detectedBlockSnapshot === void 0 ? void 0 : detectedBlockSnapshot.snippet) !== null && _g !== void 0 ? _g : null,
+                };
+            }
             pendingBlockApply = {
                 mode,
-                draft,
+                draft: resolvedDraft,
                 detectedSnapshot: mode === "detected" ? detectedBlockSnapshot : null,
                 insertPosition,
             };
-            const contextForDiff = mode === "detected" ? (_f = detectedBlockSnapshot === null || detectedBlockSnapshot === void 0 ? void 0 : detectedBlockSnapshot.context) !== null && _f !== void 0 ? _f : null : null;
+            const contextForDiff = mode === "detected" ? (_h = detectedBlockSnapshot === null || detectedBlockSnapshot === void 0 ? void 0 : detectedBlockSnapshot.context) !== null && _h !== void 0 ? _h : null : null;
             let lineOffset = 0;
             if (contextForDiff && detectedBlockSnapshot) {
-                const editorModel = (_h = (_g = monacoEditor).getModel) === null || _h === void 0 ? void 0 : _h.call(_g);
+                const editorModel = (_k = (_j = monacoEditor).getModel) === null || _k === void 0 ? void 0 : _k.call(_j);
                 if (editorModel === null || editorModel === void 0 ? void 0 : editorModel.getPositionAt) {
                     const innerOffset = detectedBlockSnapshot.start + contextForDiff.prefix.length;
                     const lineNumber = editorModel.getPositionAt(innerOffset).lineNumber;
@@ -5202,15 +5614,15 @@ window.addEventListener("DOMContentLoaded", () => {
             }
             if (contextForDiff) {
                 const originalInner = getInnerContent(contextForDiff, { trim: false });
-                const draftContext = parseBlockContext(draft.snippet);
+                const draftContext = parseBlockContext(resolvedDraft.snippet);
                 const modifiedInner = getInnerContent(draftContext, { trim: false });
                 showDiffModal(originalInner, modifiedInner, lineOffset);
             }
             else {
-                const originalSnippet = mode === "detected" ? (_j = detectedBlockSnapshot === null || detectedBlockSnapshot === void 0 ? void 0 : detectedBlockSnapshot.snippet) !== null && _j !== void 0 ? _j : "" : "";
-                showDiffModal(originalSnippet, draft.snippet, lineOffset);
+                const originalSnippet = mode === "detected" ? (_l = detectedBlockSnapshot === null || detectedBlockSnapshot === void 0 ? void 0 : detectedBlockSnapshot.snippet) !== null && _l !== void 0 ? _l : "" : "";
+                showDiffModal(originalSnippet, resolvedDraft.snippet, lineOffset);
             }
-            currentBlockDraft = draft;
+            currentBlockDraft = resolvedDraft;
         });
     }
     if (diffModalSubmit instanceof HTMLButtonElement) {
@@ -5222,6 +5634,7 @@ window.addEventListener("DOMContentLoaded", () => {
             blockPreviewActive = false;
             pendingBlockApply = null;
             currentBlockDraft = null;
+            requestFormatCurrentFile("blockInsert");
         });
     }
     if (diffModalCancel instanceof HTMLButtonElement) {
@@ -5272,6 +5685,16 @@ window.addEventListener("DOMContentLoaded", () => {
     if (settingsAutoBuildButton instanceof HTMLButtonElement) {
         settingsAutoBuildButton.addEventListener("click", () => {
             toggleAutoBuild();
+        });
+    }
+    if (projectAlignEnvToggle instanceof HTMLButtonElement) {
+        projectAlignEnvToggle.addEventListener("click", () => {
+            toggleProjectAlignEnv();
+        });
+    }
+    if (editorAutoFormatToggle instanceof HTMLButtonElement) {
+        editorAutoFormatToggle.addEventListener("click", () => {
+            toggleEditorAutoFormat();
         });
     }
     if (settingsRootSelect instanceof HTMLSelectElement) {
@@ -5613,11 +6036,14 @@ window.addEventListener("DOMContentLoaded", () => {
     bridgeWindow.tex180SaveResult = (payload) => {
         handleSaveResult(payload);
     };
+    bridgeWindow.tex180FormatResult = (payload) => {
+        handleFormatResult(payload);
+    };
     bridgeWindow.tex180RenameResult = (payload) => {
         handleRenameResult(payload);
     };
     const handleBridgeMessage = (message) => {
-        var _a, _b, _c, _d, _e, _f, _g, _h, _j;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
         if (!(message === null || message === void 0 ? void 0 : message.type)) {
             return;
         }
@@ -5646,8 +6072,11 @@ window.addEventListener("DOMContentLoaded", () => {
             case "saveResult":
                 (_h = bridgeWindow.tex180SaveResult) === null || _h === void 0 ? void 0 : _h.call(bridgeWindow, message.payload);
                 break;
+            case "formatResult":
+                (_j = bridgeWindow.tex180FormatResult) === null || _j === void 0 ? void 0 : _j.call(bridgeWindow, message.payload);
+                break;
             case "renameResult":
-                (_j = bridgeWindow.tex180RenameResult) === null || _j === void 0 ? void 0 : _j.call(bridgeWindow, message.payload);
+                (_k = bridgeWindow.tex180RenameResult) === null || _k === void 0 ? void 0 : _k.call(bridgeWindow, message.payload);
                 break;
             case "launcherStatus":
                 handleLauncherStatus(message.payload);
@@ -5682,17 +6111,68 @@ window.addEventListener("DOMContentLoaded", () => {
     }
     monacoWindow.require.config({ paths: { vs: requireBase } });
     monacoWindow.require(["vs/editor/editor.main"], () => {
-        var _a, _b;
+        var _a, _b, _c, _d, _e, _f;
         if (!monacoWindow.monaco || !monacoWindow.monaco.editor) {
             updateFallback("Monacoの初期化に失敗しました。");
             return;
         }
         monacoApi = monacoWindow.monaco;
         registerCompletionProvider(monacoWindow.monaco);
+        const themeName = "tex180-steel";
+                        const themeColors = {
+            "editor.background": "#15111C",
+            "editor.foreground": "#D8D2E2",
+            "editorLineNumber.foreground": "#6D6578",
+            "editorLineNumber.activeForeground": "#B8AEC8",
+            "editorCursor.foreground": "#C9AEE6",
+            "editor.selectionBackground": "#2C2436",
+            "editor.inactiveSelectionBackground": "#231E2A",
+            "editor.selectionHighlightBackground": "rgba(154, 107, 197, 0.22)",
+            "editor.lineHighlightBackground": "#1A1522",
+            "editor.lineHighlightBorder": "#2A2234",
+            "editorIndentGuide.background": "#2A2335",
+            "editorIndentGuide.activeBackground": "#3A3046",
+            "editorWhitespace.foreground": "#2A2533",
+            "editorGutter.background": "#15111C",
+            "editorWidget.background": "#1A1522",
+            "editorWidget.border": "#2B2436",
+            "editorHoverWidget.background": "#1A1522",
+            "editorHoverWidget.border": "#2B2436",
+            "editorSuggestWidget.background": "#1A1522",
+            "editorSuggestWidget.border": "#2B2436",
+            "editorSuggestWidget.foreground": "#D8D2E2",
+            "editorSuggestWidget.selectedBackground": "rgba(154, 107, 197, 0.2)",
+            "editorSuggestWidget.highlightForeground": "#C9AEE6",
+            "editorBracketMatch.background": "rgba(201, 174, 230, 0.22)",
+            "editorBracketMatch.border": "#C9AEE6",
+            "editor.findMatchBackground": "rgba(201, 174, 230, 0.2)",
+            "editor.findMatchHighlightBackground": "rgba(201, 174, 230, 0.14)",
+            "editor.findRangeHighlightBackground": "rgba(201, 174, 230, 0.1)",
+            "editor.wordHighlightBackground": "rgba(201, 174, 230, 0.14)",
+            "editor.wordHighlightStrongBackground": "rgba(201, 174, 230, 0.22)",
+            "editorError.foreground": "#D5B06A",
+            "editorError.border": "#D5B06A",
+            "editorOverviewRuler.errorForeground": "rgba(213, 176, 106, 0.6)",
+            "editorMarkerNavigationError.background": "rgba(213, 176, 106, 0.2)",
+            "editorGutter.errorForeground": "#D5B06A",
+            "editorWarning.foreground": "#B88A52",
+            "editorInfo.foreground": "#B59BCC",
+            "scrollbarSlider.background": "rgba(201, 174, 230, 0.14)",
+            "scrollbarSlider.hoverBackground": "rgba(201, 174, 230, 0.24)",
+            "scrollbarSlider.activeBackground": "rgba(201, 174, 230, 0.32)",
+            "editorRuler.foreground": "#2A2234",
+        };
+        (_b = (_a = monacoWindow.monaco.editor).defineTheme) === null || _b === void 0 ? void 0 : _b.call(_a, themeName, {
+            base: "vs-dark",
+            inherit: true,
+            rules: [],
+            colors: themeColors,
+        });
+        (_d = (_c = monacoWindow.monaco.editor).setTheme) === null || _d === void 0 ? void 0 : _d.call(_c, themeName);
         const editor = monacoWindow.monaco.editor.create(editorHost, {
             value: "",
             language: "latex",
-            theme: "vs-dark",
+            theme: themeName,
             automaticLayout: true,
             glyphMargin: true,
             minimap: { enabled: false },
@@ -5702,6 +6182,11 @@ window.addEventListener("DOMContentLoaded", () => {
             lineHeight: 20,
             scrollBeyondLastLine: false,
             wordWrap: "off",
+            wordBasedSuggestions: "off",
+            quickSuggestions: false,
+            suggestOnTriggerCharacters: true,
+            occurrencesHighlight: false,
+            selectionHighlight: false,
         }); // Cast to any to access full Monaco API
         monacoEditor = editor;
         if (isE2E) {
@@ -5738,7 +6223,7 @@ window.addEventListener("DOMContentLoaded", () => {
             composingFilePath = null;
             handleCompositionEnd();
         });
-        (_a = editor.onDidFocusEditorWidget) === null || _a === void 0 ? void 0 : _a.call(editor, () => {
+        (_e = editor.onDidFocusEditorWidget) === null || _e === void 0 ? void 0 : _e.call(editor, () => {
             setTreeFocus(false);
         });
         editor.onDidChangeModelContent(() => {
@@ -5760,7 +6245,7 @@ window.addEventListener("DOMContentLoaded", () => {
             updateBreadcrumbs();
             renderFileTree();
         });
-        (_b = editor.onDidChangeCursorPosition) === null || _b === void 0 ? void 0 : _b.call(editor, (e) => {
+        (_f = editor.onDidChangeCursorPosition) === null || _f === void 0 ? void 0 : _f.call(editor, (e) => {
             if (currentFilePath && currentFilePath.endsWith(".tex")) {
                 handleCursorPositionChange(e.position);
             }

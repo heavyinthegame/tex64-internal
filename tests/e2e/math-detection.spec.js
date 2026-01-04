@@ -159,7 +159,6 @@ test("math detection covers patterns and skips raw/comment blocks", async () => 
       await waitForAutoDetected(page, false, needle);
     }
 
-    await page.click('.block-toggle-button[data-block="math"]');
     await setMathFieldValue(page, "");
     await page.evaluate(() => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "Shift" }));

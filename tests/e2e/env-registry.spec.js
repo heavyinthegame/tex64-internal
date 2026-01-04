@@ -26,8 +26,8 @@ test("env registry ui toggles detection and allows custom envs", async () => {
     await moveCursorTo(page, "alOne");
     await waitForAutoDetected(page, true, "align enabled");
 
-    await page.click('.tab[data-tab="settings"]');
-    await page.waitForSelector('.panel[data-panel="settings"].is-active');
+    await page.click('.tab[data-tab="project"]');
+    await page.waitForSelector('.panel[data-panel="project"].is-active');
     await toggleEnvRegistry(page, "align", "math", false);
 
     await page.click('.tab[data-tab="blocks"]');
@@ -35,15 +35,15 @@ test("env registry ui toggles detection and allows custom envs", async () => {
     await moveCursorTo(page, "alOne");
     await waitForAutoDetected(page, false, "align disabled");
 
-    await page.click('.tab[data-tab="settings"]');
-    await page.waitForSelector('.panel[data-panel="settings"].is-active');
+    await page.click('.tab[data-tab="project"]');
+    await page.waitForSelector('.panel[data-panel="project"].is-active');
     await toggleEnvRegistry(page, "align", "math", true);
 
     await page.click('.tab[data-tab="blocks"]');
     await moveCursorTo(page, "alOne");
     await waitForAutoDetected(page, true, "align re-enabled");
 
-    await page.click('.tab[data-tab="settings"]');
+    await page.click('.tab[data-tab="project"]');
     await page.waitForSelector("#env-registry-input");
     await page.fill("#env-registry-input", "myequation");
     await page.selectOption("#env-registry-kind", "math");

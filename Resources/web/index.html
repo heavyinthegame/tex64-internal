@@ -129,6 +129,24 @@
                 </svg>
               </span>
             </button>
+            <button
+              class="tab"
+              type="button"
+              role="tab"
+              data-tab="project"
+              aria-selected="false"
+              aria-label="プロジェクト"
+              title="プロジェクト"
+            >
+              <span class="tab-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="3"></circle>
+                  <path
+                    d="M19.4 15a1 1 0 0 0 .2 1.1l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1 1 0 0 0-1.1-.2 1 1 0 0 0-.6.9V21a2 2 0 1 1-4 0v-.1a1 1 0 0 0-.7-.9 1 1 0 0 0-1.1.2l-.1.1a2 2 0 0 1-2.8-2.8l.1-.1a1 1 0 0 0 .2-1.1 1 1 0 0 0-.9-.6H3a2 2 0 1 1 0-4h.1a1 1 0 0 0 .9-.7 1 1 0 0 0-.2-1.1l-.1-.1a2 2 0 0 1 2.8-2.8l.1.1a1 1 0 0 0 1.1.2 1 1 0 0 0 .6-.9V3a2 2 0 1 1 4 0v.1a1 1 0 0 0 .7.9 1 1 0 0 0 1.1-.2l.1-.1a2 2 0 0 1 2.8 2.8l-.1.1a1 1 0 0 0-.2 1.1 1 1 0 0 0 .9.6H21a2 2 0 1 1 0 4h-.1a1 1 0 0 0-.9.7z"
+                  ></path>
+                </svg>
+              </span>
+            </button>
           </div>
           <div class="tab-group secondary" role="tablist" aria-label="補助">
             <button
@@ -210,18 +228,12 @@
             <div class="panel-body blocks-panel">
               <div class="block-compose">
                 <div class="block-row">
-                  <div class="block-toggle" role="tablist" aria-label="ブロック種別">
-                    <button class="block-toggle-button is-active" type="button" data-block="math">数式</button>
-                    <button class="block-toggle-button" type="button" data-block="table">表</button>
-                  </div>
-                  <div class="block-target" id="block-target">自動判定: 未検出</div>
                   <div class="block-actions">
                     <button class="panel-button" id="block-insert-button" type="button">挿入</button>
                   </div>
                 </div>
                 <div class="block-form is-active" data-form="math">
                   <div id="block-math-input-container" class="block-math-input-container"></div>
-                  <div class="block-format-hint is-hidden" id="block-format-hint">形式: 自動判定</div>
                 </div>
                 <div class="block-form" data-form="table">
                   <div class="block-table-grid" id="block-table-grid">
@@ -242,7 +254,6 @@
                       rows="6"
                       placeholder="tabular 内部を編集"
                     ></textarea>
-                    <div class="block-format-hint is-hidden" id="block-table-format-hint">形式: 自動判定</div>
                   </div>
                 </div>
               </div>
@@ -284,38 +295,11 @@
               <div class="git-status" id="git-status"></div>
             </div>
           </div>
-          <div class="panel no-header" data-panel="search">
+          <div class="panel no-header" data-panel="project">
             <div class="panel-header">
-              <span class="panel-title">検索</span>
-            </div>
-            <div class="panel-body search-panel">
-              <div class="search-input-row">
-                <input
-                  class="search-input"
-                  id="search-input"
-                  type="text"
-                  placeholder="ワークスペース検索"
-                >
-                <button class="panel-button" id="search-button" type="button">検索</button>
-              </div>
-              <div class="search-results" id="search-results"></div>
-            </div>
-          </div>
-          <div class="panel no-header" data-panel="settings">
-            <div class="panel-header">
-              <span class="panel-title">設定</span>
+              <span class="panel-title">プロジェクト</span>
             </div>
             <div class="panel-body settings-panel">
-              <div class="settings-group">
-                <div class="settings-group-title">ビルド</div>
-                <div class="settings-item">
-                  <div class="settings-label">
-                    <span class="settings-title">自動ビルド</span>
-                    <span class="settings-desc">保存後にビルドを実行します。</span>
-                  </div>
-                  <button class="settings-toggle" id="settings-auto-build" type="button">OFF</button>
-                </div>
-              </div>
               <div class="settings-group">
                 <div class="settings-group-title">プロジェクト</div>
                 <div class="settings-item">
@@ -336,6 +320,18 @@
                     <span class="settings-desc">現在開いているフォルダです。</span>
                   </div>
                   <div class="settings-path" id="settings-workspace">未選択</div>
+                </div>
+              </div>
+              <div class="settings-group">
+                <div class="settings-group-title">整形</div>
+                <div class="settings-item">
+                  <div class="settings-label">
+                    <span class="settings-title">\begin / \end を揃える</span>
+                    <span class="settings-desc">
+                      ブロック挿入時に環境の先頭と末尾のインデントを揃えます。
+                    </span>
+                  </div>
+                  <button class="settings-toggle" id="project-align-env" type="button">ON</button>
                 </div>
               </div>
               <div class="settings-group">
@@ -377,6 +373,52 @@
                       <div class="env-registry-list" id="env-registry-table"></div>
                     </div>
                   </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="panel no-header" data-panel="search">
+            <div class="panel-header">
+              <span class="panel-title">検索</span>
+            </div>
+            <div class="panel-body search-panel">
+              <div class="search-input-row">
+                <input
+                  class="search-input"
+                  id="search-input"
+                  type="text"
+                  placeholder="ワークスペース検索"
+                >
+                <button class="panel-button" id="search-button" type="button">検索</button>
+              </div>
+              <div class="search-results" id="search-results"></div>
+            </div>
+          </div>
+          <div class="panel no-header" data-panel="settings">
+            <div class="panel-header">
+              <span class="panel-title">設定</span>
+            </div>
+            <div class="panel-body settings-panel">
+              <div class="settings-group">
+                <div class="settings-group-title">ビルド</div>
+                <div class="settings-item">
+                  <div class="settings-label">
+                    <span class="settings-title">自動ビルド</span>
+                    <span class="settings-desc">保存後にビルドを実行します。</span>
+                  </div>
+                  <button class="settings-toggle" id="settings-auto-build" type="button">OFF</button>
+                </div>
+              </div>
+              <div class="settings-group">
+                <div class="settings-group-title">エディタ</div>
+                <div class="settings-item">
+                  <div class="settings-label">
+                    <span class="settings-title">自動整形（latexindent）</span>
+                    <span class="settings-desc">
+                      保存/コンパイル/挿入時に自動で整形します。
+                    </span>
+                  </div>
+                  <button class="settings-toggle" id="editor-auto-format" type="button">ON</button>
                 </div>
               </div>
             </div>
