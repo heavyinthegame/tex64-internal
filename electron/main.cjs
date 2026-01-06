@@ -16,6 +16,8 @@ let mainWindow = null;
 let currentWorkspacePath = null;
 const isE2E = process.env.TEX180_E2E === "1";
 
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 const workspace = new WorkspaceManager();
 const buildService = new BuildService();
 const formatterService = new FormatterService();
@@ -589,19 +591,38 @@ const handleSynctexForward = async (message) => {
   }
   const line = Number.parseInt(message.line, 10);
   const column = Number.parseInt(message.column, 10);
-  let result = await synctexService.forward({
-    sourcePath,
-    line: Number.isFinite(line) ? line : 1,
-    column: Number.isFinite(column) ? column : 1,
-    pdfPath,
-  });
-  if (!result.ok && message.fallbackToTop) {
-    result = await synctexService.forward({
+  const isRetryableSynctexError = (error) =>
+    typeof error === "string" &&
+    (error.includes("位置情報") || error.includes("解析に失敗"));
+
+  const runForward = async (forwardLine, forwardColumn) => {
+    let result = await synctexService.forward({
       sourcePath,
-      line: 1,
-      column: 1,
+      line: Number.isFinite(forwardLine) ? forwardLine : 1,
+      column: Number.isFinite(forwardColumn) ? forwardColumn : 1,
       pdfPath,
     });
+    if (result.ok || !isRetryableSynctexError(result.error)) {
+      return result;
+    }
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await delay(200);
+      result = await synctexService.forward({
+        sourcePath,
+        line: Number.isFinite(forwardLine) ? forwardLine : 1,
+        column: Number.isFinite(forwardColumn) ? forwardColumn : 1,
+        pdfPath,
+      });
+      if (result.ok || !isRetryableSynctexError(result.error)) {
+        break;
+      }
+    }
+    return result;
+  };
+
+  let result = await runForward(line, column);
+  if (!result.ok && message.fallbackToTop) {
+    result = await runForward(1, 1);
     if (result.ok) {
       result.fallback = true;
     }
@@ -610,7 +631,7 @@ const handleSynctexForward = async (message) => {
     sendToRenderer("synctex:forwardResult", result);
     return;
   }
-  pdfWindowManager.show(pdfPath);
+  pdfWindowManager.show(pdfPath, { reload: false });
   pdfWindowManager.queueSync({ page: result.page, x: result.x, y: result.y });
   sendToRenderer("synctex:forwardResult", {
     ok: true,
@@ -661,6 +682,10 @@ const handleSynctexReverse = async (message) => {
     line: result.line,
     column: result.column,
   });
+  if (mainWindow) {
+    mainWindow.show();
+    mainWindow.focus();
+  }
 };
 
 const handleOpenFile = async (relativePath) => {

@@ -1,5 +1,5 @@
 # Fdb version 4
-["lualatex"] 1767688958.47614 "main.tex" "main.pdf" "main" 1767688961.09193 0
+["lualatex"] 1767692355.69292 "main.tex" "main.pdf" "main" 1767692358.75262 0
   "/Users/wedd/Library/texlive/2024/texmf-var/luatex-cache/generic/fonts/otl/haranoajigothic-medium.luc" 1766813950.85424 1924615 e21c5ee4ca568cb907556e3bdf364263 ""
   "/Users/wedd/Library/texlive/2024/texmf-var/luatex-cache/generic/fonts/otl/haranoajimincho-regular.luc" 1766813949.36405 2011213 7221fcdccf757c0b43375417e862a944 ""
   "/Users/wedd/Library/texlive/2024/texmf-var/luatex-cache/generic/fonts/otl/lmmono10-regular.luc" 1767148550.69757 81837 ac5b1b311ade3065c5dda4c0bbd0f8cb ""
@@ -227,9 +227,9 @@
   "/usr/local/texlive/2024/texmf-dist/tex/platex/jsclasses/jslogo.sty" 1601931076 5585 8e4615c54073c390d14154b29cee89cb ""
   "/usr/local/texlive/2024/texmf-var/fonts/map/pdftex/updmap/pdftex.map" 1714800338.55124 5467645 128b85b7cde5f5edc5cb7f1dd7ff8736 ""
   "/usr/local/texlive/2024/texmf-var/web2c/luahbtex/lualatex.fmt" 1714800260 12255192 275bf7f30ced6b4d01ffbcc33153c70c ""
-  "main.aux" 1767688960.56231 1842 7b8f62a110bd540bbd39d13030f8d24e "lualatex"
+  "main.aux" 1767692357.96866 1842 7b8f62a110bd540bbd39d13030f8d24e "lualatex"
   "main.tex" 1767515351.41274 4569 178c498ea1a2477cbaceb64bc4b69465 ""
-  "main.toc" 1767688960.56347 942 ce6225407985192c0e4186ba43b9256d "lualatex"
+  "main.toc" 1767692357.97055 942 ce6225407985192c0e4186ba43b9256d "lualatex"
   (generated)
   "main.aux"
   "main.log"

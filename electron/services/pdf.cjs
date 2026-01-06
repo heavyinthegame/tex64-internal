@@ -11,12 +11,16 @@ class PDFWindowManager {
     this.pendingSync = null;
   }
 
-  show(pdfPath) {
+  show(pdfPath, options = {}) {
     this.ensureWindow();
+    const reload = options?.reload !== false;
+    const needsOpen = reload || !this.isReady || this.currentPath !== pdfPath;
     this.currentPath = pdfPath;
-    this.pendingOpen = pdfPath;
-    if (this.isReady) {
-      this.flushOpen();
+    if (needsOpen) {
+      this.pendingOpen = pdfPath;
+      if (this.isReady) {
+        this.flushOpen();
+      }
     }
     if (this.window) {
       this.window.setTitle(path.basename(pdfPath));

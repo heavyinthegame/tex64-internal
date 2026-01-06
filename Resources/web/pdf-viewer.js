@@ -39,7 +39,8 @@ const initPdfViewer = () => {
 
   const MIN_SCALE = 0.4;
   const MAX_SCALE = 3;
-  const WHEEL_ZOOM_SENSITIVITY = 0.004;
+  const WHEEL_ZOOM_SENSITIVITY = 0.008;
+  const ZOOM_DRAW_DELAY = 160;
 
   const state = {
     doc: null,
@@ -53,8 +54,6 @@ const initPdfViewer = () => {
     pendingReverse: null,
     activeMarker: null,
   };
-  let pendingScale = null;
-  let zoomFrame = null;
 
   const eventBus = new EventBus();
   const linkService = new PDFLinkService({ eventBus });
@@ -67,6 +66,7 @@ const initPdfViewer = () => {
     findController,
     textLayerMode: 2,
     annotationMode: 2,
+    useOnlyCssZoom: true,
   });
   linkService.setViewer(pdfViewer);
 
@@ -74,9 +74,9 @@ const initPdfViewer = () => {
     if (statusEl) statusEl.textContent = text;
   };
 
-  const updateZoomLabel = () => {
+  const updateZoomLabel = (value = state.scale) => {
     if (!zoomLabel) return;
-    zoomLabel.textContent = `${Math.round(state.scale * 100)}%`;
+    zoomLabel.textContent = `${Math.round(value * 100)}%`;
   };
 
   const updatePageCount = () => {
@@ -90,19 +90,38 @@ const initPdfViewer = () => {
 
   const clampScale = (value) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, value));
 
-  const getScrollAnchor = () => {
+  const getZoomOrigin = (clientX, clientY) => {
     if (!scrollEl) return null;
-    const scrollHeight = scrollEl.scrollHeight || 1;
-    const anchor =
-      (scrollEl.scrollTop + scrollEl.clientHeight / 2) / scrollHeight;
-    return Math.min(Math.max(anchor, 0), 1);
+    return [clientX, clientY];
   };
 
-  const restoreScrollAnchor = (anchor) => {
-    if (!scrollEl || anchor === null) return;
-    const scrollHeight = scrollEl.scrollHeight || 0;
-    const target = anchor * scrollHeight - scrollEl.clientHeight / 2;
-    scrollEl.scrollTop = Math.max(0, target);
+  const getScrollCenter = () => {
+    if (!scrollEl) return null;
+    const rect = scrollEl.getBoundingClientRect();
+    return [rect.left + rect.width / 2, rect.top + rect.height / 2];
+  };
+
+  const updateScaleState = (value = pdfViewer.currentScale) => {
+    state.scale = value;
+    updateZoomLabel(value);
+  };
+
+  const applyZoomFactor = (scaleFactor, origin) => {
+    if (!state.doc) return;
+    if (!Number.isFinite(scaleFactor) || scaleFactor === 1) return;
+    state.scaleMode = "manual";
+    pdfViewer.updateScale({
+      scaleFactor,
+      drawingDelay: ZOOM_DRAW_DELAY,
+      origin,
+    });
+    updateScaleState();
+  };
+
+  const applyScaleTo = (nextScale, origin) => {
+    const target = clampScale(nextScale);
+    const base = state.scale || pdfViewer.currentScale || 1;
+    applyZoomFactor(target / base, origin);
   };
 
   const applyScaleMode = (mode) => {
@@ -119,35 +138,6 @@ const initPdfViewer = () => {
     }
     state.scale = pdfViewer.currentScale;
     updateZoomLabel();
-  };
-
-  const setScale = (nextScale, { preserveScroll = false } = {}) => {
-    const anchor = preserveScroll ? getScrollAnchor() : null;
-    state.scale = clampScale(nextScale);
-    state.scaleMode = "manual";
-    pdfViewer.currentScale = state.scale;
-    state.scale = pdfViewer.currentScale;
-    updateZoomLabel();
-    if (anchor !== null) {
-      requestAnimationFrame(() => restoreScrollAnchor(anchor));
-    }
-  };
-
-  const getZoomBaseScale = () => (pendingScale ?? state.scale);
-
-  const scheduleScale = (nextScale) => {
-    pendingScale = nextScale;
-    if (zoomFrame) {
-      return;
-    }
-    zoomFrame = requestAnimationFrame(() => {
-      const target = pendingScale;
-      pendingScale = null;
-      zoomFrame = null;
-      if (typeof target === "number") {
-        setScale(target, { preserveScroll: true });
-      }
-    });
   };
 
   const scrollToPage = (pageNumber) => {
@@ -295,6 +285,13 @@ const initPdfViewer = () => {
     }
   });
 
+  eventBus.on("scalechanging", (event) => {
+    if (!event || typeof event.scale !== "number") {
+      return;
+    }
+    updateScaleState(event.scale);
+  });
+
   eventBus.on("pagechanging", (event) => {
     if (pageInput) {
       pageInput.value = String(event.pageNumber);
@@ -310,7 +307,8 @@ const initPdfViewer = () => {
         }
         event.preventDefault();
         const zoomFactor = Math.exp(-event.deltaY * WHEEL_ZOOM_SENSITIVITY);
-        scheduleScale(getZoomBaseScale() * zoomFactor);
+        const origin = getZoomOrigin(event.clientX, event.clientY);
+        applyZoomFactor(zoomFactor, origin);
       },
       { passive: false }
     );
@@ -324,13 +322,24 @@ const initPdfViewer = () => {
       return Math.hypot(dx, dy);
     };
 
+    const getTouchCenter = (touches) => {
+      if (touches.length < 2) return null;
+      const [first, second] = touches;
+      return {
+        x: (first.clientX + second.clientX) / 2,
+        y: (first.clientY + second.clientY) / 2,
+      };
+    };
+
     scrollEl.addEventListener(
       "touchstart",
       (event) => {
         if (event.touches.length === 2) {
           const startDistance = getTouchDistance(event.touches);
+          const center = getTouchCenter(event.touches);
           touchPinch = {
             lastDistance: startDistance,
+            lastCenter: center,
           };
         }
       },
@@ -349,11 +358,14 @@ const initPdfViewer = () => {
           return;
         }
         const ratio = distance / touchPinch.lastDistance;
+        const center = getTouchCenter(event.touches) ?? touchPinch.lastCenter;
         if (!Number.isFinite(ratio) || ratio <= 0) {
           return;
         }
-        scheduleScale(getZoomBaseScale() * ratio);
+        const origin = center ? getZoomOrigin(center.x, center.y) : null;
+        applyZoomFactor(ratio, origin);
         touchPinch.lastDistance = distance;
+        touchPinch.lastCenter = center;
       },
       { passive: false }
     );
@@ -365,11 +377,6 @@ const initPdfViewer = () => {
     };
     scrollEl.addEventListener("touchend", clearTouchPinch);
     scrollEl.addEventListener("touchcancel", clearTouchPinch);
-    scrollEl.addEventListener("scroll", () => {
-      if (state.pendingReverse) {
-        clearJumpTarget();
-      }
-    });
   }
 
   if (pagesEl) {
@@ -441,13 +448,13 @@ const initPdfViewer = () => {
 
   if (zoomOutBtn) {
     zoomOutBtn.addEventListener("click", () => {
-      setScale(state.scale - 0.1, { preserveScroll: true });
+      applyScaleTo(state.scale - 0.1, getScrollCenter());
     });
   }
 
   if (zoomInBtn) {
     zoomInBtn.addEventListener("click", () => {
-      setScale(state.scale + 0.1, { preserveScroll: true });
+      applyScaleTo(state.scale + 0.1, getScrollCenter());
     });
   }
 
@@ -520,6 +527,10 @@ const initPdfViewer = () => {
   }
 
   if (bridge) {
+    window.__tex180PdfViewer = {
+      pdfViewer,
+      state,
+    };
     bridge.onMessage((message) => {
       if (!message || typeof message !== "object") return;
       if (message.type === "open") {
