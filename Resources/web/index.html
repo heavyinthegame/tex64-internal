@@ -337,59 +337,6 @@
                   <div class="settings-path" id="settings-workspace">未選択</div>
                 </div>
               </div>
-              <div class="settings-group">
-                <div class="settings-group-title">整形</div>
-                <div class="settings-item">
-                  <div class="settings-label">
-                    <span class="settings-title">\begin / \end を揃える</span>
-                    <span class="settings-desc">
-                      ブロック挿入時に環境の先頭と末尾のインデントを揃えます。
-                    </span>
-                  </div>
-                  <button class="settings-toggle" id="project-align-env" type="button">ON</button>
-                </div>
-              </div>
-              <div class="settings-group">
-                <div class="settings-group-title">数式/表 環境</div>
-                <div class="settings-item">
-                  <div class="settings-label">
-                    <span class="settings-title">検出対象の環境</span>
-                    <span class="settings-desc">
-                      \begin{...} の環境名を追加・無効化できます。*版は自動対応。
-                    </span>
-                  </div>
-                </div>
-                <div class="env-registry">
-                  <div class="env-registry-add">
-                    <input
-                      class="env-registry-input"
-                      id="env-registry-input"
-                      type="text"
-                      placeholder="align / myenv など"
-                    >
-                    <select class="env-registry-select" id="env-registry-kind">
-                      <option value="math">数式</option>
-                      <option value="table">表</option>
-                    </select>
-                    <button class="panel-button" id="env-registry-add" type="button">
-                      追加
-                    </button>
-                  </div>
-                  <div class="env-registry-hint" id="env-registry-hint">
-                    環境名のみ入力してください。`\begin{...}` や `*` は不要です。
-                  </div>
-                  <div class="env-registry-lists">
-                    <div class="env-registry-section">
-                      <div class="env-registry-title">数式</div>
-                      <div class="env-registry-list" id="env-registry-math"></div>
-                    </div>
-                    <div class="env-registry-section">
-                      <div class="env-registry-title">表</div>
-                      <div class="env-registry-list" id="env-registry-table"></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
           <div class="panel no-header" data-panel="search">
@@ -426,86 +373,282 @@
             <div class="panel-header">
               <span class="panel-title">設定</span>
             </div>
-            <div class="panel-body settings-panel">
-              <div class="settings-group">
-                <div class="settings-group-title">エディタ</div>
-                <div class="settings-item">
-                  <div class="settings-label">
-                    <span class="settings-title">ビルド時SyncTeX</span>
-                    <span class="settings-desc">ビルド成功時に自動でPDFへジャンプします。</span>
-                  </div>
-                  <div class="settings-control">
-                    <label class="settings-switch" for="editor-auto-synctex-build">
-                      <input class="settings-switch-input" id="editor-auto-synctex-build" type="checkbox">
-                      <span class="settings-switch-track" aria-hidden="true"></span>
-                    </label>
-                  </div>
-                </div>
-                <div class="settings-item">
-                  <div class="settings-label">
-                    <span class="settings-title">PDF別ウィンドウ</span>
-                    <span class="settings-desc">ビルド後のPDFを別ウィンドウで開きます。</span>
-                  </div>
-                  <div class="settings-control">
-                    <label class="settings-switch" for="editor-pdf-window">
-                      <input class="settings-switch-input" id="editor-pdf-window" type="checkbox">
-                      <span class="settings-switch-track" aria-hidden="true"></span>
-                    </label>
-                  </div>
-                </div>
+            <div class="panel-body settings-panel" id="settings-panel">
+              <div class="settings-nav" id="settings-nav">
+                <button class="settings-nav-item" data-settings-target="editor" type="button">
+                  <span class="settings-nav-title">エディタ</span>
+                  <span class="settings-nav-desc">SyncTeX / PDF 表示</span>
+                </button>
+                <button class="settings-nav-item" data-settings-target="format" type="button">
+                  <span class="settings-nav-title">整形</span>
+                  <span class="settings-nav-desc">latexindent の整形ルール</span>
+                </button>
+                <button class="settings-nav-item" data-settings-target="env" type="button">
+                  <span class="settings-nav-title">数式/表 環境</span>
+                  <span class="settings-nav-desc">検出対象の環境を管理</span>
+                </button>
+                <button class="settings-nav-item" data-settings-target="build" type="button">
+                  <span class="settings-nav-title">ビルド</span>
+                  <span class="settings-nav-desc">コンパイルエンジン</span>
+                </button>
+                <button class="settings-nav-item" data-settings-target="runtime" type="button">
+                  <span class="settings-nav-title">実行環境</span>
+                  <span class="settings-nav-desc">TeX Distribution / latexmk</span>
+                </button>
               </div>
-              <div class="settings-group">
-                <div class="settings-group-title">ビルド</div>
-                <div class="settings-item">
-                  <div class="settings-label">
-                    <span class="settings-title">コンパイルエンジン</span>
-                    <span class="settings-desc">ビルドに使用するエンジンを選択します。</span>
+              <div class="settings-pages is-hidden" id="settings-pages" aria-hidden="true">
+                <div class="settings-page is-hidden" data-settings-page="editor" aria-hidden="true">
+                  <div class="settings-page-header">
+                    <button class="panel-button ghost settings-back" data-settings-back type="button">
+                      戻る
+                    </button>
+                    <div class="settings-page-title">エディタ</div>
                   </div>
-                  <div class="settings-control">
-                    <select class="settings-select" id="settings-compile-engine">
-                      <option value="lualatex">LuaLaTeX</option>
-                      <option value="pdflatex">pdfLaTeX</option>
-                      <option value="xelatex">XeLaTeX</option>
-                      <option value="uplatex">upLaTeX</option>
-                    </select>
+                  <div class="settings-group">
+                    <div class="settings-group-title">エディタ</div>
+                    <div class="settings-item">
+                      <div class="settings-label">
+                        <span class="settings-title">ビルド時SyncTeX</span>
+                        <span class="settings-desc">ビルド成功時に自動でPDFへジャンプします。</span>
+                      </div>
+                      <div class="settings-control">
+                        <label class="settings-switch" for="editor-auto-synctex-build">
+                          <input class="settings-switch-input" id="editor-auto-synctex-build" type="checkbox">
+                          <span class="settings-switch-track" aria-hidden="true"></span>
+                        </label>
+                      </div>
+                    </div>
+                    <div class="settings-item">
+                      <div class="settings-label">
+                        <span class="settings-title">PDF別ウィンドウ</span>
+                        <span class="settings-desc">ビルド後のPDFを別ウィンドウで開きます。</span>
+                      </div>
+                      <div class="settings-control">
+                        <label class="settings-switch" for="editor-pdf-window">
+                          <input class="settings-switch-input" id="editor-pdf-window" type="checkbox">
+                          <span class="settings-switch-track" aria-hidden="true"></span>
+                        </label>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div class="settings-group">
-                <div class="settings-group-title">実行環境</div>
-                <div class="settings-item env-item" data-env="lualatex">
-                  <div class="settings-label">
-                    <span class="settings-title">TeX Distribution</span>
-                    <span class="settings-desc">LuaLaTeX の利用可否を確認します。</span>
-                  </div>
-                  <div class="settings-control">
-                    <span class="env-badge checking">確認中...</span>
-                    <button class="panel-button env-btn is-hidden" data-target="basictex" type="button">
-                      インストール
+                <div class="settings-page is-hidden" data-settings-page="format" aria-hidden="true">
+                  <div class="settings-page-header">
+                    <button class="panel-button ghost settings-back" data-settings-back type="button">
+                      戻る
                     </button>
+                    <div class="settings-page-title">整形</div>
+                  </div>
+                  <div class="settings-group">
+                    <div class="settings-group-title">整形</div>
+                    <div class="settings-item">
+                      <div class="settings-label">
+                        <span class="settings-title">インデント</span>
+                        <span class="settings-desc">整形時のインデント幅/タブを選択します。</span>
+                      </div>
+                      <div class="settings-control">
+                        <select class="settings-select" id="editor-format-indent">
+                          <option value="spaces-2">スペース: 2</option>
+                          <option value="spaces-4">スペース: 4</option>
+                          <option value="tab">タブ</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div class="settings-item">
+                      <div class="settings-label">
+                        <span class="settings-title">\begin / \end を別行にする</span>
+                        <span class="settings-desc">環境の開始/終了を必ず独立行にします。</span>
+                      </div>
+                      <button class="settings-toggle" id="editor-format-begin-end" type="button">ON</button>
+                    </div>
+                    <div class="settings-item">
+                      <div class="settings-label">
+                        <span class="settings-title">document をインデントしない</span>
+                        <span class="settings-desc">document 本文を追加インデントしません。</span>
+                      </div>
+                      <button
+                        class="settings-toggle"
+                        id="editor-format-document-noindent"
+                        type="button"
+                      >ON</button>
+                    </div>
+                    <div class="settings-item">
+                      <div class="settings-label">
+                        <span class="settings-title">数式の & を揃える</span>
+                        <span class="settings-desc">align などの & 揃えを行います。</span>
+                      </div>
+                      <button class="settings-toggle" id="editor-format-align-math" type="button">ON</button>
+                    </div>
+                    <div class="settings-item">
+                      <div class="settings-label">
+                        <span class="settings-title">表の & を揃える</span>
+                        <span class="settings-desc">tabular などの & 揃えを行います。</span>
+                      </div>
+                      <button class="settings-toggle" id="editor-format-align-table" type="button">ON</button>
+                    </div>
+                    <div class="settings-item">
+                      <div class="settings-label">
+                        <span class="settings-title">空行の扱い</span>
+                        <span class="settings-desc">連続する空行の扱いを選択します。</span>
+                      </div>
+                      <div class="settings-control">
+                        <select class="settings-select" id="editor-format-blank-lines">
+                          <option value="preserve">保持</option>
+                          <option value="condense">1行にまとめる</option>
+                          <option value="remove">削除</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div class="settings-item">
+                      <div class="settings-label">
+                        <span class="settings-title">\begin / \end を揃える</span>
+                        <span class="settings-desc">
+                          ブロック挿入時に環境の先頭と末尾のインデントを揃えます。
+                        </span>
+                      </div>
+                      <button class="settings-toggle" id="editor-align-env" type="button">ON</button>
+                    </div>
+                    <div class="settings-item">
+                      <div class="settings-label">
+                        <span class="settings-title">verbatim 系環境</span>
+                        <span class="settings-desc">整形対象外にしたい環境名を追加します。</span>
+                      </div>
+                    </div>
+                    <div class="settings-inline">
+                      <input
+                        class="settings-input"
+                        id="editor-format-verbatim-input"
+                        type="text"
+                        placeholder="minted / myenv など"
+                      >
+                      <button class="panel-button" id="editor-format-verbatim-add" type="button">
+                        追加
+                      </button>
+                    </div>
+                    <div class="env-registry-hint" id="editor-format-verbatim-hint">
+                      環境名のみ入力してください。`\begin{...}` や `*` は不要です。
+                    </div>
+                    <div class="env-registry-list" id="editor-format-verbatim-list"></div>
                   </div>
                 </div>
-                <div class="settings-item env-item" data-env="latexmk">
-                  <div class="settings-label">
-                    <span class="settings-title">latexmk</span>
-                    <span class="settings-desc">ビルド自動化ツールの状態を確認します。</span>
-                  </div>
-                  <div class="settings-control">
-                    <span class="env-badge checking">確認中...</span>
-                    <button class="panel-button env-btn is-hidden" data-target="latexmk" type="button">
-                      インストール
+                <div class="settings-page is-hidden" data-settings-page="env" aria-hidden="true">
+                  <div class="settings-page-header">
+                    <button class="panel-button ghost settings-back" data-settings-back type="button">
+                      戻る
                     </button>
+                    <div class="settings-page-title">数式/表 環境</div>
+                  </div>
+                  <div class="settings-group">
+                    <div class="settings-group-title">数式/表 環境</div>
+                    <div class="settings-item">
+                      <div class="settings-label">
+                        <span class="settings-title">検出対象の環境</span>
+                        <span class="settings-desc">
+                          \begin{...} の環境名を追加・無効化できます。*版は自動対応。
+                        </span>
+                      </div>
+                    </div>
+                    <div class="env-registry">
+                      <div class="env-registry-add">
+                        <input
+                          class="env-registry-input"
+                          id="env-registry-input"
+                          type="text"
+                          placeholder="align / myenv など"
+                        >
+                        <select class="env-registry-select" id="env-registry-kind">
+                          <option value="math">数式</option>
+                          <option value="table">表</option>
+                        </select>
+                        <button class="panel-button" id="env-registry-add" type="button">
+                          追加
+                        </button>
+                      </div>
+                      <div class="env-registry-hint" id="env-registry-hint">
+                        環境名のみ入力してください。`\begin{...}` や `*` は不要です。
+                      </div>
+                      <div class="env-registry-lists">
+                        <div class="env-registry-section">
+                          <div class="env-registry-title">数式</div>
+                          <div class="env-registry-list" id="env-registry-math"></div>
+                        </div>
+                        <div class="env-registry-section">
+                          <div class="env-registry-title">表</div>
+                          <div class="env-registry-list" id="env-registry-table"></div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
-                <div class="settings-item">
-                  <div class="settings-label">
-                    <span class="settings-title">環境チェック</span>
-                    <span class="settings-desc">インストール状況を再確認します。</span>
-                  </div>
-                  <div class="settings-control">
-                    <button class="panel-button ghost" id="settings-env-refresh" type="button">
-                      再チェック
+                <div class="settings-page is-hidden" data-settings-page="build" aria-hidden="true">
+                  <div class="settings-page-header">
+                    <button class="panel-button ghost settings-back" data-settings-back type="button">
+                      戻る
                     </button>
+                    <div class="settings-page-title">ビルド</div>
+                  </div>
+                  <div class="settings-group">
+                    <div class="settings-group-title">ビルド</div>
+                    <div class="settings-item">
+                      <div class="settings-label">
+                        <span class="settings-title">コンパイルエンジン</span>
+                        <span class="settings-desc">ビルドに使用するエンジンを選択します。</span>
+                      </div>
+                      <div class="settings-control">
+                        <select class="settings-select" id="settings-compile-engine">
+                          <option value="lualatex">LuaLaTeX</option>
+                          <option value="pdflatex">pdfLaTeX</option>
+                          <option value="xelatex">XeLaTeX</option>
+                          <option value="uplatex">upLaTeX</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="settings-page is-hidden" data-settings-page="runtime" aria-hidden="true">
+                  <div class="settings-page-header">
+                    <button class="panel-button ghost settings-back" data-settings-back type="button">
+                      戻る
+                    </button>
+                    <div class="settings-page-title">実行環境</div>
+                  </div>
+                  <div class="settings-group">
+                    <div class="settings-group-title">実行環境</div>
+                    <div class="settings-item env-item" data-env="lualatex">
+                      <div class="settings-label">
+                        <span class="settings-title">TeX Distribution</span>
+                        <span class="settings-desc">LuaLaTeX の利用可否を確認します。</span>
+                      </div>
+                      <div class="settings-control">
+                        <span class="env-badge checking">確認中...</span>
+                        <button class="panel-button env-btn is-hidden" data-target="basictex" type="button">
+                          インストール
+                        </button>
+                      </div>
+                    </div>
+                    <div class="settings-item env-item" data-env="latexmk">
+                      <div class="settings-label">
+                        <span class="settings-title">latexmk</span>
+                        <span class="settings-desc">ビルド自動化ツールの状態を確認します。</span>
+                      </div>
+                      <div class="settings-control">
+                        <span class="env-badge checking">確認中...</span>
+                        <button class="panel-button env-btn is-hidden" data-target="latexmk" type="button">
+                          インストール
+                        </button>
+                      </div>
+                    </div>
+                    <div class="settings-item">
+                      <div class="settings-label">
+                        <span class="settings-title">環境チェック</span>
+                        <span class="settings-desc">インストール状況を再確認します。</span>
+                      </div>
+                      <div class="settings-control">
+                        <button class="panel-button ghost" id="settings-env-refresh" type="button">
+                          再チェック
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>

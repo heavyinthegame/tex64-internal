@@ -305,6 +305,7 @@ ipcMain.on("tex180", (_event, message) => {
   if (type === "build") {
     handleBuild(message.mainFile, {
       format: message.format,
+      formatSettings: message.formatSettings,
       engine: message.engine,
       pdfViewerMode: message.pdfViewerMode,
     });
@@ -318,11 +319,17 @@ ipcMain.on("tex180", (_event, message) => {
     handleSaveFile(message.path, message.content, {
       format: message.format,
       formatSource: message.formatSource,
+      formatSettings: message.formatSettings,
     });
     return;
   }
   if (type === "formatFile") {
-    handleFormatFile(message.path, message.content, message.source);
+    handleFormatFile(
+      message.path,
+      message.content,
+      message.source,
+      message.formatSettings
+    );
     return;
   }
   if (type === "createFile") {
@@ -508,7 +515,7 @@ const handleBuild = async (mainFile, options = {}) => {
     "main.tex";
   if (options.format && typeof targetFile === "string" && targetFile.endsWith(".tex")) {
     const formatResult = await formatterService
-      .formatFile(rootPath, targetFile)
+      .formatFile(rootPath, targetFile, options.formatSettings)
       .catch((error) => ({ ok: false, error: error?.message ?? String(error) }));
     if (!formatResult.ok && !formatWarningShown) {
       formatWarningShown = true;
@@ -778,7 +785,12 @@ const handleSaveFile = async (relativePath, content, options = {}) => {
     let formatError = null;
     if (shouldFormat) {
       const formatResult = await formatterService
-        .formatContent(rootPath, relativePath, finalContent)
+        .formatContent(
+          rootPath,
+          relativePath,
+          finalContent,
+          options.formatSettings
+        )
         .catch((error) => ({ ok: false, error: error?.message ?? String(error) }));
       if (formatResult.ok && typeof formatResult.content === "string") {
         finalContent = formatResult.content;
@@ -807,7 +819,7 @@ const handleSaveFile = async (relativePath, content, options = {}) => {
   }
 };
 
-const handleFormatFile = async (relativePath, content, source) => {
+const handleFormatFile = async (relativePath, content, source, formatSettings) => {
   const rootPath = ensureWorkspace();
   if (!rootPath) {
     sendToRenderer("formatResult", {
@@ -821,7 +833,7 @@ const handleFormatFile = async (relativePath, content, source) => {
   await updateWorkspaceIfNeeded(rootPath);
   try {
     const result = await formatterService
-      .formatContent(rootPath, relativePath, content ?? "")
+      .formatContent(rootPath, relativePath, content ?? "", formatSettings)
       .catch((error) => ({ ok: false, error: error?.message ?? String(error) }));
     if (!result.ok) {
       if (!formatWarningShown) {

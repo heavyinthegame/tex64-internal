@@ -89,7 +89,27 @@ export const getDomRefs = () => ({
   settingsRootSelect: document.getElementById("settings-root-select"),
   settingsRootAuto: document.getElementById("settings-root-auto"),
   settingsWorkspace: document.getElementById("settings-workspace"),
-  projectAlignEnvToggle: document.getElementById("project-align-env"),
+  settingsPanel: document.getElementById("settings-panel"),
+  settingsNav: document.getElementById("settings-nav"),
+  settingsNavItems: Array.from(
+    document.querySelectorAll<HTMLButtonElement>(".settings-nav-item")
+  ),
+  settingsPages: document.getElementById("settings-pages"),
+  settingsPageItems: Array.from(document.querySelectorAll<HTMLElement>(".settings-page")),
+  settingsBackButtons: Array.from(
+    document.querySelectorAll<HTMLButtonElement>(".settings-back")
+  ),
+  editorAlignEnvToggle: document.getElementById("editor-align-env"),
+  editorFormatIndentSelect: document.getElementById("editor-format-indent"),
+  editorFormatBeginEndToggle: document.getElementById("editor-format-begin-end"),
+  editorFormatDocumentNoIndentToggle: document.getElementById("editor-format-document-noindent"),
+  editorFormatAlignMathToggle: document.getElementById("editor-format-align-math"),
+  editorFormatAlignTableToggle: document.getElementById("editor-format-align-table"),
+  editorFormatBlankLinesSelect: document.getElementById("editor-format-blank-lines"),
+  editorFormatVerbatimInput: document.getElementById("editor-format-verbatim-input"),
+  editorFormatVerbatimAdd: document.getElementById("editor-format-verbatim-add"),
+  editorFormatVerbatimHint: document.getElementById("editor-format-verbatim-hint"),
+  editorFormatVerbatimList: document.getElementById("editor-format-verbatim-list"),
   editorAutoSynctexBuildToggle: document.getElementById("editor-auto-synctex-build"),
   editorPdfWindowToggle: document.getElementById("editor-pdf-window"),
   settingsCompileEngineSelect: document.getElementById("settings-compile-engine"),

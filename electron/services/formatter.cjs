@@ -14,6 +14,83 @@ const safeUnlink = async (filePath) => {
   await fsp.unlink(filePath).catch(() => null);
 };
 
+const LATEXINDENT_SETTINGS_NAME = "latexindent.yaml";
+const LATEXINDENT_OVERRIDE_NAME = "latexindent.override.yaml";
+const LATEXINDENT_TEMPLATE_PATH = path.join(
+  __dirname,
+  "..",
+  "..",
+  "Resources",
+  LATEXINDENT_SETTINGS_NAME
+);
+
+const DEFAULT_FORMAT_SETTINGS = {
+  indentStyle: "spaces-2",
+  beginEndOnOwnLine: true,
+  documentNoIndent: true,
+  alignMathDelims: true,
+  alignTableDelims: true,
+  blankLines: "condense",
+  customVerbatim: [],
+};
+
+const DEFAULT_ALIGN_MATH_ENVS = [
+  "math",
+  "displaymath",
+  "equation",
+  "eqnarray",
+  "align",
+  "alignat",
+  "xalignat",
+  "xxalignat",
+  "flalign",
+  "gather",
+  "multline",
+  "split",
+  "aligned",
+  "alignedat",
+  "gathered",
+  "multlined",
+  "cases",
+  "dcases",
+  "rcases",
+  "numcases",
+  "subnumcases",
+  "empheq",
+  "matrix",
+  "pmatrix",
+  "bmatrix",
+  "Bmatrix",
+  "vmatrix",
+  "Vmatrix",
+  "smallmatrix",
+  "array",
+  "subarray",
+  "substack",
+  "subequations",
+  "dmath",
+  "dgroup",
+  "darray",
+  "IEEEeqnarray",
+  "IEEEeqnarraybox",
+  "mathpar",
+  "mathparpagebreakable",
+];
+const DEFAULT_ALIGN_TABLE_ENVS = [
+  "table",
+  "tabular",
+  "tabularx",
+  "tabulary",
+  "longtable",
+  "ltablex",
+  "xltabular",
+  "tabu",
+  "longtabu",
+  "supertabular",
+  "tblr",
+  "longtblr",
+];
+
 const INDENT_UNIT = "  ";
 const VERBATIM_ENVIRONMENTS = new Set([
   "verbatim",
@@ -24,8 +101,210 @@ const VERBATIM_ENVIRONMENTS = new Set([
   "filecontents",
   "filecontents*",
 ]);
+const NO_INDENT_ENVIRONMENTS = new Set(["document"]);
 
-const stripComments = (line) => {
+const normalizeEnvName = (value) => {
+  if (typeof value !== "string") {
+    return "";
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+  const match = trimmed.match(/\\(?:begin|end)\{([^}]+)\}/);
+  let name = match ? match[1] : trimmed;
+  name = name.replace(/[{}]/g, "");
+  name = name.replace(/^\\+/, "");
+  if (!name) {
+    return "";
+  }
+  return name.endsWith("*") ? name.slice(0, -1) : name;
+};
+
+const normalizeEnvList = (value) => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const entries = [];
+  const seen = new Set();
+  value.forEach((entry) => {
+    const normalized = normalizeEnvName(entry);
+    if (!normalized || seen.has(normalized)) {
+      return;
+    }
+    seen.add(normalized);
+    entries.push(normalized);
+  });
+  return entries;
+};
+
+const normalizeAlignEnvList = (value, fallback) => {
+  if (!Array.isArray(value)) {
+    return fallback.slice();
+  }
+  return normalizeEnvList(value);
+};
+
+const normalizeAlignEnvs = (value) => {
+  if (!value || typeof value !== "object") {
+    return {
+      math: DEFAULT_ALIGN_MATH_ENVS.slice(),
+      table: DEFAULT_ALIGN_TABLE_ENVS.slice(),
+    };
+  }
+  return {
+    math: normalizeAlignEnvList(value.math, DEFAULT_ALIGN_MATH_ENVS),
+    table: normalizeAlignEnvList(value.table, DEFAULT_ALIGN_TABLE_ENVS),
+  };
+};
+
+const normalizeFormatSettings = (value) => {
+  const settings = { ...DEFAULT_FORMAT_SETTINGS };
+  if (!value || typeof value !== "object") {
+    return { ...settings, alignEnvs: normalizeAlignEnvs(null) };
+  }
+  if (
+    value.indentStyle === "spaces-2" ||
+    value.indentStyle === "spaces-4" ||
+    value.indentStyle === "tab"
+  ) {
+    settings.indentStyle = value.indentStyle;
+  }
+  if (typeof value.beginEndOnOwnLine === "boolean") {
+    settings.beginEndOnOwnLine = value.beginEndOnOwnLine;
+  }
+  if (typeof value.documentNoIndent === "boolean") {
+    settings.documentNoIndent = value.documentNoIndent;
+  }
+  if (typeof value.alignMathDelims === "boolean") {
+    settings.alignMathDelims = value.alignMathDelims;
+  }
+  if (typeof value.alignTableDelims === "boolean") {
+    settings.alignTableDelims = value.alignTableDelims;
+  }
+  if (
+    value.blankLines === "preserve" ||
+    value.blankLines === "condense" ||
+    value.blankLines === "remove"
+  ) {
+    settings.blankLines = value.blankLines;
+  }
+  settings.customVerbatim = normalizeEnvList(value.customVerbatim);
+  settings.alignEnvs = normalizeAlignEnvs(value.alignEnvs);
+  return settings;
+};
+
+const formatIndentValue = (indentStyle) => {
+  if (indentStyle === "spaces-4") {
+    return "\"    \"";
+  }
+  if (indentStyle === "tab") {
+    return "\"\\t\"";
+  }
+  return "\"  \"";
+};
+
+const yamlEscape = (value) =>
+  String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+const yamlQuote = (value) => `"${yamlEscape(value)}"`;
+
+const expandStarVariants = (names) => {
+  const entries = new Set();
+  names.forEach((name) => {
+    const normalized = normalizeEnvName(name);
+    if (!normalized) {
+      return;
+    }
+    entries.add(normalized);
+    entries.add(`${normalized}*`);
+  });
+  return Array.from(entries);
+};
+
+const buildBlankLineSettings = (blankLines) => {
+  switch (blankLines) {
+    case "preserve":
+      return { preserveBlankLines: 1, condenseMultipleBlankLinesInto: 0 };
+    case "remove":
+      return { preserveBlankLines: 0, condenseMultipleBlankLinesInto: 0 };
+    default:
+      return { preserveBlankLines: 1, condenseMultipleBlankLinesInto: 1 };
+  }
+};
+
+const buildAlignDelimsConfig = (settings) => {
+  const config = {};
+  const alignEnvs = settings.alignEnvs ?? {};
+  const mathEnvs = Array.isArray(alignEnvs.math)
+    ? alignEnvs.math
+    : DEFAULT_ALIGN_MATH_ENVS;
+  const tableEnvs = Array.isArray(alignEnvs.table)
+    ? alignEnvs.table
+    : DEFAULT_ALIGN_TABLE_ENVS;
+  const apply = (names, enabled) => {
+    expandStarVariants(names).forEach((name) => {
+      config[name] = enabled ? 1 : 0;
+    });
+  };
+  apply(mathEnvs, settings.alignMathDelims);
+  apply(tableEnvs, settings.alignTableDelims);
+  return config;
+};
+
+const buildVerbatimEnvironmentMap = (customVerbatim) => {
+  const entries = new Set(VERBATIM_ENVIRONMENTS);
+  normalizeEnvList(customVerbatim).forEach((name) => {
+    entries.add(name);
+    entries.add(`${name}*`);
+  });
+  const mapping = {};
+  Array.from(entries)
+    .sort((a, b) => a.localeCompare(b))
+    .forEach((name) => {
+      mapping[name] = 1;
+    });
+  return mapping;
+};
+
+const buildLatexindentOverride = (settings) => {
+  const lines = [];
+  lines.push(`defaultIndent: ${formatIndentValue(settings.indentStyle)}`);
+  lines.push("noAdditionalIndent:");
+  lines.push(`  document: ${settings.documentNoIndent ? 1 : 0}`);
+  const lineBreakValue = settings.beginEndOnOwnLine ? 1 : 0;
+  const blankLines = buildBlankLineSettings(settings.blankLines);
+  lines.push("modifyLineBreaks:");
+  lines.push("  environments:");
+  lines.push(`    BeginStartsOnOwnLine: ${lineBreakValue}`);
+  lines.push(`    BodyStartsOnOwnLine: ${lineBreakValue}`);
+  lines.push(`    EndStartsOnOwnLine: ${lineBreakValue}`);
+  lines.push(`    EndFinishesWithLineBreak: ${lineBreakValue}`);
+  lines.push(`  preserveBlankLines: ${blankLines.preserveBlankLines}`);
+  lines.push(
+    `  condenseMultipleBlankLinesInto: ${blankLines.condenseMultipleBlankLinesInto}`
+  );
+
+  const alignDelims = buildAlignDelimsConfig(settings);
+  const alignNames = Object.keys(alignDelims).sort((a, b) => a.localeCompare(b));
+  if (alignNames.length > 0) {
+    lines.push("lookForAlignDelims:");
+    alignNames.forEach((name) => {
+      lines.push(`  ${yamlQuote(name)}: ${alignDelims[name]}`);
+    });
+  }
+
+  const verbatimEnvs = buildVerbatimEnvironmentMap(settings.customVerbatim);
+  const verbatimNames = Object.keys(verbatimEnvs).sort((a, b) => a.localeCompare(b));
+  if (verbatimNames.length > 0) {
+    lines.push("verbatimEnvironments:");
+    verbatimNames.forEach((env) => {
+      lines.push(`  ${yamlQuote(env)}: ${verbatimEnvs[env]}`);
+    });
+  }
+  return `${lines.join("\n")}\n`;
+};
+
+const findCommentStart = (line) => {
   for (let i = 0; i < line.length; i += 1) {
     if (line[i] !== "%") {
       continue;
@@ -35,10 +314,15 @@ const stripComments = (line) => {
       backslashes += 1;
     }
     if (backslashes % 2 === 0) {
-      return line.slice(0, i);
+      return i;
     }
   }
-  return line;
+  return -1;
+};
+
+const stripComments = (line) => {
+  const commentIndex = findCommentStart(line);
+  return commentIndex === -1 ? line : line.slice(0, commentIndex);
 };
 
 const extractTokens = (line) => {
@@ -55,6 +339,55 @@ const extractTokens = (line) => {
   return tokens;
 };
 
+const shouldIndentEnv = (env) => !NO_INDENT_ENVIRONMENTS.has(env);
+
+const splitLineByEnvTokens = (line) => {
+  const commentIndex = findCommentStart(line);
+  const head = commentIndex === -1 ? line : line.slice(0, commentIndex);
+  const comment = commentIndex === -1 ? "" : line.slice(commentIndex);
+  const regex = /\\(begin|end)\{[^}]+\}/g;
+  const tokens = [];
+  let match;
+  while ((match = regex.exec(head))) {
+    tokens.push({
+      index: match.index ?? 0,
+      text: match[0],
+    });
+  }
+  if (tokens.length === 0) {
+    return [line];
+  }
+  const result = [];
+  let cursor = 0;
+  for (const token of tokens) {
+    const before = head.slice(cursor, token.index);
+    if (before.trim().length > 0) {
+      result.push(before.replace(/\s+$/, ""));
+    }
+    result.push(token.text);
+    cursor = token.index + token.text.length;
+  }
+  const tail = head.slice(cursor);
+  if (tail.trim().length > 0) {
+    result.push(tail.replace(/^\s+/, ""));
+  }
+  if (result.length === 0) {
+    return [line];
+  }
+  if (comment) {
+    result[result.length - 1] += comment;
+  }
+  return result;
+};
+
+const hasVerbatimBegin = (line) => {
+  const parsed = stripComments(line);
+  const tokens = extractTokens(parsed);
+  return tokens.some(
+    (token) => token.type === "begin" && VERBATIM_ENVIRONMENTS.has(token.env)
+  );
+};
+
 const simpleIndent = (content) => {
   if (!content) {
     return content ?? "";
@@ -66,10 +399,10 @@ const simpleIndent = (content) => {
   let inVerbatim = false;
   let verbatimEnv = null;
 
-  for (const line of lines) {
+  for (const rawLine of lines) {
     if (inVerbatim) {
-      output.push(line);
-      const parsed = stripComments(line);
+      output.push(rawLine);
+      const parsed = stripComments(rawLine);
       const tokens = extractTokens(parsed);
       if (verbatimEnv) {
         const hasEnd = tokens.some(
@@ -84,53 +417,69 @@ const simpleIndent = (content) => {
       continue;
     }
 
-    const trimmed = line.trim();
-    if (!trimmed) {
-      output.push("");
-      continue;
-    }
+    const expandedLines = hasVerbatimBegin(rawLine)
+      ? [rawLine]
+      : splitLineByEnvTokens(rawLine);
 
-    const parsed = stripComments(line);
-    const tokens = extractTokens(parsed);
-
-    let scan = parsed.replace(/^\s+/, "");
-    let dedentBefore = 0;
-    const endPattern = /^\\end\{([^}]+)\}/;
-    while (endPattern.test(scan)) {
-      dedentBefore += 1;
-      scan = scan.replace(endPattern, "").replace(/^\s+/, "");
-    }
-    indentLevel = Math.max(indentLevel - dedentBefore, 0);
-
-    const trimmedLeading = line.replace(/^\s+/, "");
-    output.push(`${INDENT_UNIT.repeat(indentLevel)}${trimmedLeading}`);
-
-    let beginCount = 0;
-    let endCount = 0;
-    tokens.forEach((token) => {
-      if (token.type === "begin") {
-        beginCount += 1;
-      } else {
-        endCount += 1;
-      }
-    });
-    const endAfter = Math.max(endCount - dedentBefore, 0);
-    indentLevel = Math.max(indentLevel + beginCount - endAfter, 0);
-
-    for (const token of tokens) {
-      if (token.type !== "begin") {
+    for (const line of expandedLines) {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        output.push("");
         continue;
       }
-      if (!VERBATIM_ENVIRONMENTS.has(token.env)) {
-        continue;
+
+      const parsed = stripComments(line);
+      const tokens = extractTokens(parsed);
+
+      let scan = parsed.replace(/^\s+/, "");
+      let dedentBefore = 0;
+      const endPattern = /^\\end\{([^}]+)\}/;
+      while (true) {
+        const match = scan.match(endPattern);
+        if (!match) {
+          break;
+        }
+        const env = match[1]?.trim() ?? "";
+        if (shouldIndentEnv(env)) {
+          dedentBefore += 1;
+        }
+        scan = scan.replace(endPattern, "").replace(/^\s+/, "");
       }
-      const hasEndSameLine = tokens.some(
-        (entry) => entry.type === "end" && entry.env === token.env && entry.index > token.index
-      );
-      if (!hasEndSameLine) {
-        inVerbatim = true;
-        verbatimEnv = token.env;
-        break;
+      indentLevel = Math.max(indentLevel - dedentBefore, 0);
+
+      const trimmedLeading = line.replace(/^\s+/, "");
+      output.push(`${INDENT_UNIT.repeat(indentLevel)}${trimmedLeading}`);
+
+      let beginCount = 0;
+      let endCount = 0;
+      tokens.forEach((token) => {
+        if (!shouldIndentEnv(token.env)) {
+          return;
+        }
+        if (token.type === "begin") {
+          beginCount += 1;
+        } else {
+          endCount += 1;
+        }
+      });
+      const endAfter = Math.max(endCount - dedentBefore, 0);
+      indentLevel = Math.max(indentLevel + beginCount - endAfter, 0);
+
+      for (const token of tokens) {
+        if (token.type !== "begin") {
+          continue;
+        }
+        if (!VERBATIM_ENVIRONMENTS.has(token.env)) {
+          continue;
+        }
+        const hasEndSameLine = tokens.some(
+          (entry) => entry.type === "end" && entry.env === token.env && entry.index > token.index
+        );
+        if (!hasEndSameLine) {
+          inVerbatim = true;
+          verbatimEnv = token.env;
+          break;
+        }
       }
     }
   }
@@ -179,7 +528,9 @@ class FormatterService {
       if (!entry) {
         return;
       }
-      candidates.push(path.join(entry, process.platform === "win32" ? "latexindent.exe" : "latexindent"));
+      candidates.push(
+        path.join(entry, process.platform === "win32" ? "latexindent.exe" : "latexindent")
+      );
     });
     for (const candidate of candidates) {
       if (fs.existsSync(candidate)) {
@@ -208,7 +559,20 @@ class FormatterService {
     });
   }
 
-  async formatContent(rootPath, relativePath, content) {
+  async prepareLatexindentSettings(tempDir, formatSettings) {
+    const template = await fsp.readFile(LATEXINDENT_TEMPLATE_PATH, "utf8").catch(() => null);
+    if (!template) {
+      return null;
+    }
+    const settingsPath = path.join(tempDir, LATEXINDENT_SETTINGS_NAME);
+    const overridePath = path.join(tempDir, LATEXINDENT_OVERRIDE_NAME);
+    await fsp.writeFile(settingsPath, template, "utf8");
+    const override = buildLatexindentOverride(formatSettings);
+    await fsp.writeFile(overridePath, override, "utf8");
+    return { basePath: settingsPath, overridePath };
+  }
+
+  async formatContent(rootPath, relativePath, content, formatSettings) {
     if (!rootPath || !relativePath) {
       return { ok: false, error: "format target missing" };
     }
@@ -216,40 +580,68 @@ class FormatterService {
       return { ok: true, content, skipped: true };
     }
     const latexindentPath = this.findLatexindent();
-    if (latexindentPath) {
-      const tempDir = path.join(rootPath, ".tex180", ".format");
-      await ensureDirectory(tempDir);
-      const baseName = path.basename(relativePath, path.extname(relativePath)) || "document";
-      const tempName = `${baseName}-${Date.now()}-${Math.random().toString(16).slice(2)}.tex`;
-      const tempPath = path.join(tempDir, tempName);
-      await fsp.writeFile(tempPath, content ?? "", "utf8");
-      const env = { ...process.env };
-      env.PATH = this.extendPath(env.PATH);
-      const result = await this.runProcess(latexindentPath, ["-w", "-l", tempPath], rootPath, env)
-        .catch((error) => ({ output: error?.message ?? String(error), status: 1 }));
-      let formatted = null;
-      if (result.status === 0) {
-        formatted = await fsp.readFile(tempPath, "utf8").catch(() => null);
-      }
-      await safeUnlink(tempPath);
-      await safeUnlink(`${tempPath}.bak`);
-      await safeUnlink(path.join(tempDir, "indent.log"));
-      await safeUnlink(path.join(rootPath, "indent.log"));
-      if (result.status === 0 && formatted !== null) {
-        return { ok: true, content: formatted, formatted: formatted !== content };
-      }
+    if (!latexindentPath) {
+      return { ok: false, error: "latexindentが見つかりません。" };
     }
-    const fallback = simpleIndent(content ?? "");
-    return { ok: true, content: fallback, formatted: fallback !== content, fallback: true };
+    const tempDir = path.join(rootPath, ".tex180", ".format");
+    await ensureDirectory(tempDir);
+    const normalizedSettings = normalizeFormatSettings(formatSettings);
+    const settingsPaths = await this.prepareLatexindentSettings(
+      tempDir,
+      normalizedSettings
+    );
+    if (!settingsPaths) {
+      return { ok: false, error: "latexindent設定が読み込めません。" };
+    }
+    const baseName = path.basename(relativePath, path.extname(relativePath)) || "document";
+    const tempName = `${baseName}-${Date.now()}-${Math.random().toString(16).slice(2)}.tex`;
+    const tempPath = path.join(tempDir, tempName);
+    await fsp.writeFile(tempPath, content ?? "", "utf8");
+    const env = { ...process.env };
+    env.PATH = this.extendPath(env.PATH);
+    const result = await this.runProcess(
+      latexindentPath,
+      [
+        "-m",
+        "-w",
+        "-c",
+        tempDir,
+        `-l=${settingsPaths.basePath},${settingsPaths.overridePath}`,
+        tempPath,
+      ],
+      rootPath,
+      env
+    ).catch((error) => ({ output: error?.message ?? String(error), status: 1 }));
+    let formatted = null;
+    if (result.status === 0) {
+      formatted = await fsp.readFile(tempPath, "utf8").catch(() => null);
+    }
+    const backupBase = path.join(tempDir, path.basename(tempPath, path.extname(tempPath)));
+    await safeUnlink(tempPath);
+    await safeUnlink(`${backupBase}.bak`);
+    await safeUnlink(`${backupBase}.bak0`);
+    await safeUnlink(settingsPaths.overridePath);
+    await safeUnlink(path.join(tempDir, "indent.log"));
+    await safeUnlink(path.join(rootPath, "indent.log"));
+    if (result.status === 0 && formatted !== null) {
+      return { ok: true, content: formatted, formatted: formatted !== content };
+    }
+    const message = (result.output ?? "").trim();
+    return { ok: false, error: message || "latexindentに失敗しました。" };
   }
 
-  async formatFile(rootPath, relativePath) {
+  async formatFile(rootPath, relativePath, formatSettings) {
     if (!rootPath || !relativePath) {
       return { ok: false, error: "format target missing" };
     }
     const absPath = path.join(rootPath, relativePath);
     const content = await fsp.readFile(absPath, "utf8");
-    const result = await this.formatContent(rootPath, relativePath, content);
+    const result = await this.formatContent(
+      rootPath,
+      relativePath,
+      content,
+      formatSettings
+    );
     if (result.ok && typeof result.content === "string" && result.content !== content) {
       await fsp.writeFile(absPath, result.content, "utf8");
     }

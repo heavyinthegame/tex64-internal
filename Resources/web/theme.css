@@ -1067,6 +1067,73 @@ math-field.block-math-field::placeholder {
   scrollbar-gutter: stable;
 }
 
+.settings-nav {
+  display: grid;
+  gap: 8px;
+}
+
+.settings-nav-item {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--panel-border);
+  background: var(--panel-strong);
+  text-align: left;
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+}
+
+.settings-nav-item:hover {
+  border-color: var(--accent-soft-strong);
+  background: var(--panel-muted);
+  transform: translateY(-1px);
+}
+
+.settings-nav-item:active {
+  transform: translateY(0);
+}
+
+.settings-nav-title {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.settings-nav-desc {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.settings-pages {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-page-header {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-page-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.settings-back {
+  justify-self: start;
+}
+
 .settings-group {
   display: grid;
   gap: 10px;
@@ -1112,6 +1179,24 @@ math-field.block-math-field::placeholder {
 }
 
 .settings-select {
+  width: 100%;
+  min-width: 0;
+  background: var(--input-bg);
+  color: var(--text);
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 11px;
+}
+
+.settings-inline {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.settings-input {
   width: 100%;
   min-width: 0;
   background: var(--input-bg);
