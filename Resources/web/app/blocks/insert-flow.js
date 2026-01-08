@@ -78,7 +78,7 @@ export const initBlockInsertFlow = (context, deps) => {
         return normalized;
     };
     const applyBlockInsert = (payload) => {
-        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
         const applyPayload = payload !== null && payload !== void 0 ? payload : deps.getPendingBlockApply();
         if (!applyPayload && !deps.getBlockPreviewActive()) {
             deps.updateIssues(1, "プレビューを確認してから確定してください。", "error", [
@@ -166,6 +166,18 @@ export const initBlockInsertFlow = (context, deps) => {
             },
         ]);
         (_k = editor.focus) === null || _k === void 0 ? void 0 : _k.call(editor);
+        if (typeof deps.postToNative === "function") {
+            deps.postToNative({
+                type: "blocks:save",
+                entry: {
+                    file: (_l = activeGroup.currentFilePath) !== null && _l !== void 0 ? _l : null,
+                    snippet,
+                    content: (_m = draft.content) !== null && _m !== void 0 ? _m : null,
+                    mode,
+                    createdAt: new Date().toISOString(),
+                },
+            }, true);
+        }
         deps.setPendingBlockApply(null);
         deps.setCurrentBlockDraft(null);
         deps.resetBlockSession();
@@ -216,7 +228,7 @@ export const initBlockInsertFlow = (context, deps) => {
             : draft.snippet;
         const resolvedDraft = { ...draft, snippet: formattedSnippet };
         if (deps.getIsE2E()) {
-            window.__tex180LastDraft = {
+            window.__tex64LastDraft = {
                 formula: deps.getMathInputValue(),
                 snippet: resolvedDraft.snippet,
                 detectedSnippet: (_g = detectedSnapshot === null || detectedSnapshot === void 0 ? void 0 : detectedSnapshot.snippet) !== null && _g !== void 0 ? _g : null,

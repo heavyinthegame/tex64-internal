@@ -122,6 +122,7 @@ const formatBlockLinesForInsert = (lines, baseIndent, indentUnit) => {
             innerMinIndent = 0;
         }
     }
+    const innerIndent = isEnvPair ? indentUnit : baseIndent ? indentUnit : "";
     return lines.map((line, index) => {
         if (line.trim().length === 0) {
             return line;
@@ -132,7 +133,7 @@ const formatBlockLinesForInsert = (lines, baseIndent, indentUnit) => {
         }
         if (index > firstNonEmpty && index < lastNonEmpty) {
             const stripped = stripIndent(line, innerMinIndent);
-            return prefix + indentUnit + stripped;
+            return prefix + innerIndent + stripped;
         }
         return prefix + line.trimStart();
     });

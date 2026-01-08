@@ -189,7 +189,7 @@ export const initMonacoSetup = (context: AppContext, deps: MonacoSetupDeps) => {
 
       deps.setMonacoApi(monacoWindow.monaco as Record<string, unknown>);
       registerCompletionProvider(monacoWindow.monaco);
-      const themeName = "tex180-deep-slate";
+      const themeName = "tex64-deep-slate";
       const themeColors: Record<string, string> = {
         "editor.background": "#1A1D23",
         "editor.foreground": "#CDD1D9",
@@ -277,9 +277,9 @@ export const initMonacoSetup = (context: AppContext, deps: MonacoSetupDeps) => {
         group.editor = editor;
         if (context.isE2E) {
           if (group.key === "primary") {
-            (window as { __tex180Editor?: unknown }).__tex180Editor = editor;
+            (window as { __tex64Editor?: unknown }).__tex64Editor = editor;
           } else {
-            (window as { __tex180SecondaryEditor?: unknown }).__tex180SecondaryEditor = editor;
+            (window as { __tex64SecondaryEditor?: unknown }).__tex64SecondaryEditor = editor;
           }
         }
         host.addEventListener("compositionstart", () => {

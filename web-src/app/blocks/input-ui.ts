@@ -56,18 +56,20 @@ export const initBlockInputUi = (
     blockFormatOptions,
   } = context.dom;
 
-  type MathInsertMode = "inline" | "display" | "none";
+  type MathInsertMode = "inline" | "display" | "align" | "gather" | "none";
   type MathInlineWrap = "inline-dollar" | "inline-paren";
   type MathDisplayWrap = "display-dollar" | "display-bracket";
   type BlockSettingsPage = "menu" | "insert-format";
 
-  const MATH_INSERT_MODE_KEY = "tex180.math-insert-mode";
-  const MATH_INSERT_INLINE_KEY = "tex180.math-insert-inline-wrap";
-  const MATH_INSERT_DISPLAY_KEY = "tex180.math-insert-display-wrap";
-  const MATH_INSERT_LEGACY_KEY = "tex180.math-insert-format";
+  const MATH_INSERT_MODE_KEY = "tex64.math-insert-mode";
+  const MATH_INSERT_INLINE_KEY = "tex64.math-insert-inline-wrap";
+  const MATH_INSERT_DISPLAY_KEY = "tex64.math-insert-display-wrap";
+  const MATH_INSERT_LEGACY_KEY = "tex64.math-insert-format";
   const MATH_INSERT_MODES: Array<{ value: MathInsertMode; label: string }> = [
     { value: "inline", label: "インライン" },
     { value: "display", label: "別行" },
+    { value: "align", label: "align*" },
+    { value: "gather", label: "gather*" },
     { value: "none", label: "囲まない" },
   ];
 
@@ -426,7 +428,7 @@ export const initBlockInputUi = (
     if (trimmed.startsWith("\\begin{")) {
       return trimmed;
     }
-    return ["\\\\begin{tabular}{|c|}", trimmed, "\\\\end{tabular}", ""].join("\n");
+    return ["\\begin{tabular}{|c|}", trimmed, "\\end{tabular}", ""].join("\n");
   };
 
   const buildMathSnippet = (formula: string) => {
@@ -467,18 +469,22 @@ export const initBlockInputUi = (
     }
 
     switch (mathInsertMode) {
-      case "none":
-        return trimmed;
       case "inline":
         if (mathInlineWrap === "inline-paren") {
-          return ["\\\\(", trimmed, "\\\\)"].join("");
+          return ["\\(", trimmed, "\\)"].join("");
         }
         return `$${trimmed}$`;
       case "display":
         if (mathDisplayWrap === "display-dollar") {
           return ["$$", trimmed, "$$", ""].join("\n");
         }
-        return ["\\\\[", trimmed, "\\\\]", ""].join("\n");
+        return ["\\[", trimmed, "\\]", ""].join("\n");
+      case "align":
+        return ["\\begin{align*}", trimmed, "\\end{align*}", ""].join("\n");
+      case "gather":
+        return ["\\begin{gather*}", trimmed, "\\end{gather*}", ""].join("\n");
+      case "none":
+        return trimmed;
       default:
         return `$${trimmed}$`;
     }
@@ -506,13 +512,13 @@ export const initBlockInputUi = (
     const columnSpec = `|${"c|".repeat(cols)}`;
     const rowCells = Array.from({ length: cols }, () => " ").join(" & ");
     const lines: string[] = [];
-    lines.push(`\\\\begin{tabular}{${columnSpec}}`);
+    lines.push(`\\begin{tabular}{${columnSpec}}`);
     for (let row = 0; row < rows; row += 1) {
-      lines.push("\\\\hline");
+      lines.push("\\hline");
       lines.push(`${rowCells} \\\\`);
     }
-    lines.push("\\\\hline");
-    lines.push("\\\\end{tabular}");
+    lines.push("\\hline");
+    lines.push("\\end{tabular}");
     lines.push("");
     return lines.join("\n");
   };
@@ -689,11 +695,11 @@ export const initBlockInputUi = (
       if (!target) {
         return;
       }
-      const nextFormat = target.dataset.format as MathInsertMode | undefined;
+      const nextFormat = target.dataset.format;
       if (!nextFormat) {
         return;
       }
-      setMathInsertMode(nextFormat);
+      setMathInsertMode(nextFormat as MathInsertMode);
       setFormatMenuOpen(false);
     });
   }

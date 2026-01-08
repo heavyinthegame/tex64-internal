@@ -1,6 +1,6 @@
-# AI Agent Implementation Plan for tex180
+# AI Agent Implementation Plan for tex64
 
-This document provides a comprehensive technical specification for integrating an agentic AI assistant into tex180, powered by **Gemini 2.5 Flash-Lite**.
+This document provides a comprehensive technical specification for integrating an agentic AI assistant into tex64, powered by **Gemini 2.5 Flash-Lite**.
 
 ---
 
@@ -27,7 +27,7 @@ Integrate an autonomous AI agent capable of:
 ┌─────────────────────────────────────────────────────────────┐
 │                      Renderer Process                        │
 │  ┌───────────────┐    ┌────────────────────────────────┐    │
-│  │  AI Chat UI   │◄──►│  IPC Bridge (tex180:agent:*)   │    │
+│  │  AI Chat UI   │◄──►│  IPC Bridge (tex64:agent:*)   │    │
 │  │  (Sidebar)    │    └────────────────────────────────┘    │
 │  └───────────────┘                    ▲                      │
 └───────────────────────────────────────│──────────────────────┘
@@ -43,7 +43,7 @@ Integrate an autonomous AI agent capable of:
 │  │         │                │                               │ │
 │  │         ▼                ▼                               │ │
 │  │  ┌─────────────────────────────────────────────────────┐ │ │
-│  │  │              Existing tex180 Services               │ │ │
+│  │  │              Existing tex64 Services               │ │ │
 │  │  │  WorkspaceManager │ BuildService │ FormatterService │ │ │
 │  │  └─────────────────────────────────────────────────────┘ │ │
 │  └─────────────────────────────────────────────────────────┘ │
@@ -127,7 +127,7 @@ async function runAgentLoop(userMessage, conversationHistory) {
 ### 3.2 System Prompt
 
 ```markdown
-You are an AI assistant integrated into tex180, a LaTeX IDE for macOS.
+You are an AI assistant integrated into tex64, a LaTeX IDE for macOS.
 You help the user write, edit, and build LaTeX documents.
 
 ## Capabilities
@@ -341,7 +341,7 @@ const TOOL_DEFINITIONS = [
 
 ### 4.2 Tool Implementations
 
-Each tool wraps existing tex180 services:
+Each tool wraps existing tex64 services:
 
 ```javascript
 async function executeToolCall(toolCall) {
@@ -495,7 +495,7 @@ ipcMain.handle('agent:clear', async () => {
 ### 6.2 Preload Exposure (`preload.cjs` additions)
 
 ```javascript
-contextBridge.exposeInMainWorld('tex180Agent', {
+contextBridge.exposeInMainWorld('tex64Agent', {
   init: (apiKey) => ipcRenderer.invoke('agent:init', { apiKey }),
   chat: (message) => ipcRenderer.invoke('agent:chat', { message }),
   cancel: () => ipcRenderer.invoke('agent:cancel'),

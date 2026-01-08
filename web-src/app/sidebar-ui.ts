@@ -29,7 +29,7 @@ export const initSidebarVisibility = (
     "project",
   ];
   let sidebarVisibleTabs = new Set<TabKey>(primarySidebarTabs);
-  const sidebarVisibilityKey = "tex180.sidebar.primaryTabs";
+  const sidebarVisibilityKey = "tex64.sidebar.primaryTabs";
 
   const saveSidebarVisibility = () => {
     localStorage.setItem(sidebarVisibilityKey, JSON.stringify(Array.from(sidebarVisibleTabs)));

@@ -1,13 +1,15 @@
 import { reconstructionBlock } from "./context.js";
 export const initBlockInputUi = (context, deps) => {
     const { blockToggleButtons, blockForms, blockTableRows, blockTableCols, blockTableGrid, blockTableRaw, blockTableRawInput, blockSettingsButton, blockSettingsModal, blockSettingsClose, blockSettingsBack, blockSettingsPages, blockSettingsMenuItems, blockSettingsInlineOptions, blockSettingsDisplayOptions, blockFormatButton, blockFormatMenu, blockFormatOptions, } = context.dom;
-    const MATH_INSERT_MODE_KEY = "tex180.math-insert-mode";
-    const MATH_INSERT_INLINE_KEY = "tex180.math-insert-inline-wrap";
-    const MATH_INSERT_DISPLAY_KEY = "tex180.math-insert-display-wrap";
-    const MATH_INSERT_LEGACY_KEY = "tex180.math-insert-format";
+    const MATH_INSERT_MODE_KEY = "tex64.math-insert-mode";
+    const MATH_INSERT_INLINE_KEY = "tex64.math-insert-inline-wrap";
+    const MATH_INSERT_DISPLAY_KEY = "tex64.math-insert-display-wrap";
+    const MATH_INSERT_LEGACY_KEY = "tex64.math-insert-format";
     const MATH_INSERT_MODES = [
         { value: "inline", label: "インライン" },
         { value: "display", label: "別行" },
+        { value: "align", label: "align*" },
+        { value: "gather", label: "gather*" },
         { value: "none", label: "囲まない" },
     ];
     let activeBlockType = "math";
@@ -320,7 +322,7 @@ export const initBlockInputUi = (context, deps) => {
         if (trimmed.startsWith("\\begin{")) {
             return trimmed;
         }
-        return ["\\\\begin{tabular}{|c|}", trimmed, "\\\\end{tabular}", ""].join("\n");
+        return ["\\begin{tabular}{|c|}", trimmed, "\\end{tabular}", ""].join("\n");
     };
     const buildMathSnippet = (formula) => {
         const context = deps.getActiveBlockContext();
@@ -355,18 +357,22 @@ export const initBlockInputUi = (context, deps) => {
             return trimmed;
         }
         switch (mathInsertMode) {
-            case "none":
-                return trimmed;
             case "inline":
                 if (mathInlineWrap === "inline-paren") {
-                    return ["\\\\(", trimmed, "\\\\)"].join("");
+                    return ["\\(", trimmed, "\\)"].join("");
                 }
                 return `$${trimmed}$`;
             case "display":
                 if (mathDisplayWrap === "display-dollar") {
                     return ["$$", trimmed, "$$", ""].join("\n");
                 }
-                return ["\\\\[", trimmed, "\\\\]", ""].join("\n");
+                return ["\\[", trimmed, "\\]", ""].join("\n");
+            case "align":
+                return ["\\begin{align*}", trimmed, "\\end{align*}", ""].join("\n");
+            case "gather":
+                return ["\\begin{gather*}", trimmed, "\\end{gather*}", ""].join("\n");
+            case "none":
+                return trimmed;
             default:
                 return `$${trimmed}$`;
         }
@@ -390,13 +396,13 @@ export const initBlockInputUi = (context, deps) => {
         const columnSpec = `|${"c|".repeat(cols)}`;
         const rowCells = Array.from({ length: cols }, () => " ").join(" & ");
         const lines = [];
-        lines.push(`\\\\begin{tabular}{${columnSpec}}`);
+        lines.push(`\\begin{tabular}{${columnSpec}}`);
         for (let row = 0; row < rows; row += 1) {
-            lines.push("\\\\hline");
+            lines.push("\\hline");
             lines.push(`${rowCells} \\\\`);
         }
-        lines.push("\\\\hline");
-        lines.push("\\\\end{tabular}");
+        lines.push("\\hline");
+        lines.push("\\end{tabular}");
         lines.push("");
         return lines.join("\n");
     };

@@ -1,8 +1,8 @@
 import { DEFAULT_ENV_REGISTRY, getEnvBaseName, normalizeEnvName, } from "./env-registry.js";
 export const initEnvRegistry = (context, deps) => {
     const { envRegistryInput, envRegistryKind, envRegistryAdd, envRegistryHint, envRegistryMathList, envRegistryTableList, } = context.dom;
-    const CUSTOM_ENV_STORAGE_KEY = "tex180.custom-env-registry";
-    const DISABLED_ENV_STORAGE_KEY = "tex180.disabled-env-registry";
+    const CUSTOM_ENV_STORAGE_KEY = "tex64.custom-env-registry";
+    const DISABLED_ENV_STORAGE_KEY = "tex64.disabled-env-registry";
     const readEnvRegistryStorage = (baseKey) => {
         if (typeof localStorage === "undefined") {
             return null;
@@ -209,10 +209,10 @@ export const initEnvRegistry = (context, deps) => {
         handleEnvRegistryUpdate(false);
     };
     loadEnvRegistryState();
-    window.__tex180SetCustomEnvRegistry = setCustomEnvRegistry;
+    window.__tex64SetCustomEnvRegistry = setCustomEnvRegistry;
     window
-        .__tex180ClearCustomEnvRegistry = clearCustomEnvRegistry;
-    window.__tex180GetEnvRegistry = () => ({
+        .__tex64ClearCustomEnvRegistry = clearCustomEnvRegistry;
+    window.__tex64GetEnvRegistry = () => ({
         math: Array.from(mathEnvNames),
         table: Array.from(tableEnvNames),
         discouraged: Array.from(discouragedEnvNames),

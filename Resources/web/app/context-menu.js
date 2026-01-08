@@ -84,6 +84,18 @@ export const initContextMenu = (context) => {
             event.preventDefault();
             event.stopPropagation();
         });
+        contextMenu.addEventListener("click", (event) => {
+            if (!menuOpen) {
+                return;
+            }
+            const target = event.target;
+            if (contextMenuPanel instanceof HTMLElement && target instanceof Node) {
+                if (contextMenuPanel.contains(target)) {
+                    return;
+                }
+            }
+            close();
+        });
     }
     document.addEventListener("click", () => {
         if (menuOpen) {

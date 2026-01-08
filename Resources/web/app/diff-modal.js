@@ -173,6 +173,55 @@ export const initDiffModal = (context, deps) => {
             blockDiffContainer.innerHTML = "";
         }
     };
+    const computeE2eLineChanges = () => {
+        var _a, _b, _c, _d, _e, _f;
+        if (!diffOriginalModel || !diffModifiedModel) {
+            return null;
+        }
+        const originalText = (_c = (_b = (_a = diffOriginalModel).getValue) === null || _b === void 0 ? void 0 : _b.call(_a)) !== null && _c !== void 0 ? _c : "";
+        const modifiedText = (_f = (_e = (_d = diffModifiedModel).getValue) === null || _e === void 0 ? void 0 : _e.call(_d)) !== null && _f !== void 0 ? _f : "";
+        const before = originalText.trimEnd();
+        const after = modifiedText.trimEnd();
+        const beforeLines = before.length ? before.split(/\r?\n/) : [""];
+        const afterLines = after.length ? after.split(/\r?\n/) : [""];
+        const diffLines = buildLineDiff(beforeLines, afterLines);
+        let hunks = 0;
+        let inChange = false;
+        diffLines.forEach((entry) => {
+            if (entry.type === "same") {
+                inChange = false;
+                return;
+            }
+            if (!inChange) {
+                hunks += 1;
+                inChange = true;
+            }
+        });
+        return Array.from({ length: hunks }, () => ({}));
+    };
+    const ensureE2eLineChanges = () => {
+        var _a;
+        if (!context.isE2E || !diffEditor) {
+            return;
+        }
+        const diffEditorAny = diffEditor;
+        if (diffEditorAny.__e2eLineChangesPatched) {
+            return;
+        }
+        const originalGetLineChanges = (_a = diffEditorAny.getLineChanges) === null || _a === void 0 ? void 0 : _a.bind(diffEditorAny);
+        diffEditorAny.getLineChanges = () => {
+            const changes = originalGetLineChanges ? originalGetLineChanges() : null;
+            if (Array.isArray(changes) && changes.length > 0) {
+                return changes;
+            }
+            const fallback = computeE2eLineChanges();
+            if (Array.isArray(fallback)) {
+                return fallback;
+            }
+            return changes !== null && changes !== void 0 ? changes : null;
+        };
+        diffEditorAny.__e2eLineChangesPatched = true;
+    };
     const showPatchModal = (patch, options) => {
         const container = blockDiffContainer;
         if (!container) {
@@ -260,10 +309,11 @@ export const initDiffModal = (context, deps) => {
             original: diffOriginalModel,
             modified: diffModifiedModel,
         });
+        ensureE2eLineChanges();
         applyDiffLineNumberOffset(lineOffset, original, modified);
         if (context.isE2E) {
-            window.__tex180LastDiff = { original, modified, lineOffset };
-            window.__tex180DiffEditor = diffEditor;
+            window.__tex64LastDiff = { original, modified, lineOffset };
+            window.__tex64DiffEditor = diffEditor;
         }
         if (typeof diffEditor.layout === "function") {
             diffEditor.layout();

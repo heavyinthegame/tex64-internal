@@ -78,12 +78,12 @@ export const initSettingsUi = (
   let autoSynctexOnBuildEnabled = true;
   let pdfViewerMode: "window" | "tab" = "window";
 
-  const compileEngineKey = "tex180.compileEngine";
-  const editorAutoSynctexOnBuildKey = "tex180.editor.autoSynctexOnBuild";
-  const editorAutoSynctexOnPdfOpenKey = "tex180.editor.autoSynctexOnPdfOpen";
-  const editorPdfViewerModeKey = "tex180.editor.pdfViewerMode";
-  const editorAlignEnvKey = "tex180.editor.alignEnv";
-  const editorFormatSettingsKey = "tex180.editor.formatSettings";
+  const compileEngineKey = "tex64.compileEngine";
+  const editorAutoSynctexOnBuildKey = "tex64.editor.autoSynctexOnBuild";
+  const editorAutoSynctexOnPdfOpenKey = "tex64.editor.autoSynctexOnPdfOpen";
+  const editorPdfViewerModeKey = "tex64.editor.pdfViewerMode";
+  const editorAlignEnvKey = "tex64.editor.alignEnv";
+  const editorFormatSettingsKey = "tex64.editor.formatSettings";
 
   const updateEngineUI = () => {
     if (!(settingsCompileEngineSelect instanceof HTMLSelectElement)) {
@@ -385,7 +385,7 @@ export const initSettingsUi = (
     }
     const workspaceRootKey = deps.getWorkspaceRootKey();
     if (workspaceRootKey) {
-      const legacyKey = `tex180.project.alignEnv.${workspaceRootKey}`;
+      const legacyKey = `tex64.project.alignEnv.${workspaceRootKey}`;
       const legacy = localStorage.getItem(legacyKey);
       if (legacy !== null) {
         editorAlignEnvEnabled = legacy !== "false";

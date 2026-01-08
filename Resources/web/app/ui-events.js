@@ -1,15 +1,9 @@
 export const initUiEvents = (context, deps) => {
-    const { tabs, editorHost, editorHostSecondary, diffModalSubmit, diffModalCancel, saveFileButton, issuesBar, } = context.dom;
+    const { tabs, editorHost, editorHostSecondary, diffModalSubmit, diffModalCancel, saveFileButton, } = context.dom;
     const handleSave = () => {
         deps.saveCurrentFile().catch((message) => {
             deps.updateIssues(1, message, "error", [{ severity: "error", message }]);
         });
-    };
-    const handleIssuesFocus = () => {
-        if (deps.getCurrentIssues().length === 0) {
-            return;
-        }
-        deps.setActiveTab("issues");
     };
     const setup = () => {
         tabs.forEach((tab) => {
@@ -67,17 +61,6 @@ export const initUiEvents = (context, deps) => {
                 handleSave();
             }
         });
-        if (issuesBar instanceof HTMLElement) {
-            issuesBar.addEventListener("click", () => {
-                handleIssuesFocus();
-            });
-            issuesBar.addEventListener("keydown", (event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    handleIssuesFocus();
-                }
-            });
-        }
     };
     return { setup };
 };

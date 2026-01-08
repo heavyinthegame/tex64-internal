@@ -169,11 +169,11 @@ window.addEventListener("DOMContentLoaded", () => {
     let lastBuildMainFile = null;
     if (isE2E) {
         window
-            .__tex180SetLastBuildMainFile = (path) => {
+            .__tex64SetLastBuildMainFile = (path) => {
             lastBuildMainFile = typeof path === "string" ? path : null;
         };
     }
-    const ENABLE_TABLE_BLOCKS = false;
+    const ENABLE_TABLE_BLOCKS = true;
     let blockPreviewActive = false;
     let activeBlockOriginalSnippet = null;
     let activeBlockEditMode = "none";
@@ -205,7 +205,6 @@ window.addEventListener("DOMContentLoaded", () => {
             render: (group) => editorTabsUi.render(group),
         },
         buildOps: {
-            updateBuildTarget: () => buildOps.updateBuildTarget(),
             updateSynctexButtonState: () => buildOps.updateSynctexButtonState(),
             handleSaveFormatError: (error) => buildOps.handleSaveFormatError(error),
         },
@@ -233,11 +232,11 @@ window.addEventListener("DOMContentLoaded", () => {
         },
     });
     if (isE2E) {
-        window.__tex180SetMathInputFallback = (value) => {
+        window.__tex64SetMathInputFallback = (value) => {
             blockInputApi.setMathInputFallback(value);
         };
-        window.__tex180GetMathInputFallback = () => blockInputApi.getMathInputFallback();
-        window.__tex180GetMathInputValue =
+        window.__tex64GetMathInputFallback = () => blockInputApi.getMathInputFallback();
+        window.__tex64GetMathInputValue =
             () => blockInputApi.getMathInputValue();
     }
     const mathKeyboardApi = initMathKeyboard(appContext, {
@@ -298,6 +297,7 @@ window.addEventListener("DOMContentLoaded", () => {
         requestFormatCurrentFile: (source) => {
             buildOps.requestFormatCurrentFile(source);
         },
+        postToNative: (payload, silent) => postToNative(payload, silent),
         getIsE2E: () => isE2E,
         getMathInputValue: blockInputApi.getMathInputValue,
         resetBlockSession: () => resetBlockSession(),
@@ -383,6 +383,7 @@ window.addEventListener("DOMContentLoaded", () => {
         getEditorGroups: () => editorSession.getEditorGroups(),
         renderEditorTabs: (group) => editorTabsUi.render(group),
         requestOpenFile: editorSession.requestOpenFile,
+        getSplitViewEnabled: () => editorSession.getSplitViewEnabled(),
         settings: {
             getPdfViewerMode: settingsUi.getPdfViewerMode,
             getAutoSynctexOnBuildEnabled: settingsUi.getAutoSynctexOnBuildEnabled,
@@ -502,7 +503,6 @@ window.addEventListener("DOMContentLoaded", () => {
     searchUi.render();
     gitOps.reset();
     rootSelectorUi.render();
-    buildOps.updateBuildTarget();
     buildOps.updateSynctexButtonState();
     settingsUi.loadStartupSettings();
     updateIssues(0, "ビルド結果はここに要約します。", "info", []);

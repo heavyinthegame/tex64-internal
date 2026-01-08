@@ -33,7 +33,7 @@ class PDFWindowManager {
     if (!this.window || this.window.isDestroyed()) {
       return;
     }
-    this.window.webContents.send("tex180:pdf-message", { type, payload });
+    this.window.webContents.send("tex64:pdf-message", { type, payload });
   }
 
   markReady() {

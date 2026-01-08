@@ -43,7 +43,6 @@ type WorkspaceControllerDeps = {
     render: () => void;
   };
   buildOps: {
-    updateBuildTarget: () => void;
     updateSynctexButtonState: () => void;
   };
   settingsUi: {
@@ -101,9 +100,6 @@ export const initWorkspaceController = (
   deps: WorkspaceControllerDeps
 ): WorkspaceControllerApi => {
   const {
-    issuesCount,
-    issuesHint,
-    issuesBar,
     issuesTab,
     workspaceLabel,
     settingsWorkspace,
@@ -138,9 +134,6 @@ export const initWorkspaceController = (
   };
 
   const setIssuesStatus = (status: IssuesStatus) => {
-    if (issuesBar instanceof HTMLElement) {
-      issuesBar.dataset.status = status;
-    }
     if (issuesTab instanceof HTMLElement) {
       issuesTab.dataset.status = status;
     }
@@ -153,8 +146,6 @@ export const initWorkspaceController = (
     issues: IssueItem[]
   ) => {
     currentIssues = issues;
-    setText(issuesCount, String(count));
-    setText(issuesHint, summary);
     setIssuesStatus(status);
     deps.issuesUi.render(issues);
     if (issuesTab instanceof HTMLElement) {
@@ -190,7 +181,6 @@ export const initWorkspaceController = (
       payload.rootSource === "manual" || payload.rootSource === "auto"
         ? payload.rootSource
         : "auto";
-    deps.buildOps.updateBuildTarget();
     deps.buildOps.updateSynctexButtonState();
     const rootChanged = Boolean(previousRoot && previousRoot !== payload.rootPath);
     if (rootChanged) {
@@ -203,7 +193,6 @@ export const initWorkspaceController = (
     deps.settingsUi.loadWorkspaceSettings();
     deps.envRegistry.reload(false);
     deps.rootSelectorUi.render();
-    deps.buildOps.updateBuildTarget();
     deps.buildOps.updateSynctexButtonState();
     deps.editorSession.requestInitialOpen();
   };

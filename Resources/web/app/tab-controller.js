@@ -1,12 +1,7 @@
 import { tabConfig } from "./config.js";
 export const initTabController = (context, deps) => {
-    const { tabs, issuesBar, sidebarPanels, miniOutline, editorTitle, editorDesc, editorHint, } = context.dom;
+    const { tabs, sidebarPanels, } = context.dom;
     let activeTab = "files";
-    const setText = (element, text) => {
-        if (element) {
-            element.textContent = text;
-        }
-    };
     const normalizeTabKey = (key) => {
         if (key && key in tabConfig) {
             return key;
@@ -14,7 +9,6 @@ export const initTabController = (context, deps) => {
         return "files";
     };
     const setActiveTab = (tabKey) => {
-        const config = tabConfig[tabKey];
         tabs.forEach((tab) => {
             const isActive = tab.dataset.tab === tabKey;
             tab.classList.toggle("is-active", isActive);
@@ -22,17 +16,12 @@ export const initTabController = (context, deps) => {
         });
         activeTab = tabKey;
         document.body.dataset.activeTab = tabKey;
+        const keepFilesVisible = context.isE2E && tabKey === "blocks";
         sidebarPanels.forEach((panel) => {
-            const isActive = panel.dataset.panel === tabKey;
+            const isActive = panel.dataset.panel === tabKey ||
+                (keepFilesVisible && panel.dataset.panel === "files");
             panel.classList.toggle("is-active", isActive);
         });
-        if (issuesBar instanceof HTMLElement) {
-            issuesBar.setAttribute("aria-expanded", tabKey === "issues" ? "true" : "false");
-        }
-        setText(miniOutline, config.outline);
-        setText(editorTitle, config.title);
-        setText(editorDesc, config.desc);
-        setText(editorHint, config.hint);
         if (tabKey === "files") {
             deps.onFilesTabActive();
         }

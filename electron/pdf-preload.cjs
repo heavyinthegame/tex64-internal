@@ -1,8 +1,8 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
-contextBridge.exposeInMainWorld("tex180Pdf", {
+contextBridge.exposeInMainWorld("tex64Pdf", {
   postMessage: (payload) => {
-    ipcRenderer.send("tex180:pdf", payload);
+    ipcRenderer.send("tex64:pdf", payload);
   },
   onMessage: (handler) => {
     if (typeof handler !== "function") {
@@ -11,9 +11,9 @@ contextBridge.exposeInMainWorld("tex180Pdf", {
     const listener = (_event, message) => {
       handler(message);
     };
-    ipcRenderer.on("tex180:pdf-message", listener);
+    ipcRenderer.on("tex64:pdf-message", listener);
     return () => {
-      ipcRenderer.removeListener("tex180:pdf-message", listener);
+      ipcRenderer.removeListener("tex64:pdf-message", listener);
     };
   },
 });

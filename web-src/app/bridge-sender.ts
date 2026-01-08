@@ -22,7 +22,7 @@ export const initBridgeSender = (deps: BridgeSenderDeps): PostToNative => {
 
   const tryFlush = () => {
     const handler =
-      deps.bridgeWindow.tex180Bridge ?? deps.bridgeWindow.webkit?.messageHandlers?.tex180;
+      deps.bridgeWindow.tex64Bridge ?? deps.bridgeWindow.webkit?.messageHandlers?.tex64;
     if (!handler || typeof handler.postMessage !== "function") {
       return false;
     }
@@ -51,13 +51,13 @@ export const initBridgeSender = (deps: BridgeSenderDeps): PostToNative => {
 
   return (payload, silent = false) => {
     if (deps.isE2E) {
-      const log = (window as { __tex180PostMessages?: unknown }).__tex180PostMessages;
+      const log = (window as { __tex64PostMessages?: unknown }).__tex64PostMessages;
       if (Array.isArray(log)) {
         log.push(payload);
       }
     }
     const handler =
-      deps.bridgeWindow.tex180Bridge ?? deps.bridgeWindow.webkit?.messageHandlers?.tex180;
+      deps.bridgeWindow.tex64Bridge ?? deps.bridgeWindow.webkit?.messageHandlers?.tex64;
     if (!handler || typeof handler.postMessage !== "function") {
       if (deps.isE2E) {
         pending.push({ payload });

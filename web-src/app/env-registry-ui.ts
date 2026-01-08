@@ -33,8 +33,8 @@ export const initEnvRegistry = (
     envRegistryTableList,
   } = context.dom;
 
-  const CUSTOM_ENV_STORAGE_KEY = "tex180.custom-env-registry";
-  const DISABLED_ENV_STORAGE_KEY = "tex180.disabled-env-registry";
+  const CUSTOM_ENV_STORAGE_KEY = "tex64.custom-env-registry";
+  const DISABLED_ENV_STORAGE_KEY = "tex64.disabled-env-registry";
 
   const readEnvRegistryStorage = (baseKey: string) => {
     if (typeof localStorage === "undefined") {
@@ -277,20 +277,20 @@ export const initEnvRegistry = (
 
   (
     window as {
-      __tex180SetCustomEnvRegistry?: (value: unknown) => void;
-      __tex180ClearCustomEnvRegistry?: () => void;
-      __tex180GetEnvRegistry?: () => {
+      __tex64SetCustomEnvRegistry?: (value: unknown) => void;
+      __tex64ClearCustomEnvRegistry?: () => void;
+      __tex64GetEnvRegistry?: () => {
         math: string[];
         table: string[];
         discouraged: string[];
       };
     }
-  ).__tex180SetCustomEnvRegistry = setCustomEnvRegistry;
-  (window as { __tex180ClearCustomEnvRegistry?: () => void })
-    .__tex180ClearCustomEnvRegistry = clearCustomEnvRegistry;
+  ).__tex64SetCustomEnvRegistry = setCustomEnvRegistry;
+  (window as { __tex64ClearCustomEnvRegistry?: () => void })
+    .__tex64ClearCustomEnvRegistry = clearCustomEnvRegistry;
   (
     window as {
-      __tex180GetEnvRegistry?: () => {
+      __tex64GetEnvRegistry?: () => {
         math: string[];
         table: string[];
         discouraged: string[];
@@ -298,7 +298,7 @@ export const initEnvRegistry = (
         disabled: string[];
       };
     }
-  ).__tex180GetEnvRegistry = () => ({
+  ).__tex64GetEnvRegistry = () => ({
     math: Array.from(mathEnvNames),
     table: Array.from(tableEnvNames),
     discouraged: Array.from(discouragedEnvNames),

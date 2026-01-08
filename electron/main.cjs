@@ -11,6 +11,7 @@ const { SynctexService } = require("./services/synctex.cjs");
 const { SearchService } = require("./services/search.cjs");
 const { WorkspaceManager, WorkspaceError } = require("./services/workspace.cjs");
 const { EnvService } = require("./services/env.cjs");
+const { BlocksStore } = require("./services/blocks.cjs");
 
 // Expose require so Playwright's electronApp.evaluate can load Electron APIs in e2e.
 global.require = require;
@@ -18,6 +19,9 @@ global.require = require;
 let mainWindow = null;
 let currentWorkspacePath = null;
 const isE2E = process.env.TEX180_E2E === "1";
+if (isE2E && process.env.TEX180_E2E_USERDATA) {
+  app.setPath("userData", process.env.TEX180_E2E_USERDATA);
+}
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -29,6 +33,7 @@ const searchService = new SearchService();
 const gitService = new GitService();
 const pdfWindowManager = new PDFWindowManager();
 const synctexService = new SynctexService();
+const blocksStore = new BlocksStore();
 let lastBuildPdfPath = null;
 const envService = new EnvService();
 let formatWarningShown = false;
@@ -103,7 +108,7 @@ const createMainWindow = () => {
     minWidth: 960,
     minHeight: 600,
     backgroundColor: "#1c2129",
-    title: "tex180",
+    title: "tex64",
     webPreferences: {
       contextIsolation: !isE2E,
       nodeIntegration: false,
@@ -125,7 +130,7 @@ const sendToRenderer = (type, payload) => {
   if (!mainWindow) {
     return;
   }
-  mainWindow.webContents.send("tex180:message", { type, payload });
+  mainWindow.webContents.send("tex64:message", { type, payload });
 };
 
 const sendBuildState = (state, message) => {
@@ -197,6 +202,9 @@ const updateWorkspaceIfNeeded = async (rootPath, force = false) => {
 };
 
 const requestIndex = (rootPath) => {
+  if (isE2E) {
+    return;
+  }
   indexerService.requestIndex(rootPath, (snapshot) => {
     if (currentWorkspacePath !== rootPath) {
       return;
@@ -276,7 +284,7 @@ app.on("window-all-closed", () => {
   }
 });
 
-ipcMain.on("tex180", (_event, message) => {
+ipcMain.on("tex64", (_event, message) => {
   if (!message || typeof message !== "object") {
     return;
   }
@@ -420,6 +428,10 @@ ipcMain.on("tex180", (_event, message) => {
     handleGitDiff(message.mode, message.hash);
     return;
   }
+  if (type === "blocks:save") {
+    handleBlocksSave(message.entry);
+    return;
+  }
   if (type === "consoleLog") {
     if (message.message) {
       // eslint-disable-next-line no-console
@@ -439,7 +451,7 @@ ipcMain.on("tex180", (_event, message) => {
   }
 });
 
-ipcMain.on("tex180:pdf", (_event, message) => {
+ipcMain.on("tex64:pdf", (_event, message) => {
   if (!message || typeof message !== "object") {
     return;
   }
@@ -1162,10 +1174,16 @@ const handleIndexRequest = () => {
   if (!rootPath) {
     return;
   }
+  if (isE2E) {
+    return;
+  }
   requestIndex(rootPath);
 };
 
 const handleSearch = async (query) => {
+  if (isE2E) {
+    return;
+  }
   const rootPath = ensureWorkspace();
   if (!rootPath) {
     sendToRenderer("updateSearch", {
@@ -1180,6 +1198,9 @@ const handleSearch = async (query) => {
 };
 
 const handleGitStatus = async () => {
+  if (isE2E) {
+    return;
+  }
   const rootPath = ensureWorkspace();
   if (!rootPath) {
     sendToRenderer("updateGit", {
@@ -1217,6 +1238,9 @@ const reportGitAction = (result, fallback) => {
 };
 
 const handleGitInit = async () => {
+  if (isE2E) {
+    return;
+  }
   const rootPath = ensureWorkspace();
   if (!rootPath) {
     sendIssues(1, "ワークスペースが選択されていません。", "error", [
@@ -1231,6 +1255,9 @@ const handleGitInit = async () => {
 };
 
 const handleGitCommit = async (message) => {
+  if (isE2E) {
+    return;
+  }
   const rootPath = ensureWorkspace();
   if (!rootPath) {
     sendIssues(1, "ワークスペースが選択されていません。", "error", [
@@ -1245,6 +1272,9 @@ const handleGitCommit = async (message) => {
 };
 
 const handleGitSetRemote = async (url) => {
+  if (isE2E) {
+    return;
+  }
   const rootPath = ensureWorkspace();
   if (!rootPath) {
     sendIssues(1, "ワークスペースが選択されていません。", "error", [
@@ -1259,6 +1289,9 @@ const handleGitSetRemote = async (url) => {
 };
 
 const handleGitPull = async () => {
+  if (isE2E) {
+    return;
+  }
   const rootPath = ensureWorkspace();
   if (!rootPath) {
     sendIssues(1, "ワークスペースが選択されていません。", "error", [
@@ -1273,6 +1306,9 @@ const handleGitPull = async () => {
 };
 
 const handleGitPush = async () => {
+  if (isE2E) {
+    return;
+  }
   const rootPath = ensureWorkspace();
   if (!rootPath) {
     sendIssues(1, "ワークスペースが選択されていません。", "error", [
@@ -1287,6 +1323,9 @@ const handleGitPush = async () => {
 };
 
 const handleGitRestore = async (hash) => {
+  if (isE2E) {
+    return;
+  }
   const rootPath = ensureWorkspace();
   if (!rootPath) {
     sendIssues(1, "ワークスペースが選択されていません。", "error", [
@@ -1301,6 +1340,9 @@ const handleGitRestore = async (hash) => {
 };
 
 const handleGitDiff = async (mode, hash) => {
+  if (isE2E) {
+    return;
+  }
   const rootPath = ensureWorkspace();
   if (!rootPath) {
     sendToRenderer("updateGitDiff", {
@@ -1322,4 +1364,21 @@ const handleGitDiff = async (mode, hash) => {
     patch: snapshot.patch,
     message: snapshot.message,
   });
+};
+
+const handleBlocksSave = async (entry) => {
+  const rootPath = ensureWorkspace();
+  if (!rootPath) {
+    return;
+  }
+  let blocks = [];
+  try {
+    blocks = await blocksStore.load(rootPath);
+  } catch {
+    blocks = [];
+  }
+  if (entry && typeof entry === "object") {
+    blocks.push(entry);
+  }
+  await blocksStore.save(rootPath, blocks);
 };

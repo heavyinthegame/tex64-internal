@@ -1,19 +1,34 @@
 export const initBuildOpsUi = (context, deps) => {
-    const { buildButton, formatButton, synctexButton, buildTarget, issuesLog, issuesLogContent } = context.dom;
+    const { buildButton, formatButton, synctexButton, issuesLog, issuesLogContent } = context.dom;
     let formatInFlight = false;
     let formatPending = false;
     let formatWarningShown = false;
     let currentBuildLog = null;
-    const setText = (element, text) => {
-        if (element) {
-            element.textContent = text;
+    const resolvePdfTargetGroupKey = (preferredKey, pdfPath) => {
+        if (pdfPath) {
+            const existing = deps
+                .getEditorGroups()
+                .find((group) => group.openTabs.includes(pdfPath));
+            if (existing) {
+                return existing.key;
+            }
         }
-    };
-    const updateBuildTarget = () => {
-        var _a;
-        const activePath = deps.getActiveFilePath();
-        const target = (_a = deps.getRootFilePath()) !== null && _a !== void 0 ? _a : (activePath && activePath.endsWith(".tex") ? activePath : null);
-        setText(buildTarget, target !== null && target !== void 0 ? target : "--");
+        if (!deps.getSplitViewEnabled()) {
+            return preferredKey;
+        }
+        const groups = deps.getEditorGroups();
+        const preferred = groups.find((group) => group.key === preferredKey);
+        if (!preferred) {
+            return preferredKey;
+        }
+        if (preferred.openTabs.length === 0) {
+            return preferred.key;
+        }
+        const other = groups.find((group) => group.key !== preferred.key);
+        if (other && other.openTabs.length === 0) {
+            return other.key;
+        }
+        return preferred.key;
     };
     const updateSynctexButtonState = () => {
         if (!(synctexButton instanceof HTMLButtonElement)) {
@@ -92,7 +107,7 @@ export const initBuildOpsUi = (context, deps) => {
             ? deps.getActiveFilePath()
             : undefined);
         deps.setLastBuildMainFile(mainFile !== null && mainFile !== void 0 ? mainFile : null);
-        const engine = localStorage.getItem("tex180.compileEngine") || "lualatex";
+        const engine = localStorage.getItem("tex64.compileEngine") || "lualatex";
         const payload = { type: "build" };
         if (mainFile) {
             payload.mainFile = mainFile;
@@ -186,26 +201,27 @@ export const initBuildOpsUi = (context, deps) => {
         }
     };
     const handleSynctexForwardResult = (payload) => {
-        var _a, _b, _c, _d;
+        var _a, _b, _c, _d, _e;
         if (!payload) {
             return;
         }
         if (payload.ok) {
             if (deps.settings.getPdfViewerMode() === "tab" && typeof payload.page === "number") {
-                const activeGroup = deps.getActiveGroup();
-                if (payload.pdfPath && activeGroup.viewer.getViewerMode() !== "pdf") {
-                    deps.requestOpenFile(payload.pdfPath, deps.getActiveEditorGroupKey());
+                const targetKey = resolvePdfTargetGroupKey(deps.getActiveEditorGroupKey(), payload.pdfPath);
+                const targetGroup = (_a = deps.getEditorGroups().find((group) => group.key === targetKey)) !== null && _a !== void 0 ? _a : deps.getActiveGroup();
+                if (payload.pdfPath && targetGroup.viewer.getViewerMode() !== "pdf") {
+                    deps.requestOpenFile(payload.pdfPath, targetKey);
                 }
-                activeGroup.viewer.syncPdf({
+                targetGroup.viewer.syncPdf({
                     page: payload.page,
-                    x: (_a = payload.x) !== null && _a !== void 0 ? _a : 0,
-                    y: (_b = payload.y) !== null && _b !== void 0 ? _b : 0,
+                    x: (_b = payload.x) !== null && _b !== void 0 ? _b : 0,
+                    y: (_c = payload.y) !== null && _c !== void 0 ? _c : 0,
                 });
             }
             return;
         }
-        deps.updateIssues(1, (_c = payload.error) !== null && _c !== void 0 ? _c : "SyncTeX に失敗しました。", "error", [
-            { severity: "error", message: (_d = payload.error) !== null && _d !== void 0 ? _d : "SyncTeX に失敗しました。" },
+        deps.updateIssues(1, (_d = payload.error) !== null && _d !== void 0 ? _d : "SyncTeX に失敗しました。", "error", [
+            { severity: "error", message: (_e = payload.error) !== null && _e !== void 0 ? _e : "SyncTeX に失敗しました。" },
         ]);
     };
     const setupActionButtons = () => {
@@ -240,7 +256,6 @@ export const initBuildOpsUi = (context, deps) => {
         }
     };
     return {
-        updateBuildTarget,
         updateSynctexButtonState,
         setBuildState,
         startBuild,

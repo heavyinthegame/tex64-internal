@@ -65,6 +65,7 @@ type BuildOpsDeps = {
     groupKey: EditorGroupKey,
     force?: boolean
   ) => boolean;
+  getSplitViewEnabled: () => boolean;
   settings: {
     getPdfViewerMode: () => "window" | "tab";
     getAutoSynctexOnBuildEnabled: () => boolean;
@@ -73,7 +74,6 @@ type BuildOpsDeps = {
 };
 
 export type BuildOpsApi = {
-  updateBuildTarget: () => void;
   updateSynctexButtonState: () => void;
   setBuildState: (state: BuildState, message?: string) => void;
   startBuild: () => void;
@@ -106,26 +106,41 @@ export const initBuildOpsUi = (
   context: AppContext,
   deps: BuildOpsDeps
 ): BuildOpsApi => {
-  const { buildButton, formatButton, synctexButton, buildTarget, issuesLog, issuesLogContent } =
-    context.dom;
+  const { buildButton, formatButton, synctexButton, issuesLog, issuesLogContent } = context.dom;
 
   let formatInFlight = false;
   let formatPending = false;
   let formatWarningShown = false;
   let currentBuildLog: string | null = null;
 
-  const setText = (element: HTMLElement | null, text: string) => {
-    if (element) {
-      element.textContent = text;
+  const resolvePdfTargetGroupKey = (
+    preferredKey: EditorGroupKey,
+    pdfPath?: string | null
+  ): EditorGroupKey => {
+    if (pdfPath) {
+      const existing = deps
+        .getEditorGroups()
+        .find((group) => group.openTabs.includes(pdfPath));
+      if (existing) {
+        return existing.key;
+      }
     }
-  };
-
-  const updateBuildTarget = () => {
-    const activePath = deps.getActiveFilePath();
-    const target =
-      deps.getRootFilePath() ??
-      (activePath && activePath.endsWith(".tex") ? activePath : null);
-    setText(buildTarget, target ?? "--");
+    if (!deps.getSplitViewEnabled()) {
+      return preferredKey;
+    }
+    const groups = deps.getEditorGroups();
+    const preferred = groups.find((group) => group.key === preferredKey);
+    if (!preferred) {
+      return preferredKey;
+    }
+    if (preferred.openTabs.length === 0) {
+      return preferred.key;
+    }
+    const other = groups.find((group) => group.key !== preferred.key);
+    if (other && other.openTabs.length === 0) {
+      return other.key;
+    }
+    return preferred.key;
   };
 
   const updateSynctexButtonState = () => {
@@ -219,7 +234,7 @@ export const initBuildOpsUi = (
 
     deps.setLastBuildMainFile(mainFile ?? null);
 
-    const engine = localStorage.getItem("tex180.compileEngine") || "lualatex";
+    const engine = localStorage.getItem("tex64.compileEngine") || "lualatex";
 
     const payload: {
       type: string;
@@ -342,11 +357,17 @@ export const initBuildOpsUi = (
     }
     if (payload.ok) {
       if (deps.settings.getPdfViewerMode() === "tab" && typeof payload.page === "number") {
-        const activeGroup = deps.getActiveGroup();
-        if (payload.pdfPath && activeGroup.viewer.getViewerMode() !== "pdf") {
-          deps.requestOpenFile(payload.pdfPath, deps.getActiveEditorGroupKey());
+        const targetKey = resolvePdfTargetGroupKey(
+          deps.getActiveEditorGroupKey(),
+          payload.pdfPath
+        );
+        const targetGroup =
+          deps.getEditorGroups().find((group) => group.key === targetKey) ??
+          deps.getActiveGroup();
+        if (payload.pdfPath && targetGroup.viewer.getViewerMode() !== "pdf") {
+          deps.requestOpenFile(payload.pdfPath, targetKey);
         }
-        activeGroup.viewer.syncPdf({
+        targetGroup.viewer.syncPdf({
           page: payload.page,
           x: payload.x ?? 0,
           y: payload.y ?? 0,
@@ -393,7 +414,6 @@ export const initBuildOpsUi = (
   };
 
   return {
-    updateBuildTarget,
     updateSynctexButtonState,
     setBuildState,
     startBuild,

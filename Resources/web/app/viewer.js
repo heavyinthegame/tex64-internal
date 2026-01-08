@@ -15,7 +15,7 @@ export const createViewer = (deps) => {
         if (!target) {
             return false;
         }
-        target.postMessage({ source: "tex180-pdf", payload }, "*");
+        target.postMessage({ source: "tex64-pdf", payload }, "*");
         return true;
     };
     const ensurePdfFrame = () => {
@@ -36,7 +36,7 @@ export const createViewer = (deps) => {
             return;
         }
         const data = event.data;
-        if (!data || data.source !== "tex180-pdf") {
+        if (!data || data.source !== "tex64-pdf") {
             return;
         }
         const payload = data.payload;

@@ -76,7 +76,6 @@ type EditorSessionDeps = {
     render: (group: EditorGroupState) => void;
   };
   buildOps: {
-    updateBuildTarget: () => void;
     updateSynctexButtonState: () => void;
     handleSaveFormatError: (error?: string) => void;
   };
@@ -176,8 +175,6 @@ export const initEditorSession = (
     editorHost,
     editorHostSecondary,
     editorSplitButton,
-    breadcrumbs,
-    miniOutline,
   } = context.dom;
 
   const editorGroupsRootEl =
@@ -259,6 +256,32 @@ export const initEditorSession = (
   const getActiveFilePath = () => getActiveGroup().currentFilePath;
   const getActiveEditor = () => getActiveGroup().editor;
   const isActiveGroup = (group: EditorGroupState) => group.key === activeEditorGroup;
+  const getOtherGroupKey = (key: EditorGroupKey): EditorGroupKey =>
+    key === "primary" ? "secondary" : "primary";
+  const resolveAutoOpenGroupKey = (preferredKey: EditorGroupKey): EditorGroupKey => {
+    if (!splitViewEnabled) {
+      return preferredKey;
+    }
+    const preferred = getEditorGroup(preferredKey);
+    if (preferred.openTabs.length === 0) {
+      return preferredKey;
+    }
+    const otherKey = getOtherGroupKey(preferredKey);
+    const other = getEditorGroup(otherKey);
+    if (other.openTabs.length === 0) {
+      return otherKey;
+    }
+    return preferredKey;
+  };
+  const findGroupKeyByPath = (path: string): EditorGroupKey | null => {
+    const groups = Object.keys(editorGroups) as EditorGroupKey[];
+    for (const key of groups) {
+      if (editorGroups[key].openTabs.includes(path)) {
+        return key;
+      }
+    }
+    return null;
+  };
   const forEachEditorGroup = (handler: (group: EditorGroupState) => void) => {
     (Object.keys(editorGroups) as EditorGroupKey[]).forEach((key) => {
       handler(editorGroups[key]);
@@ -454,25 +477,10 @@ export const initEditorSession = (
   };
 
   const updateBreadcrumbs = () => {
-    if (breadcrumbs instanceof HTMLElement) {
-      const activeGroup = getActiveGroup();
-      const fileLabel = activeGroup.currentFilePath ?? "未選択";
-      const dirtyMark = activeGroup.isDirty ? " ●" : "";
-      breadcrumbs.textContent = `${fileLabel}${dirtyMark}`;
-    }
     deps.editorTabs.render(getActiveGroup());
   };
 
-  const updateMiniOutline = () => {
-    if (!(miniOutline instanceof HTMLElement)) {
-      return;
-    }
-    const activeGroup = getActiveGroup();
-    const fileLabel = activeGroup.currentFilePath
-      ? activeGroup.currentFilePath.split("/").pop()
-      : "未選択";
-    miniOutline.textContent = `ミニアウトライン: ${fileLabel}`;
-  };
+  const updateMiniOutline = () => {};
 
   const setActiveGroup = (
     nextKey: EditorGroupKey,
@@ -491,7 +499,6 @@ export const initEditorSession = (
     updateMiniOutline();
     deps.outline.render();
     deps.fileTree.render();
-    deps.buildOps.updateBuildTarget();
     deps.buildOps.updateSynctexButtonState();
     if (options.focusEditor) {
       const editor = getActiveEditor() as { focus?: () => void };
@@ -765,7 +772,6 @@ export const initEditorSession = (
       group.viewer.showPdfViewer(path, data, mimeType);
     }
     if (isActiveGroup(group)) {
-      deps.buildOps.updateBuildTarget();
       deps.buildOps.updateSynctexButtonState();
       deps.fileTree.setTreeFocus(false);
     }
@@ -793,7 +799,6 @@ export const initEditorSession = (
     }
     group.viewer.showUnsupportedViewer();
     if (isActiveGroup(group)) {
-      deps.buildOps.updateBuildTarget();
       deps.buildOps.updateSynctexButtonState();
       deps.fileTree.setTreeFocus(false);
     }
@@ -892,7 +897,6 @@ export const initEditorSession = (
       deps.fileTree.setTreeFocus(false);
     }
     if (isActiveGroup(group)) {
-      deps.buildOps.updateBuildTarget();
       deps.buildOps.updateSynctexButtonState();
     }
   };
@@ -949,7 +953,11 @@ export const initEditorSession = (
   };
 
   const requestOpenFile = (path: string, groupKey: EditorGroupKey, force = false) => {
-    const group = getEditorGroup(groupKey);
+    const existingGroupKey = !force ? findGroupKeyByPath(path) : null;
+    const resolvedGroupKey = force
+      ? groupKey
+      : existingGroupKey ?? resolveAutoOpenGroupKey(groupKey);
+    const group = getEditorGroup(resolvedGroupKey);
     if (group.currentFilePath === path) {
       return false;
     }
@@ -957,7 +965,7 @@ export const initEditorSession = (
     if (!force) {
       cacheCurrentBuffer(group);
     }
-    const requestEntry = { path, group: groupKey };
+    const requestEntry = { path, group: resolvedGroupKey };
     pendingOpenRequests.push(requestEntry);
     const ok = deps.postToNative({ type: "openFile", path });
     if (!ok) {
@@ -1079,8 +1087,18 @@ export const initEditorSession = (
     mimeType?: string;
   }) => {
     const pendingIndex = pendingOpenRequests.findIndex((entry) => entry.path === payload.path);
-    const targetGroupKey =
-      pendingIndex >= 0 ? pendingOpenRequests.splice(pendingIndex, 1)[0].group : activeEditorGroup;
+    let targetGroupKey: EditorGroupKey =
+      pendingIndex >= 0
+        ? pendingOpenRequests.splice(pendingIndex, 1)[0].group
+        : activeEditorGroup;
+    if (pendingIndex < 0 && payload.path) {
+      const existingGroupKey = findGroupKeyByPath(payload.path);
+      if (existingGroupKey) {
+        targetGroupKey = existingGroupKey;
+      } else {
+        targetGroupKey = resolveAutoOpenGroupKey(targetGroupKey);
+      }
+    }
     const targetGroup = getEditorGroup(targetGroupKey);
     if (payload.error) {
       if (
@@ -1093,6 +1111,26 @@ export const initEditorSession = (
       deps.updateIssues(1, payload.error, "error", [
         { severity: "error", message: payload.error },
       ]);
+      return;
+    }
+    const type = (payload as any).type;
+    if (type === "searchResult") {
+      deps.search.handleSearchUpdate(payload as any);
+      return;
+    }
+    if (type === "env:checkResult") {
+      deps.settings.updateEnvStatus((payload as any).command, (payload as any).available);
+      return;
+    }
+    if (type === "env:installResult") {
+      const { target, success, message } = payload as any;
+      console.log(`Install result for ${target}: ${success} - ${message}`);
+      if (!success) {
+        alert(message);
+      }
+      return;
+    }
+    if (!payload.path) {
       return;
     }
     const path = payload.path;
@@ -1111,24 +1149,6 @@ export const initEditorSession = (
     }
     if (kind === "unsupported") {
       applyUnsupportedFile(targetGroup, path);
-      return;
-    }
-    const type = (payload as any).type;
-
-    if (type === "searchResult") {
-      deps.search.handleSearchUpdate(payload as any);
-      return;
-    }
-    if (type === "env:checkResult") {
-      deps.settings.updateEnvStatus((payload as any).command, (payload as any).available);
-      return;
-    }
-    if (type === "env:installResult") {
-      const { target, success, message } = payload as any;
-      console.log(`Install result for ${target}: ${success} - ${message}`);
-      if (!success) {
-        alert(message);
-      }
       return;
     }
     const content = payload.content ?? "";

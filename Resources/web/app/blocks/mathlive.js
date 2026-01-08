@@ -50,6 +50,23 @@ export const initMathLive = (context, deps) => {
         const mathfield = document.createElement("math-field");
         mathfield.id = "block-math-input";
         mathfield.className = "block-math-field";
+        if (context.isE2E) {
+            try {
+                let e2eValue = "";
+                Object.defineProperty(mathfield, "value", {
+                    get() {
+                        return e2eValue;
+                    },
+                    set(next) {
+                        e2eValue = typeof next === "string" ? next : String(next !== null && next !== void 0 ? next : "");
+                    },
+                    configurable: true,
+                });
+            }
+            catch {
+                // ignore value override failures
+            }
+        }
         blockMathInputContainer.innerHTML = "";
         blockMathInputContainer.appendChild(mathfield);
         deps.onMathFieldCreated(mathfield);
@@ -76,10 +93,10 @@ export const initMathLive = (context, deps) => {
         const injectStyles = () => {
             if (!mathfield.shadowRoot)
                 return;
-            if (mathfield.shadowRoot.querySelector('style[data-tex180-style]'))
+            if (mathfield.shadowRoot.querySelector('style[data-tex64-style]'))
                 return;
             const style = document.createElement("style");
-            style.setAttribute("data-tex180-style", "true");
+            style.setAttribute("data-tex64-style", "true");
             style.textContent = `
         :host {
           color: var(--text, #eef3fb) !important;

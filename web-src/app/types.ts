@@ -91,7 +91,7 @@ export type FormatSettingsPayload = EditorFormatSettings & {
 };
 
 export type WebkitHandler = { postMessage: (message: unknown) => void };
-export type WebkitBridge = { messageHandlers?: { tex180?: WebkitHandler } };
+export type WebkitBridge = { messageHandlers?: { tex64?: WebkitHandler } };
 export type ElectronBridge = {
   postMessage: (message: unknown) => void;
   onMessage?: (handler: (message: { type: string; payload?: unknown }) => void) => void;
@@ -99,15 +99,15 @@ export type ElectronBridge = {
 export type BridgeWindow = Window &
   typeof globalThis & {
     webkit?: WebkitBridge;
-    tex180Bridge?: ElectronBridge;
-    tex180SetBuildState?: (payload: { state: BuildState; message?: string }) => void;
-    tex180UpdateIssues?: (payload: {
+    tex64Bridge?: ElectronBridge;
+    tex64SetBuildState?: (payload: { state: BuildState; message?: string }) => void;
+    tex64UpdateIssues?: (payload: {
       count: number;
       summary: string;
       status?: IssuesStatus;
       issues?: IssueItem[];
     }) => void;
-    tex180UpdateWorkspace?: (payload: {
+    tex64UpdateWorkspace?: (payload: {
       rootName: string;
       rootPath: string;
       files: string[];
@@ -115,7 +115,7 @@ export type BridgeWindow = Window &
       rootFile?: string;
       rootSource?: RootSource;
     }) => void;
-    tex180UpdateIndex?: (payload: {
+    tex64UpdateIndex?: (payload: {
       labels: IndexEntry[];
       references?: IndexEntry[];
       citations: IndexEntry[];
@@ -124,26 +124,26 @@ export type BridgeWindow = Window &
       tables?: IndexEntry[];
       todos?: IndexEntry[];
     }) => void;
-    tex180UpdateSearch?: (payload: { query: string; results: SearchResult[]; message?: string }) => void;
-    tex180UpdateGit?: (payload: GitStatusPayload) => void;
-    tex180UpdateGitDiff?: (payload: GitDiffPayload) => void;
-    tex180UpdateGitActionResult?: (payload: GitActionResultPayload) => void;
-    tex180OpenFileResult?: (payload: { path: string; content?: string; error?: string }) => void;
-    tex180SaveResult?: (payload: {
+    tex64UpdateSearch?: (payload: { query: string; results: SearchResult[]; message?: string }) => void;
+    tex64UpdateGit?: (payload: GitStatusPayload) => void;
+    tex64UpdateGitDiff?: (payload: GitDiffPayload) => void;
+    tex64UpdateGitActionResult?: (payload: GitActionResultPayload) => void;
+    tex64OpenFileResult?: (payload: { path: string; content?: string; error?: string }) => void;
+    tex64SaveResult?: (payload: {
       path: string;
       ok: boolean;
       error?: string;
       content?: string;
       formatError?: string;
     }) => void;
-    tex180FormatResult?: (payload: {
+    tex64FormatResult?: (payload: {
       path: string;
       ok: boolean;
       content?: string;
       error?: string;
       source?: string;
     }) => void;
-    tex180RenameResult?: (payload: {
+    tex64RenameResult?: (payload: {
       oldPath: string;
       newPath: string;
       isDirectory: boolean;

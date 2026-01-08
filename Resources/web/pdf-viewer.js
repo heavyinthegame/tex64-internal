@@ -16,7 +16,7 @@ const createParentBridge = () => {
       return;
     }
     const data = event.data;
-    if (!data || data.source !== "tex180-pdf") {
+    if (!data || data.source !== "tex64-pdf") {
       return;
     }
     handlers.forEach((handler) => {
@@ -29,7 +29,7 @@ const createParentBridge = () => {
   });
   return {
     postMessage: (payload) => {
-      window.parent.postMessage({ source: "tex180-pdf", payload }, "*");
+      window.parent.postMessage({ source: "tex64-pdf", payload }, "*");
     },
     onMessage: (handler) => {
       if (typeof handler !== "function") {
@@ -43,7 +43,7 @@ const createParentBridge = () => {
   };
 };
 
-const resolveBridge = () => window.tex180Pdf || createParentBridge();
+const resolveBridge = () => window.tex64Pdf || createParentBridge();
 
 const initPdfViewer = () => {
   const bridge = resolveBridge();
@@ -107,7 +107,7 @@ const initPdfViewer = () => {
     useOnlyCssZoom: true,
   });
   linkService.setViewer(pdfViewer);
-  window.__tex180PdfViewer = {
+  window.__tex64PdfViewer = {
     pdfViewer,
     state,
   };

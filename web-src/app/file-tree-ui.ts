@@ -85,7 +85,7 @@ export const initFileTreeUi = (
     if (!workspaceRootKey) {
       return null;
     }
-    return `tex180.tree.${workspaceRootKey}`;
+    return `tex64.tree.${workspaceRootKey}`;
   };
 
   const loadOpenState = () => {
@@ -156,18 +156,18 @@ export const initFileTreeUi = (
   };
 
   const normalizeInputPath = (value: string) => {
-    return value.trim().replace(/\\/g, "/").replace(/^\/+/, "");
+    return value.trim().replace(/\\/g, "/");
   };
 
   const validatePath = (value: string, kind: "file" | "folder") => {
     if (!value) {
       return "名前を入力してください。";
     }
+    if (/^[A-Za-z]:\//.test(value) || value.startsWith("/")) {
+      return "絶対パスは使えません。";
+    }
     if (value.includes("..")) {
       return "親ディレクトリを含む名前は使えません。";
-    }
-    if (value.startsWith("/")) {
-      return "絶対パスは使えません。";
     }
     if (kind === "file" && value.endsWith("/")) {
       return "ファイル名に末尾の / は使えません。";
@@ -274,6 +274,9 @@ export const initFileTreeUi = (
     const rawValue = createModalInput.value.trim();
     if (!rawValue) {
       setCreateModalHelp("名前を入力してください。", true);
+      deps.updateIssues(1, "名前を入力してください。", "error", [
+        { severity: "error", message: "名前を入力してください。" },
+      ]);
       return;
     }
     let value = normalizeInputPath(rawValue);
@@ -643,7 +646,7 @@ export const initFileTreeUi = (
     setTreeFocus(true);
   };
 
-  const dragDataType = "application/x-tex180-item";
+  const dragDataType = "application/x-tex64-item";
 
   const setDragData = (event: DragEvent, payload: DragPayload) => {
     if (!event.dataTransfer) {

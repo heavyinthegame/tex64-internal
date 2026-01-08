@@ -1,4 +1,4 @@
-# tex180
+# tex64
 
 Electron ベースの TeX エディタ（開発中）。
 
@@ -22,7 +22,7 @@ Electron ベースの TeX エディタ（開発中）。
 ## 構成
 
 - Electron 殻: `electron/main.cjs` がメイン UI を起動（別ウィンドウのブロック編集は廃止）。
-- Bridge: `electron/preload.cjs` が `window.tex180Bridge` を公開し IPC を中継。
+- Bridge: `electron/preload.cjs` が `window.tex64Bridge` を公開し IPC を中継。
 - Web UI: `Resources/web/index.html` + `Resources/web/main.js` + `Resources/web/app/*.js`（生成物）。
 - PDF ビューア: `Resources/web/pdf-viewer.html` / `Resources/web/pdf-viewer.js` / `Resources/web/pdf-viewer.css`。
 - Monaco: `web-src/main.ts`（エントリ） + `web-src/app/*`。

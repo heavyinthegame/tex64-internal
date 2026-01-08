@@ -5,13 +5,13 @@ const path = require("path");
 
 const IGNORED_DIRECTORIES = new Set([
   ".git",
-  ".tex180",
+  ".tex64",
   ".swiftpm",
   "node_modules",
   "DerivedData",
   "build",
   "Resources",
-  "tex180.xcodeproj",
+  "tex64.xcodeproj",
 ]);
 const HIDDEN_EDITOR_EXTENSIONS = new Set([
   "aux",
@@ -575,7 +575,7 @@ class WorkspaceManager {
     if (!this.rootPath) {
       return null;
     }
-    const settingsPath = path.join(this.rootPath, ".tex180", "settings.json");
+    const settingsPath = path.join(this.rootPath, ".tex64", "settings.json");
     const exists = await fsp.stat(settingsPath).then(() => true).catch(() => false);
     if (!exists) {
       return null;
@@ -588,7 +588,7 @@ class WorkspaceManager {
     if (!this.rootPath) {
       throw new Error(WorkspaceError.invalidPath);
     }
-    const directory = path.join(this.rootPath, ".tex180");
+    const directory = path.join(this.rootPath, ".tex64");
     await ensureDirectory(directory);
     const settingsPath = path.join(directory, "settings.json");
     const payload = JSON.stringify(settings, null, 2);
@@ -599,7 +599,7 @@ class WorkspaceManager {
     if (!this.rootPath) {
       return;
     }
-    const settingsPath = path.join(this.rootPath, ".tex180", "settings.json");
+    const settingsPath = path.join(this.rootPath, ".tex64", "settings.json");
     await fsp.unlink(settingsPath).catch(() => null);
   }
 
@@ -652,7 +652,7 @@ class WorkspaceManager {
     if (!this.rootPath) {
       throw new Error(WorkspaceError.invalidPath);
     }
-    const trashDir = path.join(this.rootPath, ".tex180", ".trash");
+    const trashDir = path.join(this.rootPath, ".tex64", ".trash");
     await ensureDirectory(trashDir);
     const baseName = path.basename(itemPath);
     let attempt = 0;

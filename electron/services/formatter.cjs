@@ -583,7 +583,7 @@ class FormatterService {
     if (!latexindentPath) {
       return { ok: false, error: "latexindentが見つかりません。" };
     }
-    const tempDir = path.join(rootPath, ".tex180", ".format");
+    const tempDir = path.join(rootPath, ".tex64", ".format");
     await ensureDirectory(tempDir);
     const normalizedSettings = normalizeFormatSettings(formatSettings);
     const settingsPaths = await this.prepareLatexindentSettings(

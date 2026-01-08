@@ -62,6 +62,9 @@ type BridgeHandlersDeps = {
     handleBuildLog: (log: string | null) => void;
     handleSynctexForwardResult: (payload: { ok?: boolean; error?: string }) => void;
   };
+  settings?: {
+    updateEnvStatus: (command: string, available: boolean) => void;
+  };
   editorSession: {
     handleOpenFileResult: (payload: {
       path: string;
@@ -89,52 +92,52 @@ type BridgeHandlersDeps = {
 export const initBridgeHandlers = (deps: BridgeHandlersDeps) => {
   const { bridgeWindow } = deps;
 
-  bridgeWindow.tex180SetBuildState = (payload) => {
+  bridgeWindow.tex64SetBuildState = (payload) => {
     deps.build.setBuildState(payload.state, payload.message);
   };
 
-  bridgeWindow.tex180UpdateIssues = (payload) => {
+  bridgeWindow.tex64UpdateIssues = (payload) => {
     const status = payload.status ?? (payload.count > 0 ? "error" : "success");
     deps.updateIssues(payload.count, payload.summary, status, payload.issues ?? []);
   };
 
-  bridgeWindow.tex180UpdateWorkspace = (payload) => {
+  bridgeWindow.tex64UpdateWorkspace = (payload) => {
     deps.handleWorkspaceUpdate(payload);
   };
 
-  bridgeWindow.tex180UpdateIndex = (payload) => {
+  bridgeWindow.tex64UpdateIndex = (payload) => {
     deps.handleIndexUpdate(payload);
   };
 
-  bridgeWindow.tex180UpdateSearch = (payload) => {
+  bridgeWindow.tex64UpdateSearch = (payload) => {
     deps.search.handleSearchUpdate(payload);
   };
 
-  bridgeWindow.tex180UpdateGit = (payload) => {
+  bridgeWindow.tex64UpdateGit = (payload) => {
     deps.git.handleUpdate(payload);
   };
 
-  bridgeWindow.tex180UpdateGitDiff = (payload) => {
+  bridgeWindow.tex64UpdateGitDiff = (payload) => {
     deps.git.handleDiff(payload);
   };
 
-  bridgeWindow.tex180UpdateGitActionResult = (payload) => {
+  bridgeWindow.tex64UpdateGitActionResult = (payload) => {
     deps.git.handleActionResult(payload);
   };
 
-  bridgeWindow.tex180OpenFileResult = (payload) => {
+  bridgeWindow.tex64OpenFileResult = (payload) => {
     deps.editorSession.handleOpenFileResult(payload);
   };
 
-  bridgeWindow.tex180SaveResult = (payload) => {
+  bridgeWindow.tex64SaveResult = (payload) => {
     deps.editorSession.handleSaveResult(payload);
   };
 
-  bridgeWindow.tex180FormatResult = (payload) => {
+  bridgeWindow.tex64FormatResult = (payload) => {
     deps.build.handleFormatResult(payload);
   };
 
-  bridgeWindow.tex180RenameResult = (payload) => {
+  bridgeWindow.tex64RenameResult = (payload) => {
     deps.editorSession.handleRenameResult(payload);
   };
 
@@ -144,13 +147,13 @@ export const initBridgeHandlers = (deps: BridgeHandlersDeps) => {
     }
     switch (message.type) {
       case "setBuildState":
-        bridgeWindow.tex180SetBuildState?.(message.payload as {
+        bridgeWindow.tex64SetBuildState?.(message.payload as {
           state: BuildState;
           message?: string;
         });
         break;
       case "updateIssues":
-        bridgeWindow.tex180UpdateIssues?.(message.payload as {
+        bridgeWindow.tex64UpdateIssues?.(message.payload as {
           count: number;
           summary: string;
           status?: IssuesStatus;
@@ -158,7 +161,7 @@ export const initBridgeHandlers = (deps: BridgeHandlersDeps) => {
         });
         break;
       case "updateWorkspace":
-        bridgeWindow.tex180UpdateWorkspace?.(message.payload as {
+        bridgeWindow.tex64UpdateWorkspace?.(message.payload as {
           rootName: string;
           rootPath: string;
           files: string[];
@@ -168,7 +171,7 @@ export const initBridgeHandlers = (deps: BridgeHandlersDeps) => {
         });
         break;
       case "updateIndex":
-        bridgeWindow.tex180UpdateIndex?.(message.payload as {
+        bridgeWindow.tex64UpdateIndex?.(message.payload as {
           labels: IndexEntry[];
           references?: IndexEntry[];
           citations: IndexEntry[];
@@ -179,32 +182,32 @@ export const initBridgeHandlers = (deps: BridgeHandlersDeps) => {
         });
         break;
       case "updateSearch":
-        bridgeWindow.tex180UpdateSearch?.(message.payload as {
+        bridgeWindow.tex64UpdateSearch?.(message.payload as {
           query: string;
           results: SearchResult[];
           message?: string;
         });
         break;
       case "updateGit":
-        bridgeWindow.tex180UpdateGit?.(message.payload as GitStatusPayload);
+        bridgeWindow.tex64UpdateGit?.(message.payload as GitStatusPayload);
         break;
       case "updateGitDiff":
-        bridgeWindow.tex180UpdateGitDiff?.(message.payload as GitDiffPayload);
+        bridgeWindow.tex64UpdateGitDiff?.(message.payload as GitDiffPayload);
         break;
       case "gitActionResult":
-        bridgeWindow.tex180UpdateGitActionResult?.(
+        bridgeWindow.tex64UpdateGitActionResult?.(
           message.payload as GitActionResultPayload
         );
         break;
       case "openFileResult":
-        bridgeWindow.tex180OpenFileResult?.(message.payload as {
+        bridgeWindow.tex64OpenFileResult?.(message.payload as {
           path: string;
           content?: string;
           error?: string;
         });
         break;
       case "saveResult":
-        bridgeWindow.tex180SaveResult?.(message.payload as {
+        bridgeWindow.tex64SaveResult?.(message.payload as {
           path: string;
           ok: boolean;
           error?: string;
@@ -213,7 +216,7 @@ export const initBridgeHandlers = (deps: BridgeHandlersDeps) => {
         });
         break;
       case "formatResult":
-        bridgeWindow.tex180FormatResult?.(message.payload as {
+        bridgeWindow.tex64FormatResult?.(message.payload as {
           path: string;
           ok: boolean;
           content?: string;
@@ -230,11 +233,17 @@ export const initBridgeHandlers = (deps: BridgeHandlersDeps) => {
         );
         break;
       case "renameResult":
-        bridgeWindow.tex180RenameResult?.(message.payload as {
+        bridgeWindow.tex64RenameResult?.(message.payload as {
           oldPath: string;
           newPath: string;
           isDirectory: boolean;
         });
+        break;
+      case "env:checkResult":
+        deps.settings?.updateEnvStatus(
+          (message.payload as { command?: string }).command ?? "",
+          Boolean((message.payload as { available?: boolean }).available)
+        );
         break;
       case "launcherStatus":
         deps.handleLauncherStatus(message.payload as { isBusy?: boolean; message?: string });
@@ -244,7 +253,7 @@ export const initBridgeHandlers = (deps: BridgeHandlersDeps) => {
     }
   };
 
-  if (bridgeWindow.tex180Bridge?.onMessage) {
-    bridgeWindow.tex180Bridge.onMessage(handleBridgeMessage);
+  if (bridgeWindow.tex64Bridge?.onMessage) {
+    bridgeWindow.tex64Bridge.onMessage(handleBridgeMessage);
   }
 };

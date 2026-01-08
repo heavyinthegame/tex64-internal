@@ -26,7 +26,7 @@ export const createViewer = (deps: ViewerDeps) => {
     if (!target) {
       return false;
     }
-    target.postMessage({ source: "tex180-pdf", payload }, "*");
+    target.postMessage({ source: "tex64-pdf", payload }, "*");
     return true;
   };
 
@@ -49,7 +49,7 @@ export const createViewer = (deps: ViewerDeps) => {
       return;
     }
     const data = event.data as { source?: string; payload?: { type?: string } };
-    if (!data || data.source !== "tex180-pdf") {
+    if (!data || data.source !== "tex64-pdf") {
       return;
     }
     const payload = data.payload;

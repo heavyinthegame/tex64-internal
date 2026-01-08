@@ -1,5 +1,5 @@
 export const initWorkspaceController = (context, deps) => {
-    const { issuesCount, issuesHint, issuesBar, issuesTab, workspaceLabel, settingsWorkspace, } = context.dom;
+    const { issuesTab, workspaceLabel, settingsWorkspace, } = context.dom;
     let currentIssues = [];
     let pendingBuildIssuesFocus = false;
     let indexLabels = [];
@@ -25,17 +25,12 @@ export const initWorkspaceController = (context, deps) => {
         syncWorkspaceLabel();
     };
     const setIssuesStatus = (status) => {
-        if (issuesBar instanceof HTMLElement) {
-            issuesBar.dataset.status = status;
-        }
         if (issuesTab instanceof HTMLElement) {
             issuesTab.dataset.status = status;
         }
     };
     const updateIssues = (count, summary, status, issues) => {
         currentIssues = issues;
-        setText(issuesCount, String(count));
-        setText(issuesHint, summary);
         setIssuesStatus(status);
         deps.issuesUi.render(issues);
         if (issuesTab instanceof HTMLElement) {
@@ -69,7 +64,6 @@ export const initWorkspaceController = (context, deps) => {
             payload.rootSource === "manual" || payload.rootSource === "auto"
                 ? payload.rootSource
                 : "auto";
-        deps.buildOps.updateBuildTarget();
         deps.buildOps.updateSynctexButtonState();
         const rootChanged = Boolean(previousRoot && previousRoot !== payload.rootPath);
         if (rootChanged) {
@@ -82,7 +76,6 @@ export const initWorkspaceController = (context, deps) => {
         deps.settingsUi.loadWorkspaceSettings();
         deps.envRegistry.reload(false);
         deps.rootSelectorUi.render();
-        deps.buildOps.updateBuildTarget();
         deps.buildOps.updateSynctexButtonState();
         deps.editorSession.requestInitialOpen();
     };

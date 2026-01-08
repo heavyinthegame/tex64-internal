@@ -42,6 +42,10 @@ type BlockInsertDeps = {
   updateFallback: (message: string) => void;
   getEditorAlignEnvEnabled: () => boolean;
   requestFormatCurrentFile: (source: string) => void;
+  postToNative?: (
+    payload: { type: string; [key: string]: unknown },
+    silent?: boolean
+  ) => boolean;
   getIsE2E: () => boolean;
   getMathInputValue: () => string;
   resetBlockSession: () => void;
@@ -284,6 +288,21 @@ export const initBlockInsertFlow = (
       },
     ]);
     editor.focus?.();
+    if (typeof deps.postToNative === "function") {
+      deps.postToNative(
+        {
+          type: "blocks:save",
+          entry: {
+            file: activeGroup.currentFilePath ?? null,
+            snippet,
+            content: draft.content ?? null,
+            mode,
+            createdAt: new Date().toISOString(),
+          },
+        },
+        true
+      );
+    }
     deps.setPendingBlockApply(null);
     deps.setCurrentBlockDraft(null);
     deps.resetBlockSession();
@@ -341,12 +360,12 @@ export const initBlockInsertFlow = (
 
     if (deps.getIsE2E()) {
       (window as {
-        __tex180LastDraft?: {
+        __tex64LastDraft?: {
           formula: string;
           snippet: string | null;
           detectedSnippet: string | null;
         };
-      }).__tex180LastDraft = {
+      }).__tex64LastDraft = {
         formula: deps.getMathInputValue(),
         snippet: resolvedDraft.snippet,
         detectedSnippet: detectedSnapshot?.snippet ?? null,

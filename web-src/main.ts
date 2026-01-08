@@ -212,12 +212,12 @@ window.addEventListener("DOMContentLoaded", () => {
   let lastBuildMainFile: string | null = null;
 
   if (isE2E) {
-    (window as { __tex180SetLastBuildMainFile?: (path: string | null) => void })
-      .__tex180SetLastBuildMainFile = (path) => {
+    (window as { __tex64SetLastBuildMainFile?: (path: string | null) => void })
+      .__tex64SetLastBuildMainFile = (path) => {
         lastBuildMainFile = typeof path === "string" ? path : null;
       };
   }
-  const ENABLE_TABLE_BLOCKS = false;
+  const ENABLE_TABLE_BLOCKS = true;
   let blockPreviewActive = false;
   let activeBlockOriginalSnippet: string | null = null;
   let activeBlockEditMode: BlockEditMode = "none";
@@ -250,7 +250,6 @@ window.addEventListener("DOMContentLoaded", () => {
       render: (group) => editorTabsUi.render(group),
     },
     buildOps: {
-      updateBuildTarget: () => buildOps.updateBuildTarget(),
       updateSynctexButtonState: () => buildOps.updateSynctexButtonState(),
       handleSaveFormatError: (error) => buildOps.handleSaveFormatError(error),
     },
@@ -283,16 +282,16 @@ window.addEventListener("DOMContentLoaded", () => {
   if (isE2E) {
     (
       window as {
-        __tex180SetMathInputFallback?: (value: string | null) => void;
-        __tex180GetMathInputFallback?: () => string | null;
+        __tex64SetMathInputFallback?: (value: string | null) => void;
+        __tex64GetMathInputFallback?: () => string | null;
       }
-    ).__tex180SetMathInputFallback = (value) => {
+    ).__tex64SetMathInputFallback = (value) => {
       blockInputApi.setMathInputFallback(value);
     };
     (
-      window as { __tex180GetMathInputFallback?: () => string | null }
-    ).__tex180GetMathInputFallback = () => blockInputApi.getMathInputFallback();
-    (window as { __tex180GetMathInputValue?: () => string }).__tex180GetMathInputValue =
+      window as { __tex64GetMathInputFallback?: () => string | null }
+    ).__tex64GetMathInputFallback = () => blockInputApi.getMathInputFallback();
+    (window as { __tex64GetMathInputValue?: () => string }).__tex64GetMathInputValue =
       () => blockInputApi.getMathInputValue();
   }
 
@@ -357,6 +356,7 @@ window.addEventListener("DOMContentLoaded", () => {
     requestFormatCurrentFile: (source) => {
       buildOps.requestFormatCurrentFile(source);
     },
+    postToNative: (payload, silent) => postToNative(payload, silent),
     getIsE2E: () => isE2E,
     getMathInputValue: blockInputApi.getMathInputValue,
     resetBlockSession: () => resetBlockSession(),
@@ -444,6 +444,7 @@ window.addEventListener("DOMContentLoaded", () => {
     getEditorGroups: () => editorSession.getEditorGroups(),
     renderEditorTabs: (group) => editorTabsUi.render(group),
     requestOpenFile: editorSession.requestOpenFile,
+    getSplitViewEnabled: () => editorSession.getSplitViewEnabled(),
     settings: {
       getPdfViewerMode: settingsUi.getPdfViewerMode,
       getAutoSynctexOnBuildEnabled: settingsUi.getAutoSynctexOnBuildEnabled,
@@ -551,7 +552,6 @@ window.addEventListener("DOMContentLoaded", () => {
   searchUi.render();
   gitOps.reset();
   rootSelectorUi.render();
-  buildOps.updateBuildTarget();
   buildOps.updateSynctexButtonState();
   settingsUi.loadStartupSettings();
   updateIssues(0, "ビルド結果はここに要約します。", "info", []);

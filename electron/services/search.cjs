@@ -4,13 +4,13 @@ const { normalizeRelativePath } = require("./workspace.cjs");
 
 const IGNORED_DIRECTORIES = new Set([
   ".git",
-  ".tex180",
+  ".tex64",
   ".swiftpm",
   "node_modules",
   "DerivedData",
   "build",
   "Resources",
-  "tex180.xcodeproj",
+  "tex64.xcodeproj",
 ]);
 const TEXT_FILE_EXTENSIONS = new Set([
   "tex",

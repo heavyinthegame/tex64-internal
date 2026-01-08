@@ -107,6 +107,18 @@ export const initContextMenu = (context: AppContext): ContextMenuApi => {
       event.preventDefault();
       event.stopPropagation();
     });
+    contextMenu.addEventListener("click", (event) => {
+      if (!menuOpen) {
+        return;
+      }
+      const target = event.target;
+      if (contextMenuPanel instanceof HTMLElement && target instanceof Node) {
+        if (contextMenuPanel.contains(target)) {
+          return;
+        }
+      }
+      close();
+    });
   }
 
   document.addEventListener("click", () => {

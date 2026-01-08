@@ -1,7 +1,7 @@
 import { LATEX_FILE_EXTENSIONS, PINNED_TAB_EXTENSIONS, getFileExtension, isImageFilePath, isPdfFilePath, isTextFilePath, } from "./files.js";
 export const initEditorSession = (context, deps) => {
     var _a, _b;
-    const { editorGroups: editorGroupsRoot, editorTabs, editorTabsList, editorTabsSecondary, editorTabsListSecondary, editorHost, editorHostSecondary, editorSplitButton, breadcrumbs, miniOutline, } = context.dom;
+    const { editorGroups: editorGroupsRoot, editorTabs, editorTabsList, editorTabsSecondary, editorTabsListSecondary, editorHost, editorHostSecondary, editorSplitButton, } = context.dom;
     const editorGroupsRootEl = editorGroupsRoot instanceof HTMLElement ? editorGroupsRoot : null;
     const editorGroupPrimary = (_a = editorGroupsRootEl === null || editorGroupsRootEl === void 0 ? void 0 : editorGroupsRootEl.querySelector('[data-editor-group="primary"]')) !== null && _a !== void 0 ? _a : null;
     const editorGroupSecondary = (_b = editorGroupsRootEl === null || editorGroupsRootEl === void 0 ? void 0 : editorGroupsRootEl.querySelector('[data-editor-group="secondary"]')) !== null && _b !== void 0 ? _b : null;
@@ -68,6 +68,31 @@ export const initEditorSession = (context, deps) => {
     const getActiveFilePath = () => getActiveGroup().currentFilePath;
     const getActiveEditor = () => getActiveGroup().editor;
     const isActiveGroup = (group) => group.key === activeEditorGroup;
+    const getOtherGroupKey = (key) => key === "primary" ? "secondary" : "primary";
+    const resolveAutoOpenGroupKey = (preferredKey) => {
+        if (!splitViewEnabled) {
+            return preferredKey;
+        }
+        const preferred = getEditorGroup(preferredKey);
+        if (preferred.openTabs.length === 0) {
+            return preferredKey;
+        }
+        const otherKey = getOtherGroupKey(preferredKey);
+        const other = getEditorGroup(otherKey);
+        if (other.openTabs.length === 0) {
+            return otherKey;
+        }
+        return preferredKey;
+    };
+    const findGroupKeyByPath = (path) => {
+        const groups = Object.keys(editorGroups);
+        for (const key of groups) {
+            if (editorGroups[key].openTabs.includes(path)) {
+                return key;
+            }
+        }
+        return null;
+    };
     const forEachEditorGroup = (handler) => {
         Object.keys(editorGroups).forEach((key) => {
             handler(editorGroups[key]);
@@ -228,25 +253,9 @@ export const initEditorSession = (context, deps) => {
         requestOpenFile(path, activeEditorGroup);
     };
     const updateBreadcrumbs = () => {
-        var _a;
-        if (breadcrumbs instanceof HTMLElement) {
-            const activeGroup = getActiveGroup();
-            const fileLabel = (_a = activeGroup.currentFilePath) !== null && _a !== void 0 ? _a : "未選択";
-            const dirtyMark = activeGroup.isDirty ? " ●" : "";
-            breadcrumbs.textContent = `${fileLabel}${dirtyMark}`;
-        }
         deps.editorTabs.render(getActiveGroup());
     };
-    const updateMiniOutline = () => {
-        if (!(miniOutline instanceof HTMLElement)) {
-            return;
-        }
-        const activeGroup = getActiveGroup();
-        const fileLabel = activeGroup.currentFilePath
-            ? activeGroup.currentFilePath.split("/").pop()
-            : "未選択";
-        miniOutline.textContent = `ミニアウトライン: ${fileLabel}`;
-    };
+    const updateMiniOutline = () => { };
     const setActiveGroup = (nextKey, options = {}) => {
         var _a;
         if (activeEditorGroup === nextKey) {
@@ -262,7 +271,6 @@ export const initEditorSession = (context, deps) => {
         updateMiniOutline();
         deps.outline.render();
         deps.fileTree.render();
-        deps.buildOps.updateBuildTarget();
         deps.buildOps.updateSynctexButtonState();
         if (options.focusEditor) {
             const editor = getActiveEditor();
@@ -516,7 +524,6 @@ export const initEditorSession = (context, deps) => {
             group.viewer.showPdfViewer(path, data, mimeType);
         }
         if (isActiveGroup(group)) {
-            deps.buildOps.updateBuildTarget();
             deps.buildOps.updateSynctexButtonState();
             deps.fileTree.setTreeFocus(false);
         }
@@ -543,7 +550,6 @@ export const initEditorSession = (context, deps) => {
         }
         group.viewer.showUnsupportedViewer();
         if (isActiveGroup(group)) {
-            deps.buildOps.updateBuildTarget();
             deps.buildOps.updateSynctexButtonState();
             deps.fileTree.setTreeFocus(false);
         }
@@ -629,7 +635,6 @@ export const initEditorSession = (context, deps) => {
             deps.fileTree.setTreeFocus(false);
         }
         if (isActiveGroup(group)) {
-            deps.buildOps.updateBuildTarget();
             deps.buildOps.updateSynctexButtonState();
         }
     };
@@ -673,7 +678,11 @@ export const initEditorSession = (context, deps) => {
         }
     };
     const requestOpenFile = (path, groupKey, force = false) => {
-        const group = getEditorGroup(groupKey);
+        const existingGroupKey = !force ? findGroupKeyByPath(path) : null;
+        const resolvedGroupKey = force
+            ? groupKey
+            : existingGroupKey !== null && existingGroupKey !== void 0 ? existingGroupKey : resolveAutoOpenGroupKey(groupKey);
+        const group = getEditorGroup(resolvedGroupKey);
         if (group.currentFilePath === path) {
             return false;
         }
@@ -681,7 +690,7 @@ export const initEditorSession = (context, deps) => {
         if (!force) {
             cacheCurrentBuffer(group);
         }
-        const requestEntry = { path, group: groupKey };
+        const requestEntry = { path, group: resolvedGroupKey };
         pendingOpenRequests.push(requestEntry);
         const ok = deps.postToNative({ type: "openFile", path });
         if (!ok) {
@@ -789,7 +798,18 @@ export const initEditorSession = (context, deps) => {
     const handleOpenFileResult = (payload) => {
         var _a, _b;
         const pendingIndex = pendingOpenRequests.findIndex((entry) => entry.path === payload.path);
-        const targetGroupKey = pendingIndex >= 0 ? pendingOpenRequests.splice(pendingIndex, 1)[0].group : activeEditorGroup;
+        let targetGroupKey = pendingIndex >= 0
+            ? pendingOpenRequests.splice(pendingIndex, 1)[0].group
+            : activeEditorGroup;
+        if (pendingIndex < 0 && payload.path) {
+            const existingGroupKey = findGroupKeyByPath(payload.path);
+            if (existingGroupKey) {
+                targetGroupKey = existingGroupKey;
+            }
+            else {
+                targetGroupKey = resolveAutoOpenGroupKey(targetGroupKey);
+            }
+        }
         const targetGroup = getEditorGroup(targetGroupKey);
         if (payload.error) {
             if (pendingReveal &&
@@ -800,22 +820,6 @@ export const initEditorSession = (context, deps) => {
             deps.updateIssues(1, payload.error, "error", [
                 { severity: "error", message: payload.error },
             ]);
-            return;
-        }
-        const path = payload.path;
-        const kind = (_a = payload.kind) !== null && _a !== void 0 ? _a : (isPdfFilePath(path)
-            ? "pdf"
-            : isImageFilePath(path)
-                ? "image"
-                : isTextFilePath(path)
-                    ? "text"
-                    : "unsupported");
-        if (kind === "image" || kind === "pdf") {
-            applyViewerFile(targetGroup, path, kind, payload.data, payload.mimeType);
-            return;
-        }
-        if (kind === "unsupported") {
-            applyUnsupportedFile(targetGroup, path);
             return;
         }
         const type = payload.type;
@@ -833,6 +837,25 @@ export const initEditorSession = (context, deps) => {
             if (!success) {
                 alert(message);
             }
+            return;
+        }
+        if (!payload.path) {
+            return;
+        }
+        const path = payload.path;
+        const kind = (_a = payload.kind) !== null && _a !== void 0 ? _a : (isPdfFilePath(path)
+            ? "pdf"
+            : isImageFilePath(path)
+                ? "image"
+                : isTextFilePath(path)
+                    ? "text"
+                    : "unsupported");
+        if (kind === "image" || kind === "pdf") {
+            applyViewerFile(targetGroup, path, kind, payload.data, payload.mimeType);
+            return;
+        }
+        if (kind === "unsupported") {
+            applyUnsupportedFile(targetGroup, path);
             return;
         }
         const content = (_b = payload.content) !== null && _b !== void 0 ? _b : "";
