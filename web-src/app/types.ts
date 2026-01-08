@@ -29,9 +29,66 @@ export type MathKey = {
 };
 export type SearchResult = { path: string; line: number; preview: string };
 export type GitEntry = { status: string; path: string };
+export type GitHistoryEntry = {
+  hash: string;
+  shortHash: string;
+  date: string;
+  message: string;
+};
+export type GitRepoState = { ok: boolean; reason?: string };
+export type GitRemoteState = { exists: boolean; name?: string; url?: string | null };
+export type GitBranchState = {
+  name?: string | null;
+  upstream?: string | null;
+  ahead?: number;
+  behind?: number;
+  detached?: boolean;
+};
+export type GitStatusPayload = {
+  entries: GitEntry[];
+  message?: string;
+  repo?: GitRepoState;
+  remote?: GitRemoteState;
+  branch?: GitBranchState;
+  history?: GitHistoryEntry[];
+  historyMessage?: string;
+};
+export type GitDiffPayload = {
+  ok: boolean;
+  mode: "commit" | "restore";
+  hash?: string;
+  patch?: string;
+  message?: string | null;
+};
+export type GitActionResultPayload = {
+  action: "init" | "commit" | "remote" | "pull" | "push" | "restore";
+  ok: boolean;
+  status?: "success" | "info" | "error";
+  message?: string | null;
+  hint?: string | null;
+};
 export type FileNode = { name: string; path: string; type: "file" | "dir"; children: FileNode[] };
 export type RootSource = "auto" | "manual";
 export type LauncherTemplate = "paper" | "lecture";
+
+export type EditorFormatIndentStyle = "spaces-2" | "spaces-4" | "tab";
+export type EditorFormatBlankLines = "preserve" | "condense" | "remove";
+export type EditorFormatSettings = {
+  indentStyle: EditorFormatIndentStyle;
+  beginEndOnOwnLine: boolean;
+  documentNoIndent: boolean;
+  alignMathDelims: boolean;
+  alignTableDelims: boolean;
+  blankLines: EditorFormatBlankLines;
+  customVerbatim: string[];
+};
+export type EditorFormatAlignEnvs = {
+  math: string[];
+  table: string[];
+};
+export type FormatSettingsPayload = EditorFormatSettings & {
+  alignEnvs: EditorFormatAlignEnvs;
+};
 
 export type WebkitHandler = { postMessage: (message: unknown) => void };
 export type WebkitBridge = { messageHandlers?: { tex180?: WebkitHandler } };
@@ -68,7 +125,9 @@ export type BridgeWindow = Window &
       todos?: IndexEntry[];
     }) => void;
     tex180UpdateSearch?: (payload: { query: string; results: SearchResult[]; message?: string }) => void;
-    tex180UpdateGit?: (payload: { entries: GitEntry[]; message?: string }) => void;
+    tex180UpdateGit?: (payload: GitStatusPayload) => void;
+    tex180UpdateGitDiff?: (payload: GitDiffPayload) => void;
+    tex180UpdateGitActionResult?: (payload: GitActionResultPayload) => void;
     tex180OpenFileResult?: (payload: { path: string; content?: string; error?: string }) => void;
     tex180SaveResult?: (payload: {
       path: string;

@@ -40,11 +40,11 @@ export const tabConfig: Record<
     hint: "プレビュー後に確定します。",
   },
   git: {
-    label: "Git",
-    outline: "Gitステータス",
-    title: "Git",
-    desc: "変更ファイルの一覧を表示します。",
-    hint: "更新で再取得します。",
+    label: "履歴",
+    outline: "変更 / 履歴 / 同期",
+    title: "バージョン管理",
+    desc: "変更を履歴に保存し、他の場所と同期します。",
+    hint: "保存や同期の操作ができます。",
   },
   project: {
     label: "プロジェクト",

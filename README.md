@@ -26,16 +26,16 @@ Electron ベースの TeX エディタ（開発中）。
 - Web UI: `Resources/web/index.html` + `Resources/web/main.js` + `Resources/web/app/*.js`（生成物）。
 - PDF ビューア: `Resources/web/pdf-viewer.html` / `Resources/web/pdf-viewer.js` / `Resources/web/pdf-viewer.css`。
 - Monaco: `web-src/main.ts`（エントリ） + `web-src/app/*`。
-- Services: `electron/services/*` がワークスペース/ビルド/検索/Git/Indexer/PDF を担当。
+- Services: `electron/services/*` がワークスペース/ビルド/検索/バージョン管理/Indexer/PDF を担当。
 
 ## UI マップ（主要パーツ）
 
-- Sidebar tabs: files / outline / blocks / issues / git / search / settings。
+- Sidebar tabs: files / outline / blocks / issues / history / search / settings。
 - File explorer: `#workspace-label`, `#file-tree`, `#save-file-button`。
 - Editor: `#editor`, `#editor-tabs`, `#build-button`, `#editor-viewer`。
 - Issues: `#issues-panel`, `#issues-list`, `#issues-log`。
-- Quick insert: `#quick-insert`, `#quick-input`, `#quick-accept`, `#quick-cancel`。
 - Modals: `#create-modal`, `#rename-modal`, `#diff-modal`。
+- Versioning: `#git-summary-text`, `#git-guide-text`, `#git-init`, `#git-commit-message`, `#git-commit-button`, `#git-history`, `#git-pull`, `#git-push`, `#git-remote-url`, `#git-remote-save`, `#git-status`。
 
 ## 方針（UX/安定性）
 
@@ -45,10 +45,13 @@ Electron ベースの TeX エディタ（開発中）。
 - PDF 更新はビルド成功時のみ、失敗時は前回成功 PDF を保持。
 - ログ洪水禁止（Issues が一次窓口）。
 - UI 構成は VSCode 風（左タブ/右エディタ/下部ステータス）。
+- 設計方針に変更があったら、常に `README.md` / `map.md` / `test.md` を更新する。
 
 ## 現行仕様（要点）
 
-- ブロック編集: 数式/表を自動検出 → 差分プレビュー → 確定挿入。`verbatim` 系は対象外。
+- 差分プレビュー: 一般的な挿入/変更の確定前に共通モーダルで差分を確認し、左に変更前/右に変更後＋変更箇所の前後3行を表示する（ブロック挿入・今後のAI提案もここを使う）。
+- ブロック編集: 数式/表を自動検出 → 挿入内容を作成 → 確定挿入。`verbatim` 系は対象外。
+- バージョン管理: 保存/復元の前に差分プレビューを表示し、「履歴に保存」「履歴一覧から復元」「同期（送る/受け取る）」を中心に操作できる。同期失敗時はヒントを表示する。
 - SyncTeX:
   - ビルド成功時のみ forward（設定: 「ビルド時 SyncTeX」）。
   - PDF 側クリックで「ソースにジャンプ」ボタンを表示し、押下時のみ reverse。
@@ -58,17 +61,16 @@ Electron ベースの TeX エディタ（開発中）。
 
 ## タスク
 現在:
-インデント documentはインテンドしない 文中の環境も強制インデント
 
 
-5. 数式挿入関連
+数式挿入キーボード
 11. 予測
-1. git
 7. AI
 4. issue
-画面分割およびウィンドウ
 
 
-順番 
-6. 差分プレビュー
-1.それぞれの設定のUI
+数式挿入関連
+git
+差分プレビュー
+
+

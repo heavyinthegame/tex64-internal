@@ -7,6 +7,8 @@ export const mathKeyboardFixedKeys: MathKey[] = [
   { label: "÷", latex: "\\div ", shiftLabel: "⊘", shiftLatex: "\\oslash " },
   { label: "·", latex: "\\cdot ", shiftLabel: "•", shiftLatex: "\\bullet " },
   { label: "=", latex: "=", shiftLabel: "≡", shiftLatex: "\\equiv " },
+  { label: "&", latex: "&" },
+  { label: "\\\\", latex: "\\\\" },
   { label: "≠", latex: "\\neq ", shiftLabel: "≈", shiftLatex: "\\approx " },
   { label: "≤", latex: "\\leq ", shiftLabel: "≦", shiftLatex: "\\leqq " },
   { label: "≥", latex: "\\geq ", shiftLabel: "≧", shiftLatex: "\\geqq " },

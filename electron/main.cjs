@@ -12,6 +12,9 @@ const { SearchService } = require("./services/search.cjs");
 const { WorkspaceManager, WorkspaceError } = require("./services/workspace.cjs");
 const { EnvService } = require("./services/env.cjs");
 
+// Expose require so Playwright's electronApp.evaluate can load Electron APIs in e2e.
+global.require = require;
+
 let mainWindow = null;
 let currentWorkspacePath = null;
 const isE2E = process.env.TEX180_E2E === "1";
@@ -102,7 +105,7 @@ const createMainWindow = () => {
     backgroundColor: "#1c2129",
     title: "tex180",
     webPreferences: {
-      contextIsolation: true,
+      contextIsolation: !isE2E,
       nodeIntegration: false,
       preload: preloadPath,
     },
@@ -387,6 +390,34 @@ ipcMain.on("tex180", (_event, message) => {
   }
   if (type === "gitStatus") {
     handleGitStatus();
+    return;
+  }
+  if (type === "gitInit") {
+    handleGitInit();
+    return;
+  }
+  if (type === "gitCommit") {
+    handleGitCommit(message.message);
+    return;
+  }
+  if (type === "gitSetRemote") {
+    handleGitSetRemote(message.url);
+    return;
+  }
+  if (type === "gitPull") {
+    handleGitPull();
+    return;
+  }
+  if (type === "gitPush") {
+    handleGitPush();
+    return;
+  }
+  if (type === "gitRestore") {
+    handleGitRestore(message.hash);
+    return;
+  }
+  if (type === "gitDiff") {
+    handleGitDiff(message.mode, message.hash);
     return;
   }
   if (type === "consoleLog") {
@@ -1159,4 +1190,136 @@ const handleGitStatus = async () => {
   }
   const snapshot = await gitService.status(rootPath);
   sendToRenderer("updateGit", snapshot);
+};
+
+const sendGitActionResult = (action, result) => {
+  sendToRenderer("gitActionResult", {
+    action,
+    ok: result?.ok ?? false,
+    status: result?.status ?? "error",
+    message: result?.message ?? null,
+    hint: result?.hint ?? null,
+  });
+};
+
+const reportGitAction = (result, fallback) => {
+  const message = result?.message ?? fallback;
+  const status = result?.status ?? (result?.ok ? "success" : "error");
+  if (status === "success") {
+    sendIssues(0, message, "success", []);
+    return;
+  }
+  if (status === "info") {
+    sendIssues(0, message, "info", []);
+    return;
+  }
+  sendIssues(1, message, "error", [{ severity: "error", message }]);
+};
+
+const handleGitInit = async () => {
+  const rootPath = ensureWorkspace();
+  if (!rootPath) {
+    sendIssues(1, "ワークスペースが選択されていません。", "error", [
+      { severity: "error", message: "ワークスペースが選択されていません。" },
+    ]);
+    return;
+  }
+  const result = await gitService.init(rootPath);
+  reportGitAction(result, "履歴管理の開始に失敗しました。");
+  sendGitActionResult("init", result);
+  await handleGitStatus();
+};
+
+const handleGitCommit = async (message) => {
+  const rootPath = ensureWorkspace();
+  if (!rootPath) {
+    sendIssues(1, "ワークスペースが選択されていません。", "error", [
+      { severity: "error", message: "ワークスペースが選択されていません。" },
+    ]);
+    return;
+  }
+  const result = await gitService.commit(rootPath, message);
+  reportGitAction(result, "履歴の保存に失敗しました。");
+  sendGitActionResult("commit", result);
+  await handleGitStatus();
+};
+
+const handleGitSetRemote = async (url) => {
+  const rootPath = ensureWorkspace();
+  if (!rootPath) {
+    sendIssues(1, "ワークスペースが選択されていません。", "error", [
+      { severity: "error", message: "ワークスペースが選択されていません。" },
+    ]);
+    return;
+  }
+  const result = await gitService.setRemote(rootPath, url);
+  reportGitAction(result, "同期先の保存に失敗しました。");
+  sendGitActionResult("remote", result);
+  await handleGitStatus();
+};
+
+const handleGitPull = async () => {
+  const rootPath = ensureWorkspace();
+  if (!rootPath) {
+    sendIssues(1, "ワークスペースが選択されていません。", "error", [
+      { severity: "error", message: "ワークスペースが選択されていません。" },
+    ]);
+    return;
+  }
+  const result = await gitService.pull(rootPath);
+  reportGitAction(result, "同期に失敗しました。");
+  sendGitActionResult("pull", result);
+  await handleGitStatus();
+};
+
+const handleGitPush = async () => {
+  const rootPath = ensureWorkspace();
+  if (!rootPath) {
+    sendIssues(1, "ワークスペースが選択されていません。", "error", [
+      { severity: "error", message: "ワークスペースが選択されていません。" },
+    ]);
+    return;
+  }
+  const result = await gitService.push(rootPath);
+  reportGitAction(result, "送信に失敗しました。");
+  sendGitActionResult("push", result);
+  await handleGitStatus();
+};
+
+const handleGitRestore = async (hash) => {
+  const rootPath = ensureWorkspace();
+  if (!rootPath) {
+    sendIssues(1, "ワークスペースが選択されていません。", "error", [
+      { severity: "error", message: "ワークスペースが選択されていません。" },
+    ]);
+    return;
+  }
+  const result = await gitService.restore(rootPath, hash);
+  reportGitAction(result, "履歴の復元に失敗しました。");
+  sendGitActionResult("restore", result);
+  await handleGitStatus();
+};
+
+const handleGitDiff = async (mode, hash) => {
+  const rootPath = ensureWorkspace();
+  if (!rootPath) {
+    sendToRenderer("updateGitDiff", {
+      ok: false,
+      mode: mode === "restore" ? "restore" : "commit",
+      message: "ワークスペースが選択されていません。",
+    });
+    return;
+  }
+  const resolvedMode = mode === "restore" ? "restore" : "commit";
+  const snapshot =
+    resolvedMode === "restore"
+      ? await gitService.getRestoreDiff(rootPath, hash)
+      : await gitService.getCommitDiff(rootPath);
+  sendToRenderer("updateGitDiff", {
+    ok: snapshot.ok,
+    mode: resolvedMode,
+    hash,
+    patch: snapshot.patch,
+    message: snapshot.message,
+  });
 };
