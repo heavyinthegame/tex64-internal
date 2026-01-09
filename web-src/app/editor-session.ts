@@ -4,8 +4,6 @@ import {
   LATEX_FILE_EXTENSIONS,
   PINNED_TAB_EXTENSIONS,
   getFileExtension,
-  isImageFilePath,
-  isPdfFilePath,
   isTextFilePath,
 } from "./files.js";
 import type {
@@ -15,6 +13,10 @@ import type {
   IssuesStatus,
   SearchResult,
 } from "./types.js";
+import {
+  createEditorSessionFileOps,
+  type FileOpsState,
+} from "./editor-session-file-ops.js";
 
 export type EditorGroupKey = "primary" | "secondary";
 
@@ -38,10 +40,10 @@ export type EditorGroupState = {
   pendingCompositionAction: (() => void) | null;
 };
 
-type MonacoModel = { getValue: () => string; setValue: (value: string) => void };
-type MonacoModelEntry = { model: MonacoModel; savedContent: string };
+export type MonacoModel = { getValue: () => string; setValue: (value: string) => void };
+export type MonacoModelEntry = { model: MonacoModel; savedContent: string };
 
-type EditorSessionDeps = {
+export type EditorSessionDeps = {
   getWorkspaceFiles: () => string[];
   getRootFilePath: () => string | null;
   postToNative: (
@@ -227,23 +229,18 @@ export const initEditorSession = (
 
   let activeEditorGroup: EditorGroupKey = "primary";
   let splitViewEnabled = false;
-  const pendingOpenRequests: Array<{ path: string; group: EditorGroupKey }> = [];
+  const fileOpsState: FileOpsState = {
+    pendingOpenRequests: [],
+    pendingReveal: null,
+    pendingSave: null,
+    autoSaveTimer: null,
+    autoSavePending: false,
+  };
   let issueDecorations: string[] = [];
   const jumpDecorations: Record<EditorGroupKey, string[]> = {
     primary: [],
     secondary: [],
   };
-  let pendingReveal: { path: string; line: number; group: EditorGroupKey } | null = null;
-  let pendingSave:
-    | {
-        path: string;
-        content: string;
-        resolve: (ok: boolean) => void;
-        reject: (message: string) => void;
-      }
-    | null = null;
-  let autoSaveTimer: number | null = null;
-  let autoSavePending = false;
   let pendingAutoOpenPath: string | null = null;
   const lastCursorPositions = new Map<string, { line: number; column: number }>();
   const monacoModels = new Map<string, MonacoModelEntry>();
@@ -740,245 +737,39 @@ export const initEditorSession = (
     deps.editorTabs.render(group);
   };
 
-  const applyViewerFile = (
-    group: EditorGroupState,
-    path: string,
-    kind: "image" | "pdf",
-    data?: string,
-    mimeType?: string
-  ) => {
-    clearTemporaryTabs(group, path);
-    group.currentFilePath = path;
-    group.currentFileSavedContent = null;
-    group.isDirty = false;
-    dirtyFiles.delete(path);
-    addOpenTab(group, path);
-    deps.editorTabs.render(group);
-    if (isActiveGroup(group)) {
-      deps.fileTree.setSelection(path, "file");
-      updateBreadcrumbs();
-      updateMiniOutline();
-      deps.outline.render();
-      deps.fileTree.render();
-    }
-    deps.setBlockPreviewActive(false);
-    deps.setAutoDetectedUi(false);
-    if (pendingReveal && pendingReveal.path === path && pendingReveal.group === group.key) {
-      pendingReveal = null;
-    }
-    if (kind === "image") {
-      group.viewer.showImageViewer(path, data, mimeType);
-    } else {
-      group.viewer.showPdfViewer(path, data, mimeType);
-    }
-    if (isActiveGroup(group)) {
-      deps.buildOps.updateSynctexButtonState();
-      deps.fileTree.setTreeFocus(false);
-    }
-  };
-
-  const applyUnsupportedFile = (group: EditorGroupState, path: string) => {
-    clearTemporaryTabs(group, path);
-    group.currentFilePath = path;
-    group.currentFileSavedContent = null;
-    group.isDirty = false;
-    dirtyFiles.delete(path);
-    addOpenTab(group, path);
-    deps.editorTabs.render(group);
-    if (isActiveGroup(group)) {
-      deps.fileTree.setSelection(path, "file");
-      updateBreadcrumbs();
-      updateMiniOutline();
-      deps.outline.render();
-      deps.fileTree.render();
-    }
-    deps.setBlockPreviewActive(false);
-    deps.setAutoDetectedUi(false);
-    if (pendingReveal && pendingReveal.path === path && pendingReveal.group === group.key) {
-      pendingReveal = null;
-    }
-    group.viewer.showUnsupportedViewer();
-    if (isActiveGroup(group)) {
-      deps.buildOps.updateSynctexButtonState();
-      deps.fileTree.setTreeFocus(false);
-    }
-  };
-
-  const ensureModelEntry = (path: string, content: string, savedContent?: string) => {
-    const monacoApi = deps.getMonacoApi();
-    if (!monacoApi) {
-      return null;
-    }
-    const entry = monacoModels.get(path);
-    if (entry) {
-      const isEntryDirty = dirtyFiles.has(path);
-      if (!isEntryDirty && savedContent !== undefined && entry.savedContent !== savedContent) {
-        entry.model.setValue(content);
-        entry.savedContent = savedContent;
-        updateDirtyState(path, content, savedContent);
-      }
-      return entry;
-    }
-    const monacoApiAny = monacoApi as {
-      editor?: { createModel?: (value: string, languageId: string) => unknown };
-    };
-    if (!monacoApiAny.editor?.createModel) {
-      return null;
-    }
-    const model = monacoApiAny.editor.createModel(
-      content,
-      getLanguageIdForPath(path)
-    ) as MonacoModel;
-    const nextEntry = { model, savedContent: savedContent ?? content };
-    monacoModels.set(path, nextEntry);
-    updateDirtyState(path, content, nextEntry.savedContent);
-    return nextEntry;
-  };
-
-  const applyFileContent = (
-    group: EditorGroupState,
-    path: string,
-    content: string,
-    savedContent?: string
-  ) => {
-    const monacoApi = deps.getMonacoApi();
-    if (!group.editor || !monacoApi) {
-      deps.updateFallback("エディタの準備が完了していません。");
-      return;
-    }
-    const editor = group.editor as {
-      setModel?: (model: unknown) => void;
-      setValue?: (value: string) => void;
-      getValue?: () => string;
-      restoreViewState?: (state: unknown) => void;
-      focus?: () => void;
-    };
-    const entry = ensureModelEntry(path, content, savedContent ?? content);
-    clearTemporaryTabs(group, path);
-    group.viewer.hideViewer();
-    if (isActiveGroup(group)) {
-      clearJumpHighlight(group);
-    }
-    group.isApplyingFile = true;
-    if (entry && editor.setModel) {
-      editor.setModel(entry.model as unknown);
-    } else if (editor.setValue) {
-      editor.setValue(content);
-    }
-    group.isApplyingFile = false;
-    group.currentFilePath = path;
-    group.currentFileSavedContent = entry?.savedContent ?? (savedContent ?? content);
-    if (entry) {
-      updateDirtyState(path, entry.model.getValue(), entry.savedContent);
-    } else if (editor.getValue) {
-      updateDirtyState(path, editor.getValue(), group.currentFileSavedContent ?? content);
-    } else {
-      updateDirtyState(path, content, group.currentFileSavedContent ?? content);
-    }
-    restoreViewState(group, path);
-    addOpenTab(group, path);
-    setEditorLanguage(group, path);
-    deps.editorTabs.render(group);
-    if (isActiveGroup(group)) {
-      deps.fileTree.setSelection(path, "file");
-      updateBreadcrumbs();
-      updateMiniOutline();
-      deps.outline.render();
-      deps.fileTree.render();
-    }
-    deps.setBlockPreviewActive(false);
-    deps.setAutoDetectedUi(false);
-    if (pendingReveal && pendingReveal.path === path && pendingReveal.group === group.key) {
-      revealLine(group, pendingReveal.line);
-      pendingReveal = null;
-    }
-    if (isActiveGroup(group) && editor.focus) {
-      editor.focus();
-      deps.fileTree.setTreeFocus(false);
-    }
-    if (isActiveGroup(group)) {
-      deps.buildOps.updateSynctexButtonState();
-    }
-  };
-
-  const applyFormattedContent = (
-    group: EditorGroupState,
-    path: string,
-    content: string,
-    options?: { updateSaved?: boolean }
-  ) => {
-    if (!group.editor) {
-      return;
-    }
-    const editor = group.editor as {
-      getValue?: () => string;
-      setValue?: (value: string) => void;
-      saveViewState?: () => unknown;
-      restoreViewState?: (state: unknown) => void;
-    };
-    const entry = monacoModels.get(path);
-    const currentValue = entry?.model.getValue() ?? editor.getValue?.() ?? "";
-    const viewState = editor.saveViewState?.();
-    if (currentValue !== content) {
-      group.isApplyingFile = true;
-      if (entry?.model.setValue) {
-        entry.model.setValue(content);
-      } else if (editor.setValue) {
-        editor.setValue(content);
-      }
-      group.isApplyingFile = false;
-      if (viewState && editor.restoreViewState) {
-        editor.restoreViewState(viewState);
-      }
-    }
-    if (options?.updateSaved) {
-      if (entry) {
-        entry.savedContent = content;
-      }
-      if (group.currentFilePath === path) {
-        group.currentFileSavedContent = content;
-      }
-    }
-    const savedContent =
-      (group.currentFilePath === path
-        ? group.currentFileSavedContent
-        : entry?.savedContent) ??
-      entry?.savedContent ??
-      content;
-    updateDirtyState(path, content, savedContent);
-    if (isActiveGroup(group)) {
-      updateBreadcrumbs();
-      deps.fileTree.render();
-    }
-  };
-
-  const requestOpenFile = (path: string, groupKey: EditorGroupKey, force = false) => {
-    const existingGroupKey = !force ? findGroupKeyByPath(path) : null;
-    const resolvedGroupKey = force
-      ? groupKey
-      : existingGroupKey ?? resolveAutoOpenGroupKey(groupKey);
-    const group = getEditorGroup(resolvedGroupKey);
-    if (group.currentFilePath === path) {
-      return false;
-    }
-    // Always cache buffer immediately (preserves IME composition text)
-    if (!force) {
-      cacheCurrentBuffer(group);
-    }
-    const requestEntry = { path, group: resolvedGroupKey };
-    pendingOpenRequests.push(requestEntry);
-    const ok = deps.postToNative({ type: "openFile", path });
-    if (!ok) {
-      const index = pendingOpenRequests.indexOf(requestEntry);
-      if (index >= 0) {
-        pendingOpenRequests.splice(index, 1);
-      }
-      deps.updateIssues(1, "ファイルを開けません。", "error", [
-        { severity: "error", message: "ファイルを開けません。" },
-      ]);
-    }
-    return ok;
-  };
+  const {
+    applyFormattedContent,
+    requestOpenFile,
+    saveCurrentFile,
+    scheduleAutoSave,
+    handleOpenFileResult,
+    handleSaveResult,
+  } = createEditorSessionFileOps({
+    deps,
+    editorGroups,
+    monacoModels,
+    dirtyFiles,
+    state: fileOpsState,
+    getActiveEditorGroupKey,
+    getActiveGroup,
+    getEditorGroup,
+    isActiveGroup,
+    resolveAutoOpenGroupKey,
+    findGroupKeyByPath,
+    cacheCurrentBuffer,
+    clearJumpHighlight,
+    clearTemporaryTabs,
+    addOpenTab,
+    updateDirtyState,
+    restoreViewState,
+    setEditorLanguage,
+    updateBreadcrumbs,
+    updateMiniOutline,
+    revealLine,
+    forEachEditorGroup,
+    scheduleAfterComposition,
+    getLanguageIdForPath,
+  });
 
   const jumpToFileLine = (path: string, line: number, groupKey: EditorGroupKey) => {
     const group = getEditorGroup(groupKey);
@@ -988,7 +779,7 @@ export const initEditorSession = (
     }
     const requested = requestOpenFile(path, group.key);
     if (requested) {
-      pendingReveal = { path, line, group: group.key };
+      fileOpsState.pendingReveal = { path, line, group: group.key };
     }
   };
 
@@ -1001,242 +792,6 @@ export const initEditorSession = (
 
   const jumpToSearchResult = (result: SearchResult) => {
     jumpToFileLine(result.path, result.line, activeEditorGroup);
-  };
-
-  const saveCurrentFileInternal = () => {
-    const activeGroup = getActiveGroup();
-    const activePath = activeGroup.currentFilePath;
-    if (!activePath || !activeGroup.editor || !isTextFilePath(activePath)) {
-      const message = activePath
-        ? "このファイル形式は編集できません。"
-        : "保存するファイルが選択されていません。";
-      deps.updateIssues(1, message, "error", [{ severity: "error", message }]);
-      return Promise.resolve(false);
-    }
-    const editor = activeGroup.editor as { getValue: () => string };
-    const content = editor.getValue();
-    return new Promise<boolean>((resolve, reject) => {
-      pendingSave = { path: activePath as string, content, resolve, reject };
-      const shouldFormat = false;
-      const ok = deps.postToNative({
-        type: "saveFile",
-        path: activePath,
-        content,
-        format: shouldFormat,
-        formatSource: "save",
-        formatSettings: deps.settings.buildFormatSettingsPayload(),
-      });
-      if (!ok) {
-        pendingSave = null;
-        reject("ネイティブ連携が利用できません。");
-      }
-    });
-  };
-
-  const saveCurrentFile = () => {
-    const activeGroup = getActiveGroup();
-    if (!activeGroup.isComposing) {
-      return saveCurrentFileInternal();
-    }
-    return new Promise<boolean>((resolve, reject) => {
-      scheduleAfterComposition(activeGroup, () => {
-        saveCurrentFileInternal().then(resolve).catch(reject);
-      });
-    });
-  };
-
-  const clearAutoSaveTimer = () => {
-    if (autoSaveTimer) {
-      window.clearTimeout(autoSaveTimer);
-      autoSaveTimer = null;
-    }
-    autoSavePending = false;
-  };
-
-  const scheduleAutoSave = () => {
-    const activeGroup = getActiveGroup();
-    const activePath = activeGroup.currentFilePath;
-    if (!activePath || !isTextFilePath(activePath)) {
-      clearAutoSaveTimer();
-      return;
-    }
-    if (!activeGroup.isDirty) {
-      clearAutoSaveTimer();
-      return;
-    }
-    if (pendingSave) {
-      autoSavePending = true;
-      return;
-    }
-    clearAutoSaveTimer();
-    autoSavePending = false;
-    autoSaveTimer = window.setTimeout(() => {
-      autoSaveTimer = null;
-      saveCurrentFile().catch((message: string) => {
-        deps.updateIssues(1, message, "error", [{ severity: "error", message }]);
-      });
-    }, 400);
-  };
-
-  const handleOpenFileResult = (payload: {
-    path: string;
-    content?: string;
-    error?: string;
-    kind?: "text" | "image" | "pdf" | "unsupported";
-    data?: string;
-    mimeType?: string;
-  }) => {
-    const pendingIndex = pendingOpenRequests.findIndex((entry) => entry.path === payload.path);
-    let targetGroupKey: EditorGroupKey =
-      pendingIndex >= 0
-        ? pendingOpenRequests.splice(pendingIndex, 1)[0].group
-        : activeEditorGroup;
-    if (pendingIndex < 0 && payload.path) {
-      const existingGroupKey = findGroupKeyByPath(payload.path);
-      if (existingGroupKey) {
-        targetGroupKey = existingGroupKey;
-      } else {
-        targetGroupKey = resolveAutoOpenGroupKey(targetGroupKey);
-      }
-    }
-    const targetGroup = getEditorGroup(targetGroupKey);
-    if (payload.error) {
-      if (
-        pendingReveal &&
-        pendingReveal.path === payload.path &&
-        pendingReveal.group === targetGroupKey
-      ) {
-        pendingReveal = null;
-      }
-      deps.updateIssues(1, payload.error, "error", [
-        { severity: "error", message: payload.error },
-      ]);
-      return;
-    }
-    const type = (payload as any).type;
-    if (type === "searchResult") {
-      deps.search.handleSearchUpdate(payload as any);
-      return;
-    }
-    if (type === "env:checkResult") {
-      deps.settings.updateEnvStatus((payload as any).command, (payload as any).available);
-      return;
-    }
-    if (type === "env:installResult") {
-      const { target, success, message } = payload as any;
-      console.log(`Install result for ${target}: ${success} - ${message}`);
-      if (!success) {
-        alert(message);
-      }
-      return;
-    }
-    if (!payload.path) {
-      return;
-    }
-    const path = payload.path;
-    const kind =
-      payload.kind ??
-      (isPdfFilePath(path)
-        ? "pdf"
-        : isImageFilePath(path)
-        ? "image"
-        : isTextFilePath(path)
-        ? "text"
-        : "unsupported");
-    if (kind === "image" || kind === "pdf") {
-      applyViewerFile(targetGroup, path, kind, payload.data, payload.mimeType);
-      return;
-    }
-    if (kind === "unsupported") {
-      applyUnsupportedFile(targetGroup, path);
-      return;
-    }
-    const content = payload.content ?? "";
-    applyFileContent(targetGroup, path, content, content);
-  };
-
-  const handleSaveResult = (payload: {
-    path: string;
-    ok: boolean;
-    error?: string;
-    content?: string;
-    formatError?: string;
-  }) => {
-    let savedContent: string | null = null;
-    if (pendingSave && pendingSave.path === payload.path) {
-      if (payload.ok) {
-        if (payload.content) {
-          pendingSave.content = payload.content;
-        }
-        savedContent = pendingSave.content;
-        pendingSave.resolve(true);
-      } else {
-        pendingSave.reject(payload.error ?? "保存に失敗しました。");
-      }
-      pendingSave = null;
-    }
-    if (!payload.ok) {
-      deps.updateIssues(1, payload.error ?? "保存に失敗しました。", "error", [
-        { severity: "error", message: payload.error ?? "保存に失敗しました。" },
-      ]);
-      return;
-    }
-    const entry = monacoModels.get(payload.path);
-    let resolvedSavedContent = savedContent;
-    if (resolvedSavedContent === null) {
-      if (payload.content) {
-        resolvedSavedContent = payload.content;
-      } else if (entry) {
-        resolvedSavedContent = entry.model.getValue();
-      }
-    }
-    if (resolvedSavedContent !== null) {
-      if (entry) {
-        entry.savedContent = resolvedSavedContent;
-      }
-      dirtyFiles.delete(payload.path);
-    }
-    const groupsWithFile = Object.values(editorGroups).filter(
-      (group) => group.currentFilePath === payload.path
-    );
-    if (groupsWithFile.length > 0) {
-      groupsWithFile.forEach((group) => {
-        if (resolvedSavedContent !== null) {
-          group.currentFileSavedContent = resolvedSavedContent;
-        }
-        if (payload.content) {
-          applyFormattedContent(group, payload.path, payload.content, { updateSaved: true });
-        } else if (group.editor && group.currentFileSavedContent !== null) {
-          const editor = group.editor as { getValue: () => string };
-          const currentValue = editor.getValue();
-          updateDirtyState(payload.path, currentValue, group.currentFileSavedContent);
-        } else {
-          group.isDirty = false;
-        }
-      });
-    }
-    const activeGroup = getActiveGroup();
-    if (activeGroup.currentFilePath !== payload.path) {
-      activeGroup.isDirty = activeGroup.currentFilePath
-        ? dirtyFiles.has(activeGroup.currentFilePath)
-        : false;
-    }
-    if (autoSavePending) {
-      autoSavePending = false;
-      if (activeGroup.currentFilePath === payload.path && activeGroup.isDirty) {
-        scheduleAutoSave();
-      }
-    }
-    if (payload.formatError) {
-      deps.buildOps.handleSaveFormatError(payload.formatError);
-    }
-    updateBreadcrumbs();
-    deps.fileTree.render();
-    forEachEditorGroup((group) => {
-      if (group.openTabs.includes(payload.path)) {
-        deps.editorTabs.render(group);
-      }
-    });
   };
 
   const handleRenameResult = (payload: {
@@ -1312,7 +867,7 @@ export const initEditorSession = (
   const syncWorkspaceFiles = (payload: { workspaceFiles: string[]; rootChanged: boolean }) => {
     const { workspaceFiles, rootChanged } = payload;
     if (rootChanged) {
-      pendingReveal = null;
+      fileOpsState.pendingReveal = null;
       lastCursorPositions.clear();
       deps.fileTree.clearSelection();
       forEachEditorGroup((group) => {

@@ -23,12 +23,22 @@ const { WorkspaceManager, WorkspaceError } = require("./services/workspace.cjs")
 const { EnvService } = require("./services/env.cjs");
 const { BlocksStore } = require("./services/blocks.cjs");
 const { UserSettingsService } = require("./services/user-settings.cjs");
+const { createWorkspaceHandlers } = require("./handlers/workspace.cjs");
+const { createBuildHandlers } = require("./handlers/build.cjs");
+const { createGitHandlers } = require("./handlers/git.cjs");
+const { createMiscHandlers } = require("./handlers/misc.cjs");
 
 // Expose require so Playwright's electronApp.evaluate can load Electron APIs in e2e.
 global.require = require;
 
-let mainWindow = null;
-let currentWorkspacePath = null;
+const state = {
+  mainWindow: null,
+  currentWorkspacePath: null,
+  userSettings: null,
+  captureShortcut: null,
+  lastBuildPdfPath: null,
+  formatWarningShown: false,
+};
 const isE2E = process.env.TEX180_E2E === "1";
 if (isE2E && process.env.TEX180_E2E_USERDATA) {
   app.setPath("userData", process.env.TEX180_E2E_USERDATA);
@@ -45,77 +55,13 @@ const gitService = new GitService();
 const pdfWindowManager = new PDFWindowManager();
 const synctexService = new SynctexService();
 const blocksStore = new BlocksStore();
-let userSettings = null;
-let captureShortcut = null;
-let lastBuildPdfPath = null;
 const envService = new EnvService();
-let formatWarningShown = false;
-
-const TEXT_FILE_EXTENSIONS = new Set([
-  "tex",
-  "bib",
-  "sty",
-  "cls",
-  "bst",
-  "bbx",
-  "cbx",
-  "cfg",
-  "def",
-  "lbx",
-  "ins",
-  "dtx",
-  "ltx",
-  "aux",
-  "bbl",
-  "blg",
-  "log",
-  "out",
-  "toc",
-  "lof",
-  "lot",
-  "fdb_latexmk",
-  "fls",
-]);
-const IMAGE_FILE_EXTENSIONS = new Set([
-  "png",
-  "jpg",
-  "jpeg",
-  "gif",
-  "bmp",
-  "webp",
-  "svg",
-  "tif",
-  "tiff",
-  "ico",
-]);
-const IMAGE_MIME_TYPES = new Map([
-  ["png", "image/png"],
-  ["jpg", "image/jpeg"],
-  ["jpeg", "image/jpeg"],
-  ["gif", "image/gif"],
-  ["bmp", "image/bmp"],
-  ["webp", "image/webp"],
-  ["svg", "image/svg+xml"],
-  ["tif", "image/tiff"],
-  ["tiff", "image/tiff"],
-  ["ico", "image/x-icon"],
-]);
-
-const getFileExtension = (relativePath) => {
-  const name = typeof relativePath === "string" ? path.basename(relativePath) : "";
-  const ext = path.extname(name).toLowerCase();
-  return ext.startsWith(".") ? ext.slice(1) : ext;
-};
-
-const isTextFilePath = (relativePath) => TEXT_FILE_EXTENSIONS.has(getFileExtension(relativePath));
-const isImageFilePath = (relativePath) => IMAGE_FILE_EXTENSIONS.has(getFileExtension(relativePath));
-const isPdfFilePath = (relativePath) => getFileExtension(relativePath) === "pdf";
 
 const createMainWindow = () => {
   const preloadPath = path.join(__dirname, "preload.cjs");
   const indexPath = path.join(app.getAppPath(), "Resources", "web", "index.html");
 
-  mainWindow = new BrowserWindow({
+  state.mainWindow = new BrowserWindow({
     width: 1280,
     height: 820,
     minWidth: 960,
@@ -130,24 +76,24 @@ const createMainWindow = () => {
   });
 
   if (isE2E) {
-    mainWindow.loadFile(indexPath, { query: { e2e: "1" } });
+    state.mainWindow.loadFile(indexPath, { query: { e2e: "1" } });
   } else {
-    mainWindow.loadFile(indexPath);
+    state.mainWindow.loadFile(indexPath);
   }
-  mainWindow.on("closed", () => {
-    if (captureShortcut) {
-      globalShortcut.unregister(captureShortcut);
-      captureShortcut = null;
+  state.mainWindow.on("closed", () => {
+    if (state.captureShortcut) {
+      globalShortcut.unregister(state.captureShortcut);
+      state.captureShortcut = null;
     }
-    mainWindow = null;
+    state.mainWindow = null;
   });
 };
 
 const sendToRenderer = (type, payload) => {
-  if (!mainWindow) {
+  if (!state.mainWindow) {
     return;
   }
-  mainWindow.webContents.send("tex64:message", { type, payload });
+  state.mainWindow.webContents.send("tex64:message", { type, payload });
 };
 
 const sendBuildState = (state, message) => {
@@ -167,145 +113,95 @@ const sendBuildLog = (log) => {
 };
 
 const ensureUserSettings = () => {
-  if (!userSettings) {
-    userSettings = new UserSettingsService(app.getPath("userData"));
+  if (!state.userSettings) {
+    state.userSettings = new UserSettingsService(app.getPath("userData"));
   }
-  return userSettings;
+  return state.userSettings;
 };
 
 const registerCaptureShortcut = (shortcut) => {
-  if (!mainWindow) {
+  if (!state.mainWindow) {
     return;
   }
-  if (captureShortcut) {
-    globalShortcut.unregister(captureShortcut);
-    captureShortcut = null;
+  if (state.captureShortcut) {
+    globalShortcut.unregister(state.captureShortcut);
+    state.captureShortcut = null;
   }
   if (!shortcut || typeof shortcut !== "string") {
     return;
   }
   const ok = globalShortcut.register(shortcut, () => {
-    if (mainWindow) {
-      mainWindow.show();
-      mainWindow.focus();
+    if (state.mainWindow) {
+      state.mainWindow.show();
+      state.mainWindow.focus();
     }
     sendToRenderer("capture:open", {});
   });
   if (ok) {
-    captureShortcut = shortcut;
+    state.captureShortcut = shortcut;
   }
 };
 
-const sendWorkspace = async (rootPath) => {
-  let files = [];
-  let folders = [];
-  let errorMessage = null;
-  try {
-    files = await workspace.listFiles();
-  } catch (error) {
-    errorMessage = error.message;
-  }
-  try {
-    folders = await workspace.listFolders();
-  } catch (error) {
-    if (!errorMessage) {
-      errorMessage = error.message;
-    }
-  }
-  let rootFile = "";
-  let rootSource = "";
-  try {
-    const info = await workspace.rootInfo();
-    if (info?.path) {
-      rootFile = info.path;
-      rootSource = info.source;
-    }
-  } catch (error) {
-    if (!errorMessage) {
-      errorMessage = error.message;
-    }
-  }
-  sendToRenderer("updateWorkspace", {
-    rootName: path.basename(rootPath),
-    rootPath,
-    files,
-    folders,
-    rootFile,
-    rootSource,
-  });
-  if (errorMessage) {
-    sendIssues(1, errorMessage, "error", [
-      { severity: "error", message: errorMessage },
-    ]);
-  }
-};
+const workspaceHandlers = createWorkspaceHandlers({
+  dialog,
+  shell,
+  spawn,
+  fs,
+  fsp,
+  path,
+  workspace,
+  indexerService,
+  formatterService,
+  searchService,
+  sendToRenderer,
+  sendIssues,
+  isE2E,
+  WorkspaceError,
+  state,
+});
 
-const updateWorkspaceIfNeeded = async (rootPath, force = false) => {
-  if (!force && currentWorkspacePath === rootPath) {
-    return;
-  }
-  currentWorkspacePath = rootPath;
-  await sendWorkspace(rootPath);
-};
+const buildHandlers = createBuildHandlers({
+  fs,
+  path,
+  buildService,
+  formatterService,
+  workspace,
+  pdfWindowManager,
+  synctexService,
+  sendBuildState,
+  sendIssues,
+  sendBuildLog,
+  sendToRenderer,
+  ensureWorkspace: workspaceHandlers.ensureWorkspace,
+  updateWorkspaceIfNeeded: workspaceHandlers.updateWorkspaceIfNeeded,
+  handleOpenFile: workspaceHandlers.handleOpenFile,
+  state,
+  delay,
+});
 
-const requestIndex = (rootPath) => {
-  if (isE2E) {
-    return;
-  }
-  indexerService.requestIndex(rootPath, (snapshot) => {
-    if (currentWorkspacePath !== rootPath) {
-      return;
-    }
-    sendToRenderer("updateIndex", snapshot);
-  });
-};
+const gitHandlers = createGitHandlers({
+  gitService,
+  sendToRenderer,
+  sendIssues,
+  ensureWorkspace: workspaceHandlers.ensureWorkspace,
+  isE2E,
+});
 
-const sendLauncherStatus = (payload) => {
-  sendToRenderer("launcherStatus", payload);
-};
-
-const ensureWorkspace = () => workspace.getRootPath();
-
-const resolveWorkspacePath = (relativePath) => {
-  const rootPath = workspace.getRootPath();
-  if (!rootPath) {
-    throw new Error(WorkspaceError.invalidPath);
-  }
-  const resolved = path.resolve(rootPath, relativePath);
-  const rootResolved = path.resolve(rootPath);
-  if (resolved !== rootResolved && !resolved.startsWith(rootResolved + path.sep)) {
-    throw new Error(WorkspaceError.invalidPath);
-  }
-  return resolved;
-};
-
-const openInTerminal = (targetPath) => {
-  const rootPath = workspace.getRootPath();
-  if (!rootPath) {
-    throw new Error(WorkspaceError.invalidPath);
-  }
-  const resolved = resolveWorkspacePath(targetPath);
-  let dirPath = resolved;
-  if (fs.existsSync(resolved) && !fs.statSync(resolved).isDirectory()) {
-    dirPath = path.dirname(resolved);
-  }
-  if (process.platform === "darwin") {
-    spawn("open", ["-a", "Terminal", dirPath]);
-    return;
-  }
-  if (process.platform === "win32") {
-    spawn("cmd.exe", ["/c", "start", "cmd.exe", "/K", `cd /d "${dirPath}"`], {
-      windowsHide: true,
-    });
-    return;
-  }
-  spawn("x-terminal-emulator", [], { cwd: dirPath });
-};
-
-const revealInFinder = (targetPath) => {
-  const resolved = resolveWorkspacePath(targetPath);
-  shell.showItemInFolder(resolved);
-};
+const miscHandlers = createMiscHandlers({
+  envService,
+  ensureUserSettings,
+  registerCaptureShortcut,
+  clipboard,
+  nativeImage,
+  workspace,
+  sendToRenderer,
+  resolveWorkspacePath: workspaceHandlers.resolveWorkspacePath,
+  updateWorkspaceIfNeeded: workspaceHandlers.updateWorkspaceIfNeeded,
+  fsp,
+  path,
+  WorkspaceError,
+  blocksStore,
+});
 
 app.whenReady().then(() => {
   const e2eWorkspace = process.env.TEX180_E2E_WORKSPACE;
@@ -313,7 +209,7 @@ app.whenReady().then(() => {
     const resolved = path.resolve(e2eWorkspace);
     if (fs.existsSync(resolved) && fs.statSync(resolved).isDirectory()) {
       workspace.setRootPath(resolved);
-      currentWorkspacePath = null;
+      state.currentWorkspacePath = null;
     }
   }
   createMainWindow();
@@ -351,24 +247,24 @@ ipcMain.on("tex64", (_event, message) => {
     if (!rootPath) {
       return;
     }
-    updateWorkspaceIfNeeded(rootPath, true);
-    requestIndex(rootPath);
+    workspaceHandlers.updateWorkspaceIfNeeded(rootPath, true);
+    workspaceHandlers.requestIndex(rootPath);
     return;
   }
   if (type === "openWorkspace" || type === "requestWorkspace") {
-    handleOpenWorkspace();
+    workspaceHandlers.handleOpenWorkspace();
     return;
   }
   if (type === "createProject") {
-    handleCreateProject(message.template);
+    workspaceHandlers.handleCreateProject(message.template);
     return;
   }
   if (type === "synctex:forward") {
-    handleSynctexForward(message);
+    buildHandlers.handleSynctexForward(message);
     return;
   }
   if (type === "build") {
-    handleBuild(message.mainFile, {
+    buildHandlers.handleBuild(message.mainFile, {
       format: message.format,
       formatSettings: message.formatSettings,
       engine: message.engine,
@@ -377,11 +273,11 @@ ipcMain.on("tex64", (_event, message) => {
     return;
   }
   if (type === "openFile") {
-    handleOpenFile(message.path);
+    workspaceHandlers.handleOpenFile(message.path);
     return;
   }
   if (type === "saveFile") {
-    handleSaveFile(message.path, message.content, {
+    workspaceHandlers.handleSaveFile(message.path, message.content, {
       format: message.format,
       formatSource: message.formatSource,
       formatSettings: message.formatSettings,
@@ -389,7 +285,7 @@ ipcMain.on("tex64", (_event, message) => {
     return;
   }
   if (type === "formatFile") {
-    handleFormatFile(
+    workspaceHandlers.handleFormatFile(
       message.path,
       message.content,
       message.source,
@@ -398,108 +294,108 @@ ipcMain.on("tex64", (_event, message) => {
     return;
   }
   if (type === "createFile") {
-    handleCreateFile(message.path);
+    workspaceHandlers.handleCreateFile(message.path);
     return;
   }
   if (type === "createFolder") {
-    handleCreateFolder(message.path);
+    workspaceHandlers.handleCreateFolder(message.path);
     return;
   }
   if (type === "revealInFinder") {
-    handleRevealInFinder(message.path);
+    workspaceHandlers.handleRevealInFinder(message.path);
     return;
   }
   if (type === "openInTerminal") {
-    handleOpenInTerminal(message.path);
+    workspaceHandlers.handleOpenInTerminal(message.path);
     return;
   }
   if (type === "renameItem") {
-    handleRenameItem(message.path, message.newName);
+    workspaceHandlers.handleRenameItem(message.path, message.newName);
     return;
   }
 
   if (type === "deleteItem") {
-    handleDeleteItem(message.path);
+    workspaceHandlers.handleDeleteItem(message.path);
     return;
   }
   if (type === "moveItem") {
-    handleMoveItem(message.path, message.destination);
+    workspaceHandlers.handleMoveItem(message.path, message.destination);
     return;
   }
   if (type === "copyItem") {
-    handleCopyItem(message.path, message.destination);
+    workspaceHandlers.handleCopyItem(message.path, message.destination);
     return;
   }
   if (type === "undoFileOperation") {
-    handleUndoFileOperation();
+    workspaceHandlers.handleUndoFileOperation();
     return;
   }
   if (type === "setRoot") {
-    handleSetRoot(message.path);
+    workspaceHandlers.handleSetRoot(message.path);
     return;
   }
   if (type === "detectRoot") {
-    handleDetectRoot();
+    workspaceHandlers.handleDetectRoot();
     return;
   }
   if (type === "requestIndex") {
-    handleIndexRequest();
+    workspaceHandlers.handleIndexRequest();
     return;
   }
   if (type === "search") {
-    handleSearch(message.query);
+    workspaceHandlers.handleSearch(message.query);
     return;
   }
   if (type === "gitStatus") {
-    handleGitStatus();
+    gitHandlers.handleGitStatus();
     return;
   }
   if (type === "gitInit") {
-    handleGitInit();
+    gitHandlers.handleGitInit();
     return;
   }
   if (type === "gitCommit") {
-    handleGitCommit(message.message);
+    gitHandlers.handleGitCommit(message.message);
     return;
   }
   if (type === "gitSetRemote") {
-    handleGitSetRemote(message.url);
+    gitHandlers.handleGitSetRemote(message.url);
     return;
   }
   if (type === "gitPull") {
-    handleGitPull();
+    gitHandlers.handleGitPull();
     return;
   }
   if (type === "gitPush") {
-    handleGitPush();
+    gitHandlers.handleGitPush();
     return;
   }
   if (type === "gitRestore") {
-    handleGitRestore(message.hash);
+    gitHandlers.handleGitRestore(message.hash);
     return;
   }
   if (type === "gitDiff") {
-    handleGitDiff(message.mode, message.hash);
+    gitHandlers.handleGitDiff(message.mode, message.hash);
     return;
   }
   if (type === "blocks:save") {
-    handleBlocksSave(message.entry);
+    miscHandlers.handleBlocksSave(message.entry);
     return;
   }
   if (type === "alchemy:settings:get") {
-    handleAlchemySettingsGet();
+    miscHandlers.handleAlchemySettingsGet();
     return;
   }
   if (type === "alchemy:settings:set") {
-    handleAlchemySettingsSet(message.settings);
+    miscHandlers.handleAlchemySettingsSet(message.settings);
     return;
   }
   if (type === "alchemy:clipboard:read") {
-    handleAlchemyClipboardRead(message.requestId);
+    miscHandlers.handleAlchemyClipboardRead(message.requestId);
     return;
   }
   if (type === "alchemy:save-image") {
-    handleAlchemySaveImage(message);
+    miscHandlers.handleAlchemySaveImage(message);
     return;
   }
   if (type === "consoleLog") {
@@ -512,11 +408,11 @@ ipcMain.on("tex64", (_event, message) => {
 
   // Environment IPC
   if (type === "env:check") {
-    handleEnvCheck(message.command);
+    miscHandlers.handleEnvCheck(message.command);
     return;
   }
   if (type === "env:install") {
-    handleEnvInstall(message.target);
+    miscHandlers.handleEnvInstall(message.target);
     return;
   }
 });
@@ -534,1046 +430,3 @@ ipcMain.on("tex64:pdf", (_event, message) => {
     return;
   }
 });
-
-const handleEnvCheck = async (command) => {
-  const result = await envService.checkCommand(command);
-  sendToRenderer("env:checkResult", { command, available: result });
-};
-
-const handleEnvInstall = async (target) => {
-  sendToRenderer("env:installStart", { target });
-  const result = await envService.installEnvironment(target);
-  sendToRenderer("env:installResult", { target, ...result });
-  // Re-check relevant commands after install attempt
-  if (target === "basictex") {
-    const lualatex = await envService.checkCommand("lualatex");
-    const latexmk = await envService.checkCommand("latexmk");
-    sendToRenderer("env:checkResult", { command: "lualatex", available: lualatex });
-    sendToRenderer("env:checkResult", { command: "latexmk", available: latexmk });
-  } else if (target === "latexmk") {
-    const available = await envService.checkCommand("latexmk");
-    sendToRenderer("env:checkResult", { command: "latexmk", available });
-  }
-};
-
-const handleAlchemySettingsGet = async () => {
-  const settings = await ensureUserSettings().getAlchemySettings();
-  sendToRenderer("alchemy:settings", { settings });
-  registerCaptureShortcut(settings.shortcut);
-};
-
-const handleAlchemySettingsSet = async (partial) => {
-  const settings = await ensureUserSettings().updateAlchemySettings(partial);
-  sendToRenderer("alchemy:settings", { settings });
-  registerCaptureShortcut(settings.shortcut);
-};
-
-const readPdfBuffer = (formats) => {
-  const candidates = [];
-  const detected = formats.find((format) => format.toLowerCase().includes("pdf"));
-  if (detected) {
-    candidates.push(detected);
-  }
-  ["application/pdf", "public.pdf", "com.adobe.pdf"].forEach((format) => {
-    if (!candidates.includes(format)) {
-      candidates.push(format);
-    }
-  });
-  for (const format of candidates) {
-    try {
-      const buffer = clipboard.readBuffer(format);
-      if (buffer && buffer.length > 0) {
-        return buffer;
-      }
-    } catch {
-      // ignore PDF read failures
-    }
-  }
-  return null;
-};
-
-const handleAlchemyClipboardRead = (requestId) => {
-  const formats = clipboard.availableFormats();
-  const payload = { requestId, formats };
-  const text = clipboard.readText();
-  if (text) {
-    payload.text = text;
-  }
-  const html = clipboard.readHTML();
-  if (html) {
-    payload.html = html;
-  }
-  const image = clipboard.readImage();
-  if (image && !image.isEmpty()) {
-    payload.imageDataUrl = image.toDataURL();
-  }
-  const pdfBuffer = readPdfBuffer(formats);
-  if (pdfBuffer) {
-    payload.pdfBase64 = pdfBuffer.toString("base64");
-  }
-  sendToRenderer("alchemy:clipboard", payload);
-};
-
-const handleAlchemySaveImage = async (payload) => {
-  const requestId = payload?.requestId ?? null;
-  const dataUrl = typeof payload?.dataUrl === "string" ? payload.dataUrl : "";
-  const rootPath = workspace.getRootPath();
-  if (!rootPath) {
-    sendToRenderer("alchemy:image-saved", {
-      requestId,
-      ok: false,
-      error: WorkspaceError.invalidPath,
-    });
-    return;
-  }
-  if (!dataUrl) {
-    sendToRenderer("alchemy:image-saved", {
-      requestId,
-      ok: false,
-      error: "画像データが空です。",
-    });
-    return;
-  }
-  const image = nativeImage.createFromDataURL(dataUrl);
-  if (image.isEmpty()) {
-    sendToRenderer("alchemy:image-saved", {
-      requestId,
-      ok: false,
-      error: "画像データの読み込みに失敗しました。",
-    });
-    return;
-  }
-  const match = dataUrl.match(/^data:image\/([a-zA-Z0-9+]+);/);
-  const ext = match?.[1]?.toLowerCase() ?? "png";
-  const normalizedExt = ext === "jpeg" || ext === "jpg" ? "jpg" : "png";
-  const buffer =
-    normalizedExt === "jpg" ? image.toJPEG(92) : image.toPNG();
-  const fileName = `capture-${Date.now()}-${Math.random().toString(16).slice(2, 6)}.${normalizedExt}`;
-  const dirPath = resolveWorkspacePath("images");
-  const filePath = path.join(dirPath, fileName);
-  try {
-    await fsp.mkdir(dirPath, { recursive: true });
-    await fsp.writeFile(filePath, buffer);
-    await updateWorkspaceIfNeeded(rootPath, true);
-    sendToRenderer("alchemy:image-saved", {
-      requestId,
-      ok: true,
-      path: `images/${fileName}`,
-    });
-  } catch (error) {
-    sendToRenderer("alchemy:image-saved", {
-      requestId,
-      ok: false,
-      error: error?.message ?? "画像の保存に失敗しました。",
-    });
-  }
-};
-
-const handleOpenWorkspace = async () => {
-  if (!mainWindow) {
-    return;
-  }
-  sendLauncherStatus({ isBusy: true, message: null });
-  const result = await dialog.showOpenDialog(mainWindow, {
-    title: "プロジェクトを選択",
-    message: "LaTeXプロジェクトのフォルダを選択してください。",
-    properties: ["openDirectory"],
-    buttonLabel: "選択",
-  });
-  if (result.canceled || result.filePaths.length === 0) {
-    sendLauncherStatus({ isBusy: false, message: "キャンセルしました。" });
-    sendIssues(0, "フォルダ選択をキャンセルしました。", "info", []);
-    return;
-  }
-  const rootPath = result.filePaths[0];
-  workspace.setRootPath(rootPath);
-  lastBuildPdfPath = null;
-  currentWorkspacePath = null;
-  await updateWorkspaceIfNeeded(rootPath, true);
-  requestIndex(rootPath);
-  sendLauncherStatus({ isBusy: false, message: null });
-};
-
-const handleCreateProject = async (template) => {
-  if (!mainWindow) {
-    return;
-  }
-  sendLauncherStatus({ isBusy: true, message: null });
-  const result = await dialog.showOpenDialog(mainWindow, {
-    title: "新規プロジェクト",
-    message: "プロジェクト用フォルダを作成または選択してください。",
-    properties: ["openDirectory", "createDirectory"],
-    buttonLabel: "作成",
-  });
-  if (result.canceled || result.filePaths.length === 0) {
-    sendLauncherStatus({ isBusy: false, message: null });
-    return;
-  }
-  const rootPath = result.filePaths[0];
-  try {
-    await workspace.initializeProject(rootPath, template === "lecture" ? "lecture" : "paper");
-  } catch (error) {
-    sendLauncherStatus({ isBusy: false, message: error.message });
-    return;
-  }
-  workspace.setRootPath(rootPath);
-  lastBuildPdfPath = null;
-  currentWorkspacePath = null;
-  await updateWorkspaceIfNeeded(rootPath, true);
-  requestIndex(rootPath);
-  sendLauncherStatus({ isBusy: false, message: null });
-};
-
-const handleBuild = async (mainFile, options = {}) => {
-  sendBuildState("building", "ビルド中...");
-  sendIssues(0, "ビルド中...", "info", []);
-  const rootPath = ensureWorkspace();
-  if (!rootPath) {
-    sendBuildState("idle", "キャンセル");
-    sendIssues(0, "ビルドをキャンセルしました。", "info", []);
-    return;
-  }
-  await updateWorkspaceIfNeeded(rootPath);
-  const rootInfo = await workspace.rootInfo().catch(() => null);
-  const targetFile =
-    (mainFile && mainFile.trim() ? mainFile : null) ||
-    rootInfo?.path ||
-    "main.tex";
-  if (options.format && typeof targetFile === "string" && targetFile.endsWith(".tex")) {
-    const formatResult = await formatterService
-      .formatFile(rootPath, targetFile, options.formatSettings)
-      .catch((error) => ({ ok: false, error: error?.message ?? String(error) }));
-    if (!formatResult.ok && !formatWarningShown) {
-      formatWarningShown = true;
-      sendIssues(1, formatResult.error ?? "整形に失敗しました。", "info", [
-        { severity: "warning", message: formatResult.error ?? "整形に失敗しました。", line: null },
-      ]);
-    }
-  }
-  const result = await buildService.build(rootPath, targetFile, options.engine);
-  if (result.kind === "busy") {
-    sendBuildState("building", "ビルド中...");
-    sendIssues(0, "すでにビルド中です。", "info", []);
-    return;
-  }
-  sendBuildLog(result.log ?? null);
-  if (result.kind === "success") {
-    const warningIssues = result.issues.filter((issue) => issue.severity === "warning");
-    const warningCount = warningIssues.length;
-    const summaryText = warningIssues[0]?.message ?? result.summary;
-    if (fs.existsSync(result.pdfPath)) {
-      lastBuildPdfPath = result.pdfPath;
-      const viewerMode = options.pdfViewerMode === "tab" ? "tab" : "window";
-      if (viewerMode === "tab") {
-        const relativePdfPath = resolveWorkspaceRelativePath(rootPath, result.pdfPath);
-        if (relativePdfPath) {
-          await handleOpenFile(relativePdfPath);
-        } else {
-          pdfWindowManager.show(result.pdfPath);
-        }
-      } else {
-        pdfWindowManager.show(result.pdfPath);
-      }
-      sendBuildState("success", result.summary);
-      if (warningCount > 0) {
-        sendIssues(warningCount, summaryText, "info", warningIssues);
-      } else {
-        sendIssues(0, result.summary, "success", []);
-      }
-      return;
-    }
-    sendBuildState("failed", "PDFが見つかりません。");
-    sendIssues(1, "PDFが見つかりません。", "error", [
-      { severity: "error", message: "PDFが見つかりません。", line: null },
-    ]);
-    return;
-  }
-  if (result.kind === "failure") {
-    const count = Math.max(result.issues.length, 1);
-    const summaryText = result.issues[0]?.message ?? result.summary;
-    sendBuildState("failed", result.summary);
-    sendIssues(count, summaryText, "error", result.issues);
-  }
-};
-
-const resolveWorkspacePathFromRoot = (rootPath, targetPath) => {
-  if (!targetPath || typeof targetPath !== "string") {
-    return null;
-  }
-  return path.isAbsolute(targetPath) ? targetPath : path.join(rootPath, targetPath);
-};
-
-const resolveWorkspaceRelativePath = (rootPath, targetPath) => {
-  if (!rootPath || !targetPath || typeof targetPath !== "string") {
-    return null;
-  }
-  if (!path.isAbsolute(targetPath)) {
-    return targetPath;
-  }
-  const relative = path.relative(rootPath, targetPath);
-  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
-    return null;
-  }
-  return relative;
-};
-
-const isSkippableSynctexLine = (sourcePath, lineNumber) => {
-  if (!Number.isFinite(lineNumber) || lineNumber < 1) {
-    return false;
-  }
-  try {
-    const content = fs.readFileSync(sourcePath, "utf8");
-    const lines = content.split(/\r?\n/);
-    const line = lines[lineNumber - 1];
-    if (typeof line !== "string") {
-      return false;
-    }
-    const trimmed = line.trim();
-    if (!trimmed) {
-      return true;
-    }
-    return trimmed.startsWith("%");
-  } catch {
-    return false;
-  }
-};
-
-const handleSynctexForward = async (message) => {
-  const rootPath = ensureWorkspace();
-  if (!rootPath) {
-    sendToRenderer("synctex:forwardResult", {
-      ok: false,
-      error: "ワークスペースが選択されていません。",
-    });
-    return;
-  }
-  const sourcePath = resolveWorkspacePathFromRoot(rootPath, message.path);
-  const pdfPath =
-    resolveWorkspacePathFromRoot(rootPath, message.pdfPath) || lastBuildPdfPath;
-  if (!sourcePath) {
-    sendToRenderer("synctex:forwardResult", {
-      ok: false,
-      error: "対象のTeXファイルが選択されていません。",
-    });
-    return;
-  }
-  if (!pdfPath) {
-    sendToRenderer("synctex:forwardResult", {
-      ok: false,
-      error: "PDFがまだ生成されていません。",
-    });
-    return;
-  }
-  const line = Number.parseInt(message.line, 10);
-  const column = Number.parseInt(message.column, 10);
-  const viewerMode = message.pdfViewerMode === "tab" ? "tab" : "window";
-  const allowFallback = message.fallbackToTop !== false;
-  const isRetryableSynctexError = (error) =>
-    typeof error === "string" &&
-    (error.includes("位置情報") || error.includes("解析に失敗"));
-
-  const runForward = async (forwardLine, forwardColumn) => {
-    let result = await synctexService.forward({
-      sourcePath,
-      line: Number.isFinite(forwardLine) ? forwardLine : 1,
-      column: Number.isFinite(forwardColumn) ? forwardColumn : 1,
-      pdfPath,
-    });
-    if (result.ok || !isRetryableSynctexError(result.error)) {
-      return result;
-    }
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      await delay(200);
-      result = await synctexService.forward({
-        sourcePath,
-        line: Number.isFinite(forwardLine) ? forwardLine : 1,
-        column: Number.isFinite(forwardColumn) ? forwardColumn : 1,
-        pdfPath,
-      });
-      if (result.ok || !isRetryableSynctexError(result.error)) {
-        break;
-      }
-    }
-    return result;
-  };
-
-  const targetLine = Number.isFinite(line) ? line : 1;
-  const preferBacktrack = isSkippableSynctexLine(sourcePath, targetLine);
-  let result = preferBacktrack
-    ? { ok: false, error: "skip" }
-    : await runForward(targetLine, column);
-  if (!result.ok && (preferBacktrack || isRetryableSynctexError(result.error))) {
-    const maxBacktrack = 160;
-    for (let offset = 1; offset <= maxBacktrack; offset += 1) {
-      const candidateLine = targetLine - offset;
-      if (candidateLine < 1) {
-        break;
-      }
-      const candidate = await runForward(candidateLine, column);
-      if (candidate.ok) {
-        candidate.fallback = true;
-        result = candidate;
-        break;
-      }
-      if (!isRetryableSynctexError(candidate.error)) {
-        result = candidate;
-        break;
-      }
-    }
-  }
-  if (!result.ok && allowFallback) {
-    const fallbackResult = await runForward(1, 1);
-    if (fallbackResult.ok) {
-      fallbackResult.fallback = true;
-    }
-    result = fallbackResult;
-  }
-  if (!result.ok) {
-    sendToRenderer("synctex:forwardResult", result);
-    return;
-  }
-  if (viewerMode === "window") {
-    pdfWindowManager.show(pdfPath, { reload: false });
-    pdfWindowManager.queueSync({ page: result.page, x: result.x, y: result.y });
-  }
-  const relativePdfPath = resolveWorkspaceRelativePath(rootPath, pdfPath);
-  sendToRenderer("synctex:forwardResult", {
-    ok: true,
-    page: result.page,
-    x: result.x,
-    y: result.y,
-    fallback: result.fallback === true,
-    pdfPath: relativePdfPath,
-  });
-};
-
-
-const handleOpenFile = async (relativePath) => {
-  const rootPath = ensureWorkspace();
-  if (!rootPath) {
-    sendToRenderer("openFileResult", {
-      path: relativePath,
-      error: "ワークスペースが選択されていません。",
-    });
-    return;
-  }
-  await updateWorkspaceIfNeeded(rootPath);
-  try {
-    if (isPdfFilePath(relativePath)) {
-      const data = await workspace.readBinaryFile(relativePath);
-      sendToRenderer("openFileResult", {
-        path: relativePath,
-        kind: "pdf",
-        mimeType: "application/pdf",
-        data: data.toString("base64"),
-      });
-      return;
-    }
-    if (isImageFilePath(relativePath)) {
-      const data = await workspace.readBinaryFile(relativePath);
-      const ext = getFileExtension(relativePath);
-      sendToRenderer("openFileResult", {
-        path: relativePath,
-        kind: "image",
-        mimeType: IMAGE_MIME_TYPES.get(ext) || "image/*",
-        data: data.toString("base64"),
-      });
-      return;
-    }
-    if (!isTextFilePath(relativePath)) {
-      sendToRenderer("openFileResult", { path: relativePath, kind: "unsupported" });
-      return;
-    }
-    const content = await workspace.readFile(relativePath);
-    sendToRenderer("openFileResult", { path: relativePath, content, kind: "text" });
-  } catch (error) {
-    sendToRenderer("openFileResult", { path: relativePath, error: error.message });
-  }
-};
-
-const handleSaveFile = async (relativePath, content, options = {}) => {
-  const rootPath = ensureWorkspace();
-  if (!rootPath) {
-    sendToRenderer("saveResult", {
-      path: relativePath,
-      ok: false,
-      error: "ワークスペースが選択されていません。",
-    });
-    return;
-  }
-  await updateWorkspaceIfNeeded(rootPath);
-  try {
-    const shouldFormat =
-      options.format === true &&
-      typeof relativePath === "string" &&
-      relativePath.toLowerCase().endsWith(".tex");
-    let finalContent = content ?? "";
-    let formatError = null;
-    if (shouldFormat) {
-      const formatResult = await formatterService
-        .formatContent(
-          rootPath,
-          relativePath,
-          finalContent,
-          options.formatSettings
-        )
-        .catch((error) => ({ ok: false, error: error?.message ?? String(error) }));
-      if (formatResult.warning && !formatWarningShown) {
-        formatWarningShown = true;
-        sendIssues(1, formatResult.warning, "info", [
-          { severity: "warning", message: formatResult.warning, line: null },
-        ]);
-      }
-      if (formatResult.ok && typeof formatResult.content === "string") {
-        finalContent = formatResult.content;
-      } else {
-        formatError = formatResult.error ?? "整形に失敗しました。";
-        if (!formatWarningShown) {
-          formatWarningShown = true;
-          sendIssues(1, formatError, "info", [
-            { severity: "warning", message: formatError, line: null },
-          ]);
-        }
-      }
-    }
-    await workspace.writeFile(relativePath, finalContent);
-    sendToRenderer("saveResult", {
-      path: relativePath,
-      ok: true,
-      content: shouldFormat ? finalContent : undefined,
-      formatError: formatError ?? undefined,
-    });
-    if (workspace.isIndexTarget(relativePath)) {
-      requestIndex(rootPath);
-    }
-  } catch (error) {
-    sendToRenderer("saveResult", { path: relativePath, ok: false, error: error.message });
-  }
-};
-
-const handleFormatFile = async (relativePath, content, source, formatSettings) => {
-  const rootPath = ensureWorkspace();
-  if (!rootPath) {
-    sendToRenderer("formatResult", {
-      path: relativePath,
-      ok: false,
-      error: "ワークスペースが選択されていません。",
-      source,
-    });
-    return;
-  }
-  await updateWorkspaceIfNeeded(rootPath);
-  try {
-    const result = await formatterService
-      .formatContent(rootPath, relativePath, content ?? "", formatSettings)
-      .catch((error) => ({ ok: false, error: error?.message ?? String(error) }));
-    if (result.warning && !formatWarningShown) {
-      formatWarningShown = true;
-      sendIssues(1, result.warning, "info", [
-        { severity: "warning", message: result.warning, line: null },
-      ]);
-    }
-    if (!result.ok) {
-      if (!formatWarningShown) {
-        formatWarningShown = true;
-        sendIssues(1, result.error ?? "整形に失敗しました。", "info", [
-          {
-            severity: "warning",
-            message: result.error ?? "整形に失敗しました。",
-            line: null,
-          },
-        ]);
-      }
-      sendToRenderer("formatResult", {
-        path: relativePath,
-        ok: false,
-        error: result.error ?? "整形に失敗しました。",
-        source,
-      });
-      return;
-    }
-    sendToRenderer("formatResult", {
-      path: relativePath,
-      ok: true,
-      content: result.content ?? content ?? "",
-      source,
-    });
-  } catch (error) {
-    sendToRenderer("formatResult", {
-      path: relativePath,
-      ok: false,
-      error: error.message,
-      source,
-    });
-  }
-};
-
-const handleCreateFile = async (relativePath) => {
-  const rootPath = ensureWorkspace();
-  if (!rootPath) {
-    sendIssues(1, "ワークスペースが選択されていません。", "error", [
-      { severity: "error", message: "ワークスペースが選択されていません。", line: null },
-    ]);
-    return;
-  }
-  await updateWorkspaceIfNeeded(rootPath);
-  try {
-    await workspace.createFile(relativePath);
-    await sendWorkspace(rootPath);
-    sendToRenderer("openFileResult", { path: relativePath, content: "" });
-    sendIssues(0, "ファイルを作成しました。", "success", []);
-    if (workspace.isIndexTarget(relativePath)) {
-      requestIndex(rootPath);
-    }
-  } catch (error) {
-    sendIssues(1, error.message, "error", [
-      { severity: "error", message: error.message, line: null },
-    ]);
-  }
-};
-
-const handleCreateFolder = async (relativePath) => {
-  const rootPath = ensureWorkspace();
-  if (!rootPath) {
-    sendIssues(1, "ワークスペースが選択されていません。", "error", [
-      { severity: "error", message: "ワークスペースが選択されていません。", line: null },
-    ]);
-    return;
-  }
-  await updateWorkspaceIfNeeded(rootPath);
-  try {
-    await workspace.createFolder(relativePath);
-    await sendWorkspace(rootPath);
-    sendIssues(0, "フォルダを作成しました。", "success", []);
-  } catch (error) {
-    sendIssues(1, error.message, "error", [
-      { severity: "error", message: error.message, line: null },
-    ]);
-  }
-};
-
-const handleRevealInFinder = (relativePath) => {
-  const rootPath = ensureWorkspace();
-  if (!rootPath) {
-    sendIssues(1, "ワークスペースが選択されていません。", "error", [
-      { severity: "error", message: "ワークスペースが選択されていません。", line: null },
-    ]);
-    return;
-  }
-  try {
-    revealInFinder(relativePath);
-  } catch (_error) {
-    sendIssues(1, "対象が見つかりません。", "error", [
-      { severity: "error", message: "対象が見つかりません。", line: null },
-    ]);
-  }
-};
-
-const handleOpenInTerminal = (relativePath) => {
-  const rootPath = ensureWorkspace();
-  if (!rootPath) {
-    sendIssues(1, "ワークスペースが選択されていません。", "error", [
-      { severity: "error", message: "ワークスペースが選択されていません。", line: null },
-    ]);
-    return;
-  }
-  try {
-    openInTerminal(relativePath);
-  } catch (_error) {
-    sendIssues(1, "ターミナルを開けませんでした。", "error", [
-      { severity: "error", message: "ターミナルを開けませんでした。", line: null },
-    ]);
-  }
-};
-
-const handleRenameItem = async (relativePath, newName) => {
-  const rootPath = ensureWorkspace();
-  if (!rootPath) {
-    sendIssues(1, "ワークスペースが選択されていません。", "error", [
-      { severity: "error", message: "ワークスペースが選択されていません。", line: null },
-    ]);
-    return;
-  }
-  await updateWorkspaceIfNeeded(rootPath);
-  try {
-    const resolved = resolveWorkspacePath(relativePath);
-    const isDirectory = fs.existsSync(resolved) && fs.statSync(resolved).isDirectory();
-    const newPath = await workspace.renameItem(relativePath, newName);
-    sendToRenderer("renameResult", {
-      oldPath: relativePath,
-      newPath,
-      isDirectory,
-    });
-    await sendWorkspace(rootPath);
-    sendIssues(0, "名前を変更しました。", "success", []);
-    if (isDirectory || workspace.isIndexTarget(relativePath) || workspace.isIndexTarget(newPath)) {
-      requestIndex(rootPath);
-    }
-  } catch (error) {
-    sendIssues(1, error.message, "error", [
-      { severity: "error", message: error.message, line: null },
-    ]);
-  }
-};
-
-const handleDeleteItem = async (relativePath) => {
-  const rootPath = ensureWorkspace();
-  if (!rootPath) {
-    sendIssues(1, "ワークスペースが選択されていません。", "error", [
-      { severity: "error", message: "ワークスペースが選択されていません。", line: null },
-    ]);
-    return;
-  }
-  await updateWorkspaceIfNeeded(rootPath);
-  try {
-    await workspace.deleteItem(relativePath);
-    await sendWorkspace(rootPath);
-    sendIssues(0, "削除しました。", "success", []);
-    if (workspace.isIndexTarget(relativePath)) {
-      requestIndex(rootPath);
-    }
-  } catch (error) {
-    sendIssues(1, error.message, "error", [
-      { severity: "error", message: error.message, line: null },
-    ]);
-  }
-};
-
-const handleMoveItem = async (relativePath, destination) => {
-  const rootPath = ensureWorkspace();
-  if (!rootPath) {
-    sendIssues(1, "ワークスペースが選択されていません。", "error", [
-      { severity: "error", message: "ワークスペースが選択されていません。", line: null },
-    ]);
-    return;
-  }
-  await updateWorkspaceIfNeeded(rootPath);
-  try {
-    const resolved = resolveWorkspacePath(relativePath);
-    const isDirectory = fs.existsSync(resolved) && fs.statSync(resolved).isDirectory();
-    const newPath = await workspace.moveItem(relativePath, destination);
-    sendToRenderer("renameResult", {
-      oldPath: relativePath,
-      newPath,
-      isDirectory,
-    });
-    await sendWorkspace(rootPath);
-    sendIssues(0, "移動しました。", "success", []);
-    if (isDirectory || workspace.isIndexTarget(relativePath) || workspace.isIndexTarget(newPath)) {
-      requestIndex(rootPath);
-    }
-  } catch (error) {
-    sendIssues(1, error.message, "error", [
-      { severity: "error", message: error.message, line: null },
-    ]);
-  }
-};
-
-const handleCopyItem = async (relativePath, destination) => {
-  const rootPath = ensureWorkspace();
-  if (!rootPath) {
-    sendIssues(1, "ワークスペースが選択されていません。", "error", [
-      { severity: "error", message: "ワークスペースが選択されていません。", line: null },
-    ]);
-    return;
-  }
-  await updateWorkspaceIfNeeded(rootPath);
-  try {
-    const newPath = await workspace.copyItem(relativePath, destination);
-    await sendWorkspace(rootPath);
-    sendIssues(0, "コピーしました。", "success", []);
-    if (workspace.isIndexTarget(relativePath) || workspace.isIndexTarget(newPath)) {
-      requestIndex(rootPath);
-    }
-  } catch (error) {
-    sendIssues(1, error.message, "error", [
-      { severity: "error", message: error.message, line: null },
-    ]);
-  }
-};
-
-const handleUndoFileOperation = async () => {
-  const rootPath = ensureWorkspace();
-  if (!rootPath) {
-    sendIssues(1, "ワークスペースが選択されていません。", "error", [
-      { severity: "error", message: "ワークスペースが選択されていません。", line: null },
-    ]);
-    return;
-  }
-  await updateWorkspaceIfNeeded(rootPath);
-  try {
-    const operation = await workspace.undoLastOperation();
-    if (!operation) {
-      sendIssues(0, "戻す操作はありません。", "info", []);
-      return;
-    }
-    if (operation.kind === "move" && operation.toPath) {
-      sendToRenderer("renameResult", {
-        oldPath: operation.toPath,
-        newPath: operation.fromPath,
-        isDirectory: operation.isDirectory,
-      });
-    }
-    await sendWorkspace(rootPath);
-    sendIssues(0, "操作を戻しました。", "success", []);
-    if (operation.affectsIndex) {
-      requestIndex(rootPath);
-    }
-  } catch (error) {
-    sendIssues(1, error.message, "error", [
-      { severity: "error", message: error.message, line: null },
-    ]);
-  }
-};
-
-const handleSetRoot = async (relativePath) => {
-  const rootPath = ensureWorkspace();
-  if (!rootPath) {
-    sendIssues(1, "ワークスペースが選択されていません。", "error", [
-      { severity: "error", message: "ワークスペースが選択されていません。", line: null },
-    ]);
-    return;
-  }
-  try {
-    await workspace.setRootFile(relativePath);
-    await sendWorkspace(rootPath);
-    sendIssues(0, "メインTeXを更新しました。", "success", []);
-  } catch (error) {
-    sendIssues(1, error.message, "error", [
-      { severity: "error", message: error.message, line: null },
-    ]);
-  }
-};
-
-const handleDetectRoot = async () => {
-  const rootPath = ensureWorkspace();
-  if (!rootPath) {
-    sendIssues(1, "ワークスペースが選択されていません。", "error", [
-      { severity: "error", message: "ワークスペースが選択されていません。", line: null },
-    ]);
-    return;
-  }
-  try {
-    await workspace.clearRootOverride();
-    await sendWorkspace(rootPath);
-    sendIssues(0, "メインTeXを自動検出しました。", "success", []);
-  } catch (error) {
-    sendIssues(1, error.message, "error", [
-      { severity: "error", message: error.message, line: null },
-    ]);
-  }
-};
-
-const handleIndexRequest = () => {
-  const rootPath = ensureWorkspace();
-  if (!rootPath) {
-    return;
-  }
-  if (isE2E) {
-    return;
-  }
-  requestIndex(rootPath);
-};
-
-const handleSearch = async (query) => {
-  if (isE2E) {
-    return;
-  }
-  const rootPath = ensureWorkspace();
-  if (!rootPath) {
-    sendToRenderer("updateSearch", {
-      query,
-      results: [],
-      message: "ワークスペースが選択されていません。",
-    });
-    return;
-  }
-  const results = await searchService.search(rootPath, query ?? "");
-  sendToRenderer("updateSearch", { query, results });
-};
-
-const handleGitStatus = async () => {
-  if (isE2E) {
-    return;
-  }
-  const rootPath = ensureWorkspace();
-  if (!rootPath) {
-    sendToRenderer("updateGit", {
-      entries: [],
-      message: "ワークスペースが選択されていません。",
-    });
-    return;
-  }
-  const snapshot = await gitService.status(rootPath);
-  sendToRenderer("updateGit", snapshot);
-};
-
-const sendGitActionResult = (action, result) => {
-  sendToRenderer("gitActionResult", {
-    action,
-    ok: result?.ok ?? false,
-    status: result?.status ?? "error",
-    message: result?.message ?? null,
-    hint: result?.hint ?? null,
-  });
-};
-
-const reportGitAction = (result, fallback) => {
-  const message = result?.message ?? fallback;
-  const status = result?.status ?? (result?.ok ? "success" : "error");
-  if (status === "success") {
-    sendIssues(0, message, "success", []);
-    return;
-  }
-  if (status === "info") {
-    sendIssues(0, message, "info", []);
-    return;
-  }
-  sendIssues(1, message, "error", [{ severity: "error", message }]);
-};
-
-const handleGitInit = async () => {
-  if (isE2E) {
-    return;
-  }
-  const rootPath = ensureWorkspace();
-  if (!rootPath) {
-    sendIssues(1, "ワークスペースが選択されていません。", "error", [
-      { severity: "error", message: "ワークスペースが選択されていません。" },
-    ]);
-    return;
-  }
-  const result = await gitService.init(rootPath);
-  reportGitAction(result, "履歴管理の開始に失敗しました。");
-  sendGitActionResult("init", result);
-  await handleGitStatus();
-};
-
-const handleGitCommit = async (message) => {
-  if (isE2E) {
-    return;
-  }
-  const rootPath = ensureWorkspace();
-  if (!rootPath) {
-    sendIssues(1, "ワークスペースが選択されていません。", "error", [
-      { severity: "error", message: "ワークスペースが選択されていません。" },
-    ]);
-    return;
-  }
-  const result = await gitService.commit(rootPath, message);
-  reportGitAction(result, "履歴の保存に失敗しました。");
-  sendGitActionResult("commit", result);
-  await handleGitStatus();
-};
-
-const handleGitSetRemote = async (url) => {
-  if (isE2E) {
-    return;
-  }
-  const rootPath = ensureWorkspace();
-  if (!rootPath) {
-    sendIssues(1, "ワークスペースが選択されていません。", "error", [
-      { severity: "error", message: "ワークスペースが選択されていません。" },
-    ]);
-    return;
-  }
-  const result = await gitService.setRemote(rootPath, url);
-  reportGitAction(result, "同期先の保存に失敗しました。");
-  sendGitActionResult("remote", result);
-  await handleGitStatus();
-};
-
-const handleGitPull = async () => {
-  if (isE2E) {
-    return;
-  }
-  const rootPath = ensureWorkspace();
-  if (!rootPath) {
-    sendIssues(1, "ワークスペースが選択されていません。", "error", [
-      { severity: "error", message: "ワークスペースが選択されていません。" },
-    ]);
-    return;
-  }
-  const result = await gitService.pull(rootPath);
-  reportGitAction(result, "同期に失敗しました。");
-  sendGitActionResult("pull", result);
-  await handleGitStatus();
-};
-
-const handleGitPush = async () => {
-  if (isE2E) {
-    return;
-  }
-  const rootPath = ensureWorkspace();
-  if (!rootPath) {
-    sendIssues(1, "ワークスペースが選択されていません。", "error", [
-      { severity: "error", message: "ワークスペースが選択されていません。" },
-    ]);
-    return;
-  }
-  const result = await gitService.push(rootPath);
-  reportGitAction(result, "送信に失敗しました。");
-  sendGitActionResult("push", result);
-  await handleGitStatus();
-};
-
-const handleGitRestore = async (hash) => {
-  if (isE2E) {
-    return;
-  }
-  const rootPath = ensureWorkspace();
-  if (!rootPath) {
-    sendIssues(1, "ワークスペースが選択されていません。", "error", [
-      { severity: "error", message: "ワークスペースが選択されていません。" },
-    ]);
-    return;
-  }
-  const result = await gitService.restore(rootPath, hash);
-  reportGitAction(result, "履歴の復元に失敗しました。");
-  sendGitActionResult("restore", result);
-  await handleGitStatus();
-};
-
-const handleGitDiff = async (mode, hash) => {
-  if (isE2E) {
-    return;
-  }
-  const rootPath = ensureWorkspace();
-  if (!rootPath) {
-    sendToRenderer("updateGitDiff", {
-      ok: false,
-      mode: mode === "restore" ? "restore" : "commit",
-      message: "ワークスペースが選択されていません。",
-    });
-    return;
-  }
-  const resolvedMode = mode === "restore" ? "restore" : "commit";
-  const snapshot =
-    resolvedMode === "restore"
-      ? await gitService.getRestoreDiff(rootPath, hash)
-      : await gitService.getCommitDiff(rootPath);
-  sendToRenderer("updateGitDiff", {
-    ok: snapshot.ok,
-    mode: resolvedMode,
-    hash,
-    patch: snapshot.patch,
-    message: snapshot.message,
-  });
-};
-
-const handleBlocksSave = async (entry) => {
-  const rootPath = ensureWorkspace();
-  if (!rootPath) {
-    return;
-  }
-  let blocks = [];
-  try {
-    blocks = await blocksStore.load(rootPath);
-  } catch {
-    blocks = [];
-  }
-  if (entry && typeof entry === "object") {
-    blocks.push(entry);
-  }
-  await blocksStore.save(rootPath, blocks);
-};
