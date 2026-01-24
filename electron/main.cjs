@@ -359,6 +359,7 @@ ipcMain.on("tex64", (_event, message) => {
       formatSettings: message.formatSettings,
       engine: message.engine,
       pdfViewerMode: message.pdfViewerMode,
+      partial: message.partial,
     });
     return;
   }

@@ -1,6 +1,7 @@
 import { formatSnippetForInsert } from "./format.js";
 export const initBlockInsertFlow = (context, deps) => {
     const { blockInsertButton } = context.dom;
+    let triggerInsertSeq = 0;
     const countLines = (text) => {
         if (!text)
             return 1;
@@ -204,6 +205,7 @@ export const initBlockInsertFlow = (context, deps) => {
     };
     const triggerInsert = async () => {
         var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o;
+        const triggerSeq = ++triggerInsertSeq;
         const activeGroup = deps.getActiveGroup();
         if (!activeGroup.editor) {
             return;
@@ -299,6 +301,9 @@ export const initBlockInsertFlow = (context, deps) => {
                     path: filePath,
                     content: rawModified,
                 }));
+                if (triggerSeq !== triggerInsertSeq) {
+                    return;
+                }
                 if ((previewResult === null || previewResult === void 0 ? void 0 : previewResult.ok) && typeof previewResult.content === "string") {
                     const change = findChangedRange(originalContent, previewResult.content);
                     if (change) {
@@ -310,6 +315,9 @@ export const initBlockInsertFlow = (context, deps) => {
                         replaceSnippet = formattedSnippet;
                     }
                 }
+            }
+            if (triggerSeq !== triggerInsertSeq) {
+                return;
             }
             if (deps.getIsE2E()) {
                 window.__tex64LastDraft = {

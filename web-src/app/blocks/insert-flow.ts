@@ -94,6 +94,7 @@ export const initBlockInsertFlow = (
   deps: BlockInsertDeps
 ): BlockInsertApi => {
   const { blockInsertButton } = context.dom;
+  let triggerInsertSeq = 0;
   const countLines = (text: string) => {
     if (!text) return 1;
     return text.split(/\r?\n/).length;
@@ -353,6 +354,7 @@ export const initBlockInsertFlow = (
   };
 
   const triggerInsert = async () => {
+    const triggerSeq = ++triggerInsertSeq;
     const activeGroup = deps.getActiveGroup();
     if (!activeGroup.editor) {
       return;
@@ -459,6 +461,9 @@ export const initBlockInsertFlow = (
           path: filePath,
           content: rawModified,
         });
+        if (triggerSeq !== triggerInsertSeq) {
+          return;
+        }
         if (previewResult?.ok && typeof previewResult.content === "string") {
           const change = findChangedRange(originalContent, previewResult.content);
           if (change) {
@@ -474,6 +479,9 @@ export const initBlockInsertFlow = (
             replaceSnippet = formattedSnippet;
           }
         }
+      }
+      if (triggerSeq !== triggerInsertSeq) {
+        return;
       }
 
       if (deps.getIsE2E()) {

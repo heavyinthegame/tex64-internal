@@ -124,6 +124,10 @@ class BuildService {
 
     const args = [];
     args.push("-g");
+    const outputDir = path.dirname(mainFileName ?? "");
+    if (outputDir && outputDir !== ".") {
+      args.push(`-outdir=${outputDir}`);
+    }
     args.push(
       engineFlag,
       "-synctex=1",

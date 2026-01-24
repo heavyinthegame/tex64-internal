@@ -1,11 +1,117 @@
 export const initBuildOpsUi = (context, deps) => {
-    const { buildButton, formatButton, synctexButton, issuesLog, issuesLogContent } = context.dom;
+    const { buildButton, partialBuildButton, formatButton, synctexButton, issuesLog, issuesLogContent, } = context.dom;
     let formatInFlight = false;
     let formatPending = false;
     let formatWarningShown = false;
     let currentBuildLog = null;
+    let lastBuildMode = "full";
     const formatPreviewRequests = new Map();
     const formatPreviewIgnore = new Set();
+    const SECTION_LEVELS = {
+        part: 0,
+        chapter: 1,
+        section: 2,
+        subsection: 3,
+        subsubsection: 4,
+        paragraph: 5,
+        subparagraph: 6,
+    };
+    const SECTION_PATTERN = new RegExp(`^\\s*\\\\(${Object.keys(SECTION_LEVELS).join("|")})\\*?\\b`);
+    const stripLineComment = (line) => {
+        const idx = line.indexOf("%");
+        if (idx === -1) {
+            return line;
+        }
+        for (let i = idx; i < line.length; i += 1) {
+            if (line[i] !== "%") {
+                continue;
+            }
+            let backslashes = 0;
+            for (let j = i - 1; j >= 0 && line[j] === "\\"; j -= 1) {
+                backslashes += 1;
+            }
+            if (backslashes % 2 === 0) {
+                return line.slice(0, i);
+            }
+        }
+        return line;
+    };
+    const normalizeCommandLine = (line) => stripLineComment(line).replace(/\s+/g, "");
+    const resolveDocumentParts = (lines) => {
+        let beginDocLine = null;
+        let endDocLine = null;
+        for (let i = 0; i < lines.length; i += 1) {
+            const normalized = normalizeCommandLine(lines[i]);
+            if (normalized.includes("\\begin{document}")) {
+                beginDocLine = i + 1;
+                break;
+            }
+        }
+        for (let i = lines.length - 1; i >= 0; i -= 1) {
+            const normalized = normalizeCommandLine(lines[i]);
+            if (normalized.includes("\\end{document}")) {
+                endDocLine = i + 1;
+                break;
+            }
+        }
+        const bodyStartLine = beginDocLine ? Math.min(beginDocLine + 1, lines.length) : 1;
+        const bodyEndLine = endDocLine ? Math.max(1, endDocLine - 1) : lines.length;
+        const safeBodyStartLine = Math.min(bodyStartLine, Math.max(lines.length, 1));
+        const safeBodyEndLine = Math.max(bodyEndLine, safeBodyStartLine);
+        const preambleLines = beginDocLine && beginDocLine > 1
+            ? lines
+                .slice(0, beginDocLine - 1)
+                .filter((entry) => !normalizeCommandLine(entry).includes("\\documentclass"))
+            : [];
+        return {
+            bodyStartLine: safeBodyStartLine,
+            bodyEndLine: safeBodyEndLine,
+            preambleLines,
+        };
+    };
+    const resolveSectionLevel = (line) => {
+        var _a;
+        const match = stripLineComment(line).match(SECTION_PATTERN);
+        if (!match) {
+            return null;
+        }
+        return (_a = SECTION_LEVELS[match[1]]) !== null && _a !== void 0 ? _a : null;
+    };
+    const resolveSectionRange = (lines, cursorLine, bodyStartLine, bodyEndLine) => {
+        const sectionStarts = [];
+        for (let lineNumber = bodyStartLine; lineNumber <= bodyEndLine; lineNumber += 1) {
+            const level = resolveSectionLevel(lines[lineNumber - 1]);
+            if (typeof level === "number") {
+                sectionStarts.push({ lineNumber, level });
+            }
+        }
+        if (sectionStarts.length === 0) {
+            return { startLine: bodyStartLine, endLine: bodyEndLine };
+        }
+        const topLevel = Math.min(...sectionStarts.map((entry) => entry.level));
+        const topSections = sectionStarts.filter((entry) => entry.level === topLevel);
+        const clampedCursor = Math.min(Math.max(cursorLine, bodyStartLine), bodyEndLine);
+        let startLine = bodyStartLine;
+        for (const entry of topSections) {
+            if (entry.lineNumber <= clampedCursor) {
+                startLine = entry.lineNumber;
+            }
+            else {
+                break;
+            }
+        }
+        let endLine = bodyEndLine;
+        for (const entry of topSections) {
+            if (entry.lineNumber > startLine) {
+                endLine = entry.lineNumber - 1;
+                break;
+            }
+        }
+        if (endLine < startLine) {
+            endLine = startLine;
+        }
+        return { startLine, endLine };
+    };
     const isEnvMissingMessage = (message) => {
         const lower = message.toLowerCase();
         const hasMissing = message.includes("見つかりません") || lower.includes("not found");
@@ -63,19 +169,25 @@ export const initBuildOpsUi = (context, deps) => {
     };
     const setBuildState = (state, message) => {
         var _a, _b;
+        const isBusy = state === "building";
         if (buildButton instanceof HTMLButtonElement) {
-            const isBusy = state === "building";
             buildButton.disabled = isBusy;
             buildButton.classList.toggle("is-busy", isBusy);
             buildButton.setAttribute("aria-busy", isBusy ? "true" : "false");
             buildButton.setAttribute("aria-label", isBusy ? "ビルド中" : "ビルド");
         }
+        if (partialBuildButton instanceof HTMLButtonElement) {
+            partialBuildButton.disabled = isBusy;
+            partialBuildButton.setAttribute("aria-busy", isBusy ? "true" : "false");
+        }
         if (state === "success") {
-            const targetPath = (_b = (_a = deps.getLastBuildMainFile()) !== null && _a !== void 0 ? _a : deps.getRootFilePath()) !== null && _b !== void 0 ? _b : deps.getActiveFilePath();
-            if (deps.settings.getAutoSynctexOnBuildEnabled() &&
-                targetPath &&
-                targetPath.endsWith(".tex")) {
-                requestSynctexForward(targetPath, { fallbackToTop: true });
+            if (lastBuildMode === "full") {
+                const targetPath = (_b = (_a = deps.getLastBuildMainFile()) !== null && _a !== void 0 ? _a : deps.getRootFilePath()) !== null && _b !== void 0 ? _b : deps.getActiveFilePath();
+                if (deps.settings.getAutoSynctexOnBuildEnabled() &&
+                    targetPath &&
+                    targetPath.endsWith(".tex")) {
+                    requestSynctexForward(targetPath, { fallbackToTop: true });
+                }
             }
         }
         if (state === "failed") {
@@ -88,6 +200,54 @@ export const initBuildOpsUi = (context, deps) => {
             deps.updateIssues(0, message, "info", []);
         }
     };
+    const resolveSectionBuildPayload = () => {
+        var _a, _b, _c, _d;
+        const activeGroup = deps.getActiveGroup();
+        const activePath = activeGroup.currentFilePath;
+        if (!activePath || !activePath.toLowerCase().endsWith(".tex")) {
+            return null;
+        }
+        const editor = activeGroup.editor;
+        const model = (_a = editor === null || editor === void 0 ? void 0 : editor.getModel) === null || _a === void 0 ? void 0 : _a.call(editor);
+        if (!(model === null || model === void 0 ? void 0 : model.getLineCount) || !(model === null || model === void 0 ? void 0 : model.getLineContent)) {
+            return null;
+        }
+        const lineCount = model.getLineCount();
+        const lines = [];
+        for (let lineNumber = 1; lineNumber <= lineCount; lineNumber += 1) {
+            lines.push(model.getLineContent(lineNumber));
+        }
+        const { bodyStartLine, bodyEndLine, preambleLines } = resolveDocumentParts(lines);
+        const position = activeGroup.currentFilePath === activePath ? (_b = editor === null || editor === void 0 ? void 0 : editor.getPosition) === null || _b === void 0 ? void 0 : _b.call(editor) : null;
+        const storedPosition = deps.getStoredCursorPosition(activePath);
+        const cursorLine = (_d = (_c = position === null || position === void 0 ? void 0 : position.lineNumber) !== null && _c !== void 0 ? _c : storedPosition === null || storedPosition === void 0 ? void 0 : storedPosition.line) !== null && _d !== void 0 ? _d : bodyStartLine;
+        const { startLine, endLine } = resolveSectionRange(lines, cursorLine, bodyStartLine, bodyEndLine);
+        const isRootFile = deps.getRootFilePath() === activePath;
+        const extraPreamble = !isRootFile && preambleLines.length > 0 ? preambleLines.join("\n") : undefined;
+        return {
+            path: activePath,
+            startLine,
+            endLine,
+            content: lines.slice(startLine - 1, endLine).join("\n"),
+            preamble: extraPreamble,
+        };
+    };
+    const notifyPartialBuildUnavailable = (message) => {
+        deps.updateIssues(1, message, "info", [{ severity: "warning", message }]);
+    };
+    const requestPartialBuild = () => {
+        const activePath = deps.getActiveFilePath();
+        if (!activePath || !activePath.toLowerCase().endsWith(".tex")) {
+            notifyPartialBuildUnavailable("部分ビルドは .tex ファイルでのみ利用できます。");
+            return;
+        }
+        const partial = resolveSectionBuildPayload();
+        if (!partial) {
+            notifyPartialBuildUnavailable("部分ビルドに必要な情報を取得できませんでした。");
+            return;
+        }
+        startPartialBuild(partial);
+    };
     const startBuild = () => {
         var _a, _b;
         deps.cacheCurrentBuffer(deps.getActiveGroup());
@@ -95,6 +255,7 @@ export const initBuildOpsUi = (context, deps) => {
             ? deps.getActiveFilePath()
             : undefined);
         deps.setLastBuildMainFile(mainFile !== null && mainFile !== void 0 ? mainFile : null);
+        lastBuildMode = "full";
         const engine = localStorage.getItem("tex64.compileEngine") || "lualatex";
         const payload = { type: "build" };
         if (mainFile) {
@@ -109,6 +270,34 @@ export const initBuildOpsUi = (context, deps) => {
             setBuildState("building");
             handleBuildLog(null);
             deps.updateIssues(0, "ビルドを開始します。", "info", []);
+        }
+    };
+    const startPartialBuild = (partial) => {
+        var _a, _b;
+        deps.cacheCurrentBuffer(deps.getActiveGroup());
+        const mainFile = (_a = deps.getRootFilePath()) !== null && _a !== void 0 ? _a : (deps.getActiveFilePath() && ((_b = deps.getActiveFilePath()) === null || _b === void 0 ? void 0 : _b.endsWith(".tex"))
+            ? deps.getActiveFilePath()
+            : undefined);
+        deps.setLastBuildMainFile(mainFile !== null && mainFile !== void 0 ? mainFile : null);
+        lastBuildMode = "partial";
+        const engine = localStorage.getItem("tex64.compileEngine") || "lualatex";
+        const payload = { type: "build" };
+        if (mainFile) {
+            payload.mainFile = mainFile;
+        }
+        if (engine) {
+            payload.engine = engine;
+        }
+        payload.pdfViewerMode = deps.settings.getPdfViewerMode();
+        payload.formatSettings = deps.settings.buildFormatSettingsPayload();
+        payload.partial = partial;
+        if (deps.postToNative(payload)) {
+            setBuildState("building");
+            handleBuildLog(null);
+            deps.updateIssues(0, "章/節の部分ビルドを開始します。", "info", []);
+        }
+        else {
+            lastBuildMode = "full";
         }
     };
     const requestFormatCurrentFile = (source) => {
@@ -289,6 +478,30 @@ export const initBuildOpsUi = (context, deps) => {
                     return;
                 }
                 startBuild();
+            });
+        }
+        if (partialBuildButton instanceof HTMLButtonElement) {
+            partialBuildButton.addEventListener("click", () => {
+                if (partialBuildButton.disabled) {
+                    return;
+                }
+                const activeGroup = deps.getActiveGroup();
+                if (activeGroup.isDirty && activeGroup.currentFilePath) {
+                    deps
+                        .saveCurrentFile()
+                        .then((ok) => {
+                        if (ok) {
+                            requestPartialBuild();
+                        }
+                    })
+                        .catch((message) => {
+                        deps.updateIssues(1, message, "error", [
+                            { severity: "error", message },
+                        ]);
+                    });
+                    return;
+                }
+                requestPartialBuild();
             });
         }
         if (formatButton instanceof HTMLButtonElement) {

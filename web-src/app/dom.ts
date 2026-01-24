@@ -18,6 +18,7 @@ export const getDomRefs = () => ({
   editorViewerMessageSecondary: document.getElementById("editor-viewer-message-secondary"),
   editorFallbackSecondary: document.getElementById("editor-fallback-secondary"),
   formatButton: document.getElementById("format-button"),
+  partialBuildButton: document.getElementById("partial-build-button"),
   buildButton: document.getElementById("build-button"),
   synctexButton: document.getElementById("synctex-button"),
   issuesList: document.getElementById("issues-list"),

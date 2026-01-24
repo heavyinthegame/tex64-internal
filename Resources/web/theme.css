@@ -356,7 +356,7 @@ body.has-launcher .app {
 .top-actions {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
 }
 
 .pill {
@@ -2845,7 +2845,7 @@ math-field.block-math-field::placeholder {
   border-radius: 8px;
   padding: 0 10px;
   height: 32px;
-  margin: 2px 6px 2px 0;
+  margin: 2px 0;
   cursor: pointer;
   transition: all 0.2s ease;
 }
@@ -2973,7 +2973,7 @@ math-field.block-math-field::placeholder {
   border-radius: 6px;
   padding: 6px 12px;
   height: 32px;
-  margin: 2px 4px 2px 0;
+  margin: 2px 0;
   cursor: pointer;
   z-index: 4;
   transition: all 0.2s ease;
@@ -2995,6 +2995,43 @@ math-field.block-math-field::placeholder {
   animation: build-spin 0.8s linear infinite;
 }
 
+#partial-build-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--panel-border);
+  background: transparent;
+  color: var(--text-soft);
+  border-radius: 6px;
+  padding: 6px 10px;
+  height: 32px;
+  margin: 2px 0;
+  cursor: pointer;
+  z-index: 4;
+  transition: all 0.2s ease;
+}
+
+#partial-build-button svg {
+  width: 18px;
+  height: 18px;
+}
+
+#partial-build-button:hover {
+  border-color: var(--panel-border-strong);
+  color: var(--accent-hover, #4D9CFF);
+  background: var(--accent-light, rgba(58, 169, 255, 0.1));
+}
+
+#partial-build-button:active {
+  background: var(--accent-light, rgba(58, 169, 255, 0.2));
+  transform: scale(0.97);
+}
+
+#partial-build-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 #format-button {
   display: flex;
   align-items: center;
@@ -3005,7 +3042,7 @@ math-field.block-math-field::placeholder {
   border-radius: 8px;
   padding: 6px 12px;
   height: 32px;
-  margin: 2px 6px 2px 0;
+  margin: 2px 0;
   font-size: 11px;
   letter-spacing: 0.08em;
   cursor: pointer;

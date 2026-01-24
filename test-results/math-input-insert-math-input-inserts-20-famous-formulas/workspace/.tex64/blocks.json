@@ -1,0 +1,182 @@
+[
+  {
+    "file": "diff-preview.tex",
+    "snippet": "$E=mc^2$",
+    "content": {
+      "formula": "E=mc^2"
+    },
+    "mode": "new",
+    "createdAt": "2026-01-24T05:51:34.421Z"
+  },
+  {
+    "file": "diff-preview.tex",
+    "snippet": "F=ma$$",
+    "content": {
+      "formula": "F=ma"
+    },
+    "mode": "new",
+    "createdAt": "2026-01-24T05:51:36.184Z"
+  },
+  {
+    "file": "diff-preview.tex",
+    "snippet": "a^2+b^2=c^2$$",
+    "content": {
+      "formula": "a^2+b^2=c^2"
+    },
+    "mode": "new",
+    "createdAt": "2026-01-24T05:51:39.884Z"
+  },
+  {
+    "file": "diff-preview.tex",
+    "snippet": "\\sin^2x+\\cos^2x=1$$",
+    "content": {
+      "formula": "\\sin^2x+\\cos^2x=1"
+    },
+    "mode": "new",
+    "createdAt": "2026-01-24T05:51:43.215Z"
+  },
+  {
+    "file": "diff-preview.tex",
+    "snippet": "e^{i\\pi}+1=0$$",
+    "content": {
+      "formula": "e^{i\\pi}+1=0"
+    },
+    "mode": "new",
+    "createdAt": "2026-01-24T05:51:45.782Z"
+  },
+  {
+    "file": "diff-preview.tex",
+    "snippet": "\\int_0^1x^2dx=\\frac13$$",
+    "content": {
+      "formula": "\\int_0^1x^2dx=\\frac13"
+    },
+    "mode": "new",
+    "createdAt": "2026-01-24T05:51:50.099Z"
+  },
+  {
+    "file": "diff-preview.tex",
+    "snippet": "sum_{k=1}^{n}k=\\frac{n\\left(n+1\\right)}{2}$$\\",
+    "content": {
+      "formula": "\\sum_{k=1}^{n}k=\\frac{n\\left(n+1\\right)}{2}"
+    },
+    "mode": "new",
+    "createdAt": "2026-01-24T05:51:54.472Z"
+  },
+  {
+    "file": "diff-preview.tex",
+    "snippet": "lim_{x\\to0}\\frac{\\sin x}{x}=1$$\\",
+    "content": {
+      "formula": "\\lim_{x\\to0}\\frac{\\sin x}{x}=1"
+    },
+    "mode": "new",
+    "createdAt": "2026-01-24T05:51:58.465Z"
+  },
+  {
+    "file": "diff-preview.tex",
+    "snippet": "frac{d}{\\differentialD x}\\sin x=\\cos x$$\\",
+    "content": {
+      "formula": "\\frac{d}{\\differentialD x}\\sin x=\\cos x"
+    },
+    "mode": "new",
+    "createdAt": "2026-01-24T05:52:01.416Z"
+  },
+  {
+    "file": "diff-preview.tex",
+    "snippet": "ln x=\\frac{1}{x}$$\\frac{d}{\\differentialD x}\\",
+    "content": {
+      "formula": "\\frac{d}{\\differentialD x}\\ln x=\\frac{1}{x}"
+    },
+    "mode": "new",
+    "createdAt": "2026-01-24T05:52:04.949Z"
+  },
+  {
+    "file": "diff-preview.tex",
+    "snippet": "int_{-\\infty}^{\\infty}e^{-x^2}dx=\\sqrt{\\pi}$$\\",
+    "content": {
+      "formula": "\\int_{-\\infty}^{\\infty}e^{-x^2}dx=\\sqrt{\\pi}"
+    },
+    "mode": "new",
+    "createdAt": "2026-01-24T05:52:09.482Z"
+  },
+  {
+    "file": "diff-preview.tex",
+    "snippet": "A=\\pi r^2$$",
+    "content": {
+      "formula": "A=\\pi r^2"
+    },
+    "mode": "new",
+    "createdAt": "2026-01-24T05:52:11.683Z"
+  },
+  {
+    "file": "diff-preview.tex",
+    "snippet": "c=\\lambda\\nu$$",
+    "content": {
+      "formula": "c=\\lambda\\nu"
+    },
+    "mode": "new",
+    "createdAt": "2026-01-24T05:52:13.184Z"
+  },
+  {
+    "file": "diff-preview.tex",
+    "snippet": "PV=nRT$$",
+    "content": {
+      "formula": "PV=nRT"
+    },
+    "mode": "new",
+    "createdAt": "2026-01-24T05:52:15.466Z"
+  },
+  {
+    "file": "diff-preview.tex",
+    "snippet": "V=IR$$",
+    "content": {
+      "formula": "V=IR"
+    },
+    "mode": "new",
+    "createdAt": "2026-01-24T05:52:17.182Z"
+  },
+  {
+    "file": "diff-preview.tex",
+    "snippet": "x_{n+1}=x_{n}+x_{n-1}$$",
+    "content": {
+      "formula": "x_{n+1}=x_{n}+x_{n-1}"
+    },
+    "mode": "new",
+    "createdAt": "2026-01-24T05:52:21.367Z"
+  },
+  {
+    "file": "diff-preview.tex",
+    "snippet": "\\log\\left(ab\\right)=\\log a+\\log b$$",
+    "content": {
+      "formula": "\\log\\left(ab\\right)=\\log a+\\log b"
+    },
+    "mode": "new",
+    "createdAt": "2026-01-24T05:52:24.532Z"
+  },
+  {
+    "file": "diff-preview.tex",
+    "snippet": "n\\left(e^{x}\\right)=x$$\\l",
+    "content": {
+      "formula": "\\ln\\left(e^{x}\\right)=x"
+    },
+    "mode": "new",
+    "createdAt": "2026-01-24T05:52:27.298Z"
+  },
+  {
+    "file": "diff-preview.tex",
+    "snippet": "sum_{n=0}^{\\infty}x^{n}=\\frac{1}{1-x}$$\\",
+    "content": {
+      "formula": "\\sum_{n=0}^{\\infty}x^{n}=\\frac{1}{1-x}"
+    },
+    "mode": "new",
+    "createdAt": "2026-01-24T05:52:31.984Z"
+  },
+  {
+    "file": "diff-preview.tex",
+    "snippet": "H=\\frac12mv^2$$",
+    "content": {
+      "formula": "H=\\frac12mv^2"
+    },
+    "mode": "new",
+    "createdAt": "2026-01-24T05:52:35.416Z"
+  }
+]
