@@ -1,80 +1,40 @@
 const path = require("path");
 const fsp = require("fs/promises");
 const crypto = require("crypto");
-const { spawn } = require("child_process");
 const { normalizeRelativePath } = require("./workspace.cjs");
 const { AGENT_TOOL_DECLARATIONS } = require("./agent-tools.cjs");
 const { requestGemini } = require("./agent-llm.cjs");
-
-const DEFAULT_MAX_FILE_BYTES = Number.POSITIVE_INFINITY;
-const DEFAULT_MAX_READ_FILES = Number.POSITIVE_INFINITY;
-const DEFAULT_MAX_ITERATIONS = 12;
-const DEFAULT_TEXT_EXTENSIONS = null;
-const DEFAULT_BLOCKED_TOP_LEVEL = new Set();
-const ALWAYS_IGNORED_DIRECTORIES = new Set();
-const DEFAULT_LATEX_SYMBOL_EXTENSIONS = new Set([
-  "tex",
-  "bib",
-  "sty",
-  "cls",
-  "ltx",
-  "dtx",
-]);
-const LATEX_REF_COMMANDS = [
-  "ref",
-  "eqref",
-  "pageref",
-  "autoref",
-  "cref",
-  "Cref",
-  "namecref",
-  "labelcref",
-  "cpageref",
-  "Cpageref",
-];
-const LATEX_REF_RANGE_COMMANDS = [
-  "crefrange",
-  "Crefrange",
-  "cpagerefrange",
-  "Cpagerefrange",
-];
-const LATEX_CITE_COMMANDS = [
-  "cite",
-  "citet",
-  "citep",
-  "citealp",
-  "citeauthor",
-  "citeyear",
-  "citeyearpar",
-  "Cite",
-  "Citet",
-  "Citep",
-  "Citealp",
-  "Citeauthor",
-  "Citeyear",
-  "Citeyearpar",
-  "nocite",
-  "parencite",
-  "Parencite",
-  "textcite",
-  "Textcite",
-  "footcite",
-  "Footcite",
-  "autocite",
-  "Autocite",
-  "smartcite",
-  "Smartcite",
-  "supercite",
-  "Supercite",
-  "cites",
-  "Cites",
-  "parencites",
-  "Parencites",
-  "textcites",
-  "Textcites",
-];
-const MAX_SEARCH_RESULTS = 200;
-const DEFAULT_MAX_COMMAND_OUTPUT_BYTES = 2 * 1024 * 1024;
+const {
+  DEFAULT_MAX_FILE_BYTES,
+  DEFAULT_MAX_ITERATIONS,
+  DEFAULT_MAX_READ_FILES,
+  buildAgentPolicy,
+  clampNumber,
+  formatByteLimit,
+  isBlockedPath,
+  isTextExtension,
+  normalizeExtensionList,
+  normalizePath,
+  normalizeStringList,
+} = require("./agent-policy.cjs");
+const {
+  DEFAULT_LATEX_SYMBOL_EXTENSIONS,
+  renameBibEntryKey,
+  renameLatexInText,
+} = require("./agent-latex.cjs");
+const {
+  handleListFiles,
+  handleProposeCreateDirectory,
+  handleProposeDelete,
+  handleProposePatch,
+  handleProposeRename,
+  handleProposeWrite,
+  handleReadFile,
+  handleReadFiles,
+  handleRunCommand,
+  readFileFromDisk,
+} = require("./agent-tools-file.cjs");
+const { handleSearchFiles } = require("./agent-tools-search.cjs");
 const TOOL_STATUS_LABELS = {
   list_files: "構成把握中",
   get_project_structure: "構成把握中",
@@ -93,449 +53,6 @@ const TOOL_STATUS_LABELS = {
   propose_rename: "変更案作成中",
   propose_create_directory: "変更案作成中",
 };
-
-const normalizePath = (value) => normalizeRelativePath((value ?? "").trim());
-
-const normalizeStringList = (value) => {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  return value
-    .filter((entry) => typeof entry === "string")
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-};
-
-const normalizeExtensionList = (value) => {
-  const entries = normalizeStringList(value);
-  const result = new Set();
-  entries.forEach((entry) => {
-    const clean = entry.toLowerCase().replace(/^\./, "");
-    if (clean) {
-      result.add(clean);
-    }
-  });
-  return result;
-};
-
-const normalizeTopLevelList = (value) => {
-  const entries = normalizeStringList(value);
-  const result = new Set();
-  entries.forEach((entry) => {
-    const normalized = normalizePath(entry);
-    const top = normalized.split("/")[0];
-    if (top) {
-      result.add(top);
-    }
-  });
-  return result;
-};
-
-const clampNumber = (value, fallback, { min, max }) => {
-  const parsed = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(parsed)) {
-    return fallback;
-  }
-  return Math.min(max, Math.max(min, parsed));
-};
-
-const normalizeLimit = (value, fallback) => {
-  if (value === null || value === undefined || value === "") {
-    return fallback;
-  }
-  const parsed = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(parsed)) {
-    return fallback;
-  }
-  if (parsed <= 0) {
-    return Number.POSITIVE_INFINITY;
-  }
-  return parsed;
-};
-
-const normalizeEncoding = (value) => {
-  if (typeof value === "string" && value.toLowerCase() === "base64") {
-    return "base64";
-  }
-  return "utf8";
-};
-
-const wantsBase64 = (args) =>
-  args?.binary === true || normalizeEncoding(args?.encoding) === "base64";
-
-const buildAgentPolicy = (settings = {}) => {
-  const maxFileBytes = normalizeLimit(settings.maxFileBytes, DEFAULT_MAX_FILE_BYTES);
-  const maxReadFiles = Math.round(
-    normalizeLimit(settings.maxReadFiles, DEFAULT_MAX_READ_FILES)
-  );
-  let textExtensions = DEFAULT_TEXT_EXTENSIONS
-    ? new Set(DEFAULT_TEXT_EXTENSIONS)
-    : null;
-  const overrideExtensions = normalizeExtensionList(settings.textExtensions);
-  if (overrideExtensions.size > 0) {
-    textExtensions = overrideExtensions;
-  }
-  const extraExtensions = normalizeExtensionList(settings.extraTextExtensions);
-  if (textExtensions) {
-    extraExtensions.forEach((entry) => textExtensions.add(entry));
-  }
-  let blockedTopLevel = new Set(DEFAULT_BLOCKED_TOP_LEVEL);
-  const blockedOverride = normalizeTopLevelList(settings.blockedTopLevel);
-  if (blockedOverride.size > 0) {
-    blockedTopLevel = blockedOverride;
-  }
-  const allowedTopLevel = normalizeTopLevelList(settings.allowedTopLevel);
-  return {
-    maxFileBytes,
-    maxReadFiles,
-    textExtensions,
-    blockedTopLevel,
-    allowedTopLevel,
-  };
-};
-
-const formatByteLimit = (bytes) => {
-  if (!Number.isFinite(bytes)) {
-    return "無制限";
-  }
-  if (bytes >= 1024 * 1024) {
-    const mb = bytes / (1024 * 1024);
-    return `${mb % 1 === 0 ? mb.toFixed(0) : mb.toFixed(1)}MB`;
-  }
-  return `${Math.round(bytes / 1024)}KB`;
-};
-
-const isPathAllowed = (relativePath, policy) => {
-  const normalized = normalizePath(relativePath);
-  if (!normalized) {
-    return false;
-  }
-  const top = normalized.split("/")[0];
-  if (policy?.allowedTopLevel?.has(top)) {
-    return true;
-  }
-  if (policy?.blockedTopLevel?.has(top)) {
-    return false;
-  }
-  return true;
-};
-
-const buildSearchResults = (content, lowerQuery, relPath, results, limit) => {
-  if (!content) {
-    return;
-  }
-  const lines = content.split(/\r?\n/);
-  for (let index = 0; index < lines.length; index += 1) {
-    if (results.length >= limit) {
-      return;
-    }
-    const line = lines[index];
-    if (line.toLowerCase().includes(lowerQuery)) {
-      results.push({
-        path: relPath,
-        line: index + 1,
-        preview: line.trim(),
-      });
-    }
-  }
-};
-
-const isBlockedPath = (relativePath, policy) => {
-  const normalized = normalizePath(relativePath);
-  if (!normalized) return true;
-  const top = normalized.split("/")[0];
-  if (policy?.allowedTopLevel?.has(top)) {
-    return false;
-  }
-  return policy?.blockedTopLevel?.has(top) ?? false;
-};
-
-const isTextExtension = (relativePath, policy) => {
-  if (!policy?.textExtensions || policy.textExtensions.size === 0) {
-    return true;
-  }
-  const ext = path.extname(relativePath).toLowerCase();
-  if (!ext) {
-    return true;
-  }
-  return policy?.textExtensions?.has(ext.slice(1)) ?? false;
-};
-
-const replaceOnceWithCount = (text, search, replace) => {
-  const index = text.indexOf(search);
-  if (index === -1) {
-    return { text, count: 0 };
-  }
-  return {
-    text: text.slice(0, index) + replace + text.slice(index + search.length),
-    count: 1,
-  };
-};
-
-const replaceAllWithCount = (text, search, replace) => {
-  let index = text.indexOf(search);
-  if (index === -1) {
-    return { text, count: 0 };
-  }
-  let result = "";
-  let lastIndex = 0;
-  let count = 0;
-  while (index !== -1) {
-    result += text.slice(lastIndex, index) + replace;
-    lastIndex = index + search.length;
-    count += 1;
-    index = text.indexOf(search, lastIndex);
-  }
-  result += text.slice(lastIndex);
-  return { text: result, count };
-};
-
-const escapeRegex = (value) =>
-  String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-const splitLineComment = (line) => {
-  for (let i = 0; i < line.length; i += 1) {
-    if (line[i] !== "%") {
-      continue;
-    }
-    let slashCount = 0;
-    for (let j = i - 1; j >= 0 && line[j] === "\\"; j -= 1) {
-      slashCount += 1;
-    }
-    if (slashCount % 2 === 0) {
-      return { code: line.slice(0, i), comment: line.slice(i) };
-    }
-  }
-  return { code: line, comment: "" };
-};
-
-const replaceKeyInList = (value, from, to) => {
-  if (typeof value !== "string") {
-    return { text: value, count: 0 };
-  }
-  let count = 0;
-  const parts = value.split(",");
-  const updated = parts.map((part) => {
-    const trimmed = part.trim();
-    if (trimmed !== from) {
-      return part;
-    }
-    count += 1;
-    const leading = part.match(/^\s*/)?.[0] ?? "";
-    const trailing = part.match(/\s*$/)?.[0] ?? "";
-    return `${leading}${to}${trailing}`;
-  });
-  return { text: updated.join(","), count };
-};
-
-const LABEL_PATTERN = /(\\label\*?)\{([^}]*)\}/g;
-const REF_PATTERN = new RegExp(
-  `(\\\\(?:${LATEX_REF_COMMANDS.join("|")})\\*?)\\{([^}]*)\\}`,
-  "g"
-);
-const REF_RANGE_PATTERN = new RegExp(
-  `(\\\\(?:${LATEX_REF_RANGE_COMMANDS.join("|")})\\*?)\\{([^}]*)\\}\\{([^}]*)\\}`,
-  "g"
-);
-const CITE_PATTERN = new RegExp(
-  `(\\\\(?:${LATEX_CITE_COMMANDS.join("|")})\\*?(?:\\[[^\\]]*\\])*)\\{([^}]*)\\}`,
-  "g"
-);
-const BIBITEM_PATTERN = /(\\bibitem\*?(?:\[[^\]]*\])?)\{([^}]*)\}/g;
-
-const renameLatexInText = (content, { from, to, renameLabels, renameCites }) => {
-  let totalCount = 0;
-  const lines = content.split(/\r?\n/);
-  const updatedLines = lines.map((line) => {
-    const { code, comment } = splitLineComment(line);
-    let text = code;
-    if (renameLabels) {
-      text = text.replace(LABEL_PATTERN, (match, prefix, keys) => {
-        const result = replaceKeyInList(keys, from, to);
-        if (result.count === 0) {
-          return match;
-        }
-        totalCount += result.count;
-        return `${prefix}{${result.text}}`;
-      });
-      text = text.replace(REF_RANGE_PATTERN, (match, prefix, first, second) => {
-        const firstResult = replaceKeyInList(first, from, to);
-        const secondResult = replaceKeyInList(second, from, to);
-        const count = firstResult.count + secondResult.count;
-        if (count === 0) {
-          return match;
-        }
-        totalCount += count;
-        return `${prefix}{${firstResult.text}}{${secondResult.text}}`;
-      });
-      text = text.replace(REF_PATTERN, (match, prefix, keys) => {
-        const result = replaceKeyInList(keys, from, to);
-        if (result.count === 0) {
-          return match;
-        }
-        totalCount += result.count;
-        return `${prefix}{${result.text}}`;
-      });
-    }
-    if (renameCites) {
-      text = text.replace(CITE_PATTERN, (match, prefix, keys) => {
-        const result = replaceKeyInList(keys, from, to);
-        if (result.count === 0) {
-          return match;
-        }
-        totalCount += result.count;
-        return `${prefix}{${result.text}}`;
-      });
-      text = text.replace(BIBITEM_PATTERN, (match, prefix, keys) => {
-        const result = replaceKeyInList(keys, from, to);
-        if (result.count === 0) {
-          return match;
-        }
-        totalCount += result.count;
-        return `${prefix}{${result.text}}`;
-      });
-    }
-    return text + comment;
-  });
-  return { text: updatedLines.join("\n"), count: totalCount };
-};
-
-const renameBibEntryKey = (content, from, to) => {
-  const pattern = new RegExp(
-    `(^\\s*@\\w+\\s*\\{\\s*)${escapeRegex(from)}(\\s*,)`,
-    "gmi"
-  );
-  let count = 0;
-  const text = content.replace(pattern, (_match, prefix, suffix) => {
-    count += 1;
-    return `${prefix}${to}${suffix}`;
-  });
-  return { text, count };
-};
-
-const readFileFromDisk = async (resolvedPath, { forceBase64 = false } = {}) => {
-  const buffer = await fsp.readFile(resolvedPath);
-  if (forceBase64) {
-    return {
-      content: buffer.toString("base64"),
-      encoding: "base64",
-      binary: true,
-      size: buffer.length,
-    };
-  }
-  if (buffer.length === 0) {
-    return { content: "", encoding: "utf8", binary: false, size: 0 };
-  }
-  const hasNullByte = buffer.includes(0);
-  if (hasNullByte) {
-    return {
-      content: buffer.toString("base64"),
-      encoding: "base64",
-      binary: true,
-      size: buffer.length,
-    };
-  }
-  return {
-    content: buffer.toString("utf8"),
-    encoding: "utf8",
-    binary: false,
-    size: buffer.length,
-  };
-};
-
-const runShellCommand = (
-  command,
-  { cwd, env, timeoutMs, maxOutputBytes = DEFAULT_MAX_COMMAND_OUTPUT_BYTES } = {}
-) =>
-  new Promise((resolve) => {
-    const outputLimit =
-      Number.isFinite(maxOutputBytes) && maxOutputBytes > 0
-        ? maxOutputBytes
-        : Number.POSITIVE_INFINITY;
-    const sanitizedEnv = {};
-    if (env && typeof env === "object") {
-      Object.entries(env).forEach(([key, value]) => {
-        if (typeof value === "string") {
-          sanitizedEnv[key] = value;
-        }
-      });
-    }
-    const proc = spawn(command, {
-      cwd,
-      env: { ...process.env, ...sanitizedEnv },
-      shell: true,
-    });
-    let stdout = "";
-    let stderr = "";
-    let truncated = false;
-    let totalBytes = 0;
-    let timedOut = false;
-
-    const appendChunk = (target, chunk) => {
-      if (!chunk) {
-        return target;
-      }
-      const text = chunk.toString("utf8");
-      if (!Number.isFinite(outputLimit)) {
-        totalBytes += Buffer.byteLength(text);
-        return target + text;
-      }
-      const remaining = outputLimit - totalBytes;
-      if (remaining <= 0) {
-        truncated = true;
-        return target;
-      }
-      const buffer = Buffer.from(text, "utf8");
-      if (buffer.length <= remaining) {
-        totalBytes += buffer.length;
-        return target + text;
-      }
-      truncated = true;
-      totalBytes += remaining;
-      return target + buffer.slice(0, remaining).toString("utf8");
-    };
-
-    const timer =
-      Number.isFinite(timeoutMs) && timeoutMs > 0
-        ? setTimeout(() => {
-            timedOut = true;
-            proc.kill("SIGKILL");
-          }, timeoutMs)
-        : null;
-
-    proc.stdout?.on("data", (chunk) => {
-      stdout = appendChunk(stdout, chunk);
-    });
-    proc.stderr?.on("data", (chunk) => {
-      stderr = appendChunk(stderr, chunk);
-    });
-    proc.on("error", (error) => {
-      if (timer) {
-        clearTimeout(timer);
-      }
-      resolve({
-        exitCode: null,
-        signal: null,
-        stdout,
-        stderr: stderr || error?.message || "command error",
-        truncated,
-        timedOut,
-      });
-    });
-    proc.on("close", (code, signal) => {
-      if (timer) {
-        clearTimeout(timer);
-      }
-      resolve({
-        exitCode: code,
-        signal,
-        stdout,
-        stderr,
-        truncated,
-        timedOut,
-      });
-    });
-  });
 
 const buildSystemPrompt = (context, rootPath, policy) => {
   const activeFilePath = context?.activeFilePath ?? "";
@@ -562,6 +79,7 @@ const buildSystemPrompt = (context, rootPath, policy) => {
   const allowedLabel = allowedList.length > 0 ? allowedList.join(" / ") : "";
   const fileSizeLabel = formatByteLimit(policy?.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES);
   const readFilesLimit = policy?.maxReadFiles ?? DEFAULT_MAX_READ_FILES;
+  const agentMode = context?.agentMode === "paper" ? "paper" : "general";
 
   const lines = [
     "あなたは tex64 に統合されたAIアシスタントです。",
@@ -588,6 +106,7 @@ const buildSystemPrompt = (context, rootPath, policy) => {
     "## 必須ルール",
     "- 検証が必要なタスクでは run_build を使って確認する（ユーザー依頼がある場合は必ず実行）",
     "- 変更は全て propose_* で提案する（適用はユーザー承認、または autoApply 有効時に自動）",
+    "- 1回の応答で提案する変更（propose_*）は原則1つだけ（小さく刻んで進める）",
     "- 変更前に必ず read_file / read_files で現状を確認する（アクティブファイルのスナップショットが提供されている場合はそれを利用してよい）",
     `- ブロック対象: ${blockedLabel}${allowedLabel ? `（許可: ${allowedLabel}）` : ""}`,
     Number.isFinite(readFilesLimit)
@@ -602,10 +121,21 @@ const buildSystemPrompt = (context, rootPath, policy) => {
     "## 出力ルール",
     "- ユーザー向けの最終応答の冒頭に、短い要約を必ず付ける",
     "- 形式: 「方針: ...」「理由: ...」の2行（各1文程度）",
+    "- 最後に「次の提案: ...」を1行で必ず書く（次に何をすべきかを明確にする）",
     "- 内部の推論や思考過程は書かない",
     "",
+    ...(agentMode === "paper"
+      ? [
+          "## 論文モード",
+          "- ユーザーが考えなくても論文が進むように、常に次の一手を提案する",
+          "- 迷ったら仮の文章を入れて前に進め、TODOで穴埋め箇所を残す",
+          "- 章立て/導入/関連/手法/実験/結果/考察/結論/参考文献の整合を優先する",
+          "",
+        ]
+      : []),
     "## ワークスペース",
     `- Root: ${rootPath}`,
+    `- Agent mode: ${agentMode}`,
     `- Active file: ${activeFilePath || "(none)"}`,
   ];
 
@@ -710,6 +240,7 @@ class AgentService {
     sendBuildLog,
     sendIssues,
     indexerService,
+    apiUsageService,
   }) {
     this.workspace = workspace;
     this.searchService = searchService;
@@ -722,6 +253,7 @@ class AgentService {
     this.sendBuildLog = sendBuildLog;
     this.sendIssues = sendIssues;
     this.indexerService = indexerService;
+    this.apiUsageService = apiUsageService;
     this.conversations = new Map();
     this.proposals = new Map();
     this.contextByConversation = new Map();
@@ -955,11 +487,6 @@ class AgentService {
   async executeToolCall(toolCall, conversationId) {
     try {
       const name = toolCall?.name ?? "";
-      const policy = this.agentPolicy ?? buildAgentPolicy();
-      const statusLabel = TOOL_STATUS_LABELS[name];
-      if (statusLabel) {
-        this.sendStatus("running", this.buildProgressMessage(statusLabel), conversationId);
-      }
       let args = toolCall?.args ?? {};
       if (typeof args === "string") {
         try {
@@ -968,266 +495,82 @@ class AgentService {
           args = {};
         }
       }
+      if (!args || typeof args !== "object") {
+        args = {};
+      }
+      const policy = this.agentPolicy ?? buildAgentPolicy();
+      const clip = (value, max = 60) => {
+        const text = typeof value === "string" ? value.trim() : "";
+        if (!text) return "";
+        return text.length > max ? `${text.slice(0, max)}…` : text;
+      };
+      const statusLabel = TOOL_STATUS_LABELS[name];
+      if (statusLabel) {
+        let detail = statusLabel;
+        if (name === "read_file") {
+          const targetPath = normalizePath(args.path);
+          if (targetPath) detail = `${statusLabel}: ${targetPath}`;
+        } else if (name === "read_files") {
+          const paths = normalizeStringList(args.paths).slice(0, 3);
+          if (paths.length > 0) {
+            const suffix = normalizeStringList(args.paths).length > 3 ? "…" : "";
+            detail = `${statusLabel}: ${paths.join(", ")}${suffix}`;
+          }
+        } else if (name === "search_files") {
+          const query = clip(args.query, 48);
+          if (query) detail = `${statusLabel}: ${query}`;
+        } else if (name === "list_files") {
+          const directory = normalizePath(args.directory);
+          if (directory) detail = `${statusLabel}: ${directory}`;
+        } else if (name === "get_index") {
+          const kinds = normalizeStringList(args.kinds).slice(0, 4);
+          const query = clip(args.query, 32);
+          if (kinds.length > 0 || query) {
+            const parts = [];
+            if (kinds.length > 0) parts.push(kinds.join(", "));
+            if (query) parts.push(`q=${query}`);
+            detail = `${statusLabel}: ${parts.join(" ")}`;
+          }
+        } else if (name === "rename_latex_symbol") {
+          const from = clip(args.from, 24);
+          const to = clip(args.to, 24);
+          if (from && to) detail = `${statusLabel}: ${from} → ${to}`;
+        } else if (name === "run_build") {
+          const mainFile = clip(args.mainFile, 64);
+          const engine = clip(args.engine, 16);
+          if (mainFile || engine) {
+            detail = `${statusLabel}: ${[mainFile, engine].filter(Boolean).join(" ")}`;
+          }
+        } else if (name === "run_command") {
+          const command = clip(args.command, 64);
+          if (command) detail = `${statusLabel}: ${command}`;
+        } else if (
+          name === "propose_write" ||
+          name === "propose_patch" ||
+          name === "propose_delete" ||
+          name === "propose_rename" ||
+          name === "propose_create_directory"
+        ) {
+          const targetPath = clip(args.path, 80);
+          if (targetPath) detail = `${statusLabel}: ${targetPath}`;
+        }
+        this.sendStatus("running", this.buildProgressMessage(detail), conversationId);
+      }
 
       if (name === "list_files") {
-        const directory = normalizePath(args.directory);
-        const rootPath = this.workspace.getRootPath();
-        if (!rootPath) {
-          return { error: "ワークスペースが選択されていません。" };
-        }
-        if (directory && isBlockedPath(directory, policy)) {
-          return { error: "対象パスは読み取り禁止です。" };
-        }
-        let basePath = "";
-        try {
-          basePath = this.workspace.resolvePath(directory);
-        } catch {
-          return { error: "ディレクトリが見つかりません。" };
-        }
-        const baseStat = await fsp.stat(basePath).catch(() => null);
-        if (!baseStat || !baseStat.isDirectory()) {
-          return { error: "ディレクトリが見つかりません。" };
-        }
-        const results = [];
-        const maxEntries = 5000;
-        let count = 0;
-        const walk = async (dirPath) => {
-          const entries = await fsp.readdir(dirPath, { withFileTypes: true }).catch(() => []);
-          for (const entry of entries) {
-            if (count >= maxEntries) {
-              return;
-            }
-            const absPath = path.join(dirPath, entry.name);
-            const relPath = normalizeRelativePath(path.relative(rootPath, absPath));
-            if (isBlockedPath(relPath, policy)) {
-              continue;
-            }
-            if (entry.isDirectory()) {
-              await walk(absPath);
-              continue;
-            }
-            if (!entry.isFile()) {
-              continue;
-            }
-            results.push(relPath);
-            count += 1;
-          }
-        };
-        await walk(basePath);
-        return { files: results.sort((a, b) => a.localeCompare(b, "ja")) };
+        return handleListFiles(this, args, policy);
       }
 
       if (name === "read_file") {
-        const targetPath = normalizePath(args.path);
-        if (!targetPath) {
-          return { error: "path が空です。" };
-        }
-        if (isBlockedPath(targetPath, policy)) {
-          return { error: "対象パスは読み取り禁止です。" };
-        }
-        const useBase64 = wantsBase64(args);
-        if (!isTextExtension(targetPath, policy) && !useBase64) {
-          return {
-            error:
-              "テキストファイルのみ読み取れます。バイナリは encoding: base64 を指定してください。",
-          };
-        }
-        const snapshot = this.getContextSnapshot(conversationId, targetPath);
-        if (snapshot && snapshot.content) {
-          if (snapshot.contentLength > policy.maxFileBytes) {
-            return { error: "ファイルが大きすぎます。" };
-          }
-          if (useBase64) {
-            return {
-              content: Buffer.from(snapshot.content, "utf8").toString("base64"),
-              encoding: "base64",
-              binary: true,
-              partial: snapshot.truncated,
-              source: "buffer",
-            };
-          }
-          return {
-            content: snapshot.content,
-            partial: snapshot.truncated,
-            source: "buffer",
-          };
-        }
-        const resolved = this.workspace.resolvePath(targetPath);
-        const stat = await fsp.stat(resolved).catch(() => null);
-        if (!stat || !stat.isFile()) {
-          return { error: "ファイルが見つかりません。" };
-        }
-        if (stat.size > policy.maxFileBytes) {
-          return { error: "ファイルが大きすぎます。" };
-        }
-        const result = await readFileFromDisk(resolved, { forceBase64: useBase64 });
-        const response = { content: result.content };
-        if (result.binary) {
-          response.encoding = "base64";
-          response.binary = true;
-          response.size = result.size;
-        }
-        return response;
+        return handleReadFile(this, args, policy, conversationId);
       }
 
       if (name === "read_files") {
-        const paths = Array.isArray(args.paths) ? args.paths : [];
-        if (paths.length === 0) {
-          return { error: "paths が空です。" };
-        }
-        if (paths.length > policy.maxReadFiles) {
-          return { error: `一度に読み取れるファイルは${policy.maxReadFiles}個までです。` };
-        }
-        const useBase64 = wantsBase64(args);
-        const results = {};
-        for (const p of paths) {
-          const targetPath = normalizePath(p);
-          if (
-            !targetPath ||
-            isBlockedPath(targetPath, policy) ||
-            (!isTextExtension(targetPath, policy) && !useBase64)
-          ) {
-            results[p] = {
-              error: useBase64
-                ? "読み取り不可"
-                : "テキストのみ読み取り可能です。バイナリは encoding: base64 を指定してください。",
-            };
-            continue;
-          }
-          try {
-            const snapshot = this.getContextSnapshot(conversationId, targetPath);
-            if (snapshot && snapshot.content) {
-              if (snapshot.contentLength > policy.maxFileBytes) {
-                results[p] = { error: "ファイルが大きすぎます。" };
-              } else {
-                if (useBase64) {
-                  results[p] = {
-                    content: Buffer.from(snapshot.content, "utf8").toString("base64"),
-                    encoding: "base64",
-                    binary: true,
-                    partial: snapshot.truncated,
-                    source: "buffer",
-                  };
-                } else {
-                  results[p] = {
-                    content: snapshot.content,
-                    partial: snapshot.truncated,
-                    source: "buffer",
-                  };
-                }
-              }
-              continue;
-            }
-            const resolved = this.workspace.resolvePath(targetPath);
-            const stat = await fsp.stat(resolved).catch(() => null);
-            if (!stat || !stat.isFile() || stat.size > policy.maxFileBytes) {
-              results[p] = { error: "ファイルが見つからないか大きすぎます" };
-              continue;
-            }
-            const result = await readFileFromDisk(resolved, { forceBase64: useBase64 });
-            results[p] = { content: result.content };
-            if (result.binary) {
-              results[p].encoding = "base64";
-              results[p].binary = true;
-              results[p].size = result.size;
-            }
-          } catch {
-            results[p] = { error: "読み取りエラー" };
-          }
-        }
-        return { files: results };
+        return handleReadFiles(this, args, policy, conversationId);
       }
 
       if (name === "search_files") {
-        const query = typeof args.query === "string" ? args.query : "";
-        const rootPath = this.workspace.getRootPath();
-        if (!rootPath) {
-          return { error: "ワークスペースが選択されていません。" };
-        }
-        const trimmed = query.trim();
-        if (!trimmed) {
-          return { results: [] };
-        }
-        const lowerQuery = trimmed.toLowerCase();
-        const results = [];
-        const seenPaths = new Set();
-        const context = this.contextByConversation.get(conversationId);
-        const activePath =
-          typeof context?.activeFilePath === "string" ? normalizePath(context.activeFilePath) : "";
-        if (
-          activePath &&
-          typeof context?.activeFileContent === "string" &&
-          results.length < MAX_SEARCH_RESULTS &&
-          isPathAllowed(activePath, policy) &&
-          isTextExtension(activePath, policy)
-        ) {
-          seenPaths.add(activePath);
-          buildSearchResults(
-            context.activeFileContent,
-            lowerQuery,
-            activePath,
-            results,
-            MAX_SEARCH_RESULTS
-          );
-        }
-        if (context?.openFileSnapshots && Array.isArray(context.openFileSnapshots)) {
-          context.openFileSnapshots.forEach((snapshot) => {
-            if (
-              typeof snapshot?.path === "string" &&
-              typeof snapshot?.content === "string" &&
-              results.length < MAX_SEARCH_RESULTS
-            ) {
-              seenPaths.add(snapshot.path);
-              buildSearchResults(
-                snapshot.content,
-                lowerQuery,
-                snapshot.path,
-                results,
-                MAX_SEARCH_RESULTS
-              );
-            }
-          });
-        }
-        const walk = async (dirPath) => {
-          const entries = await fsp.readdir(dirPath, { withFileTypes: true }).catch(() => []);
-          for (const entry of entries) {
-            if (results.length >= MAX_SEARCH_RESULTS) {
-              return;
-            }
-            if (entry.isDirectory() && ALWAYS_IGNORED_DIRECTORIES.has(entry.name)) {
-              continue;
-            }
-            const absPath = path.join(dirPath, entry.name);
-            const relPath = normalizeRelativePath(path.relative(rootPath, absPath));
-            if (!isPathAllowed(relPath, policy)) {
-              continue;
-            }
-            if (entry.isDirectory()) {
-              await walk(absPath);
-              continue;
-            }
-            if (!entry.isFile()) {
-              continue;
-            }
-            if (!isTextExtension(relPath, policy)) {
-              continue;
-            }
-            if (seenPaths.has(relPath)) {
-              continue;
-            }
-            const stat = await fsp.stat(absPath).catch(() => null);
-            if (!stat || !stat.isFile() || stat.size > policy.maxFileBytes) {
-              continue;
-            }
-            const content = await fsp.readFile(absPath, "utf8").catch(() => null);
-            if (content === null) {
-              continue;
-            }
-            buildSearchResults(content, lowerQuery, relPath, results, MAX_SEARCH_RESULTS);
-          }
-        };
-        await walk(rootPath);
-        return { results };
+        return handleSearchFiles(this, args, policy, conversationId);
       }
 
       if (name === "get_project_structure") {
@@ -1239,6 +582,11 @@ class AgentService {
         const buildTree = async (dir, depth) => {
           if (depth > maxDepth) return null;
           const entries = await fsp.readdir(dir, { withFileTypes: true }).catch(() => []);
+          entries.sort((a, b) => {
+            if (a.isDirectory() && !b.isDirectory()) return -1;
+            if (!a.isDirectory() && b.isDirectory()) return 1;
+            return a.name.localeCompare(b.name, "ja");
+          });
           const result = [];
           for (const entry of entries) {
             const absPath = path.join(dir, entry.name);
@@ -1249,9 +597,14 @@ class AgentService {
             }
             if (entry.isDirectory()) {
               const children = await buildTree(absPath, depth + 1);
-              result.push({ name: entry.name, type: "dir", children: children || [] });
+              result.push({
+                name: entry.name,
+                path: relPath,
+                type: "dir",
+                children: children || [],
+              });
             } else {
-              result.push({ name: entry.name, type: "file" });
+              result.push({ name: entry.name, path: relPath, type: "file" });
             }
           }
           return result;
@@ -1411,40 +764,7 @@ class AgentService {
       }
 
       if (name === "run_command") {
-        const command = typeof args.command === "string" ? args.command.trim() : "";
-        if (!command) {
-          return { error: "command が空です。" };
-        }
-        const rootPath = this.workspace.getRootPath();
-        if (!rootPath) {
-          return { error: "ワークスペースが選択されていません。" };
-        }
-        let cwd = rootPath;
-        if (typeof args.cwd === "string" && args.cwd.trim()) {
-          try {
-            cwd = this.workspace.resolvePath(normalizePath(args.cwd));
-          } catch {
-            return { error: "cwd が不正です。" };
-          }
-        }
-        const timeoutMs = Number.isFinite(args.timeoutMs) ? args.timeoutMs : null;
-        const maxOutputBytes = Number.isFinite(args.maxOutputBytes)
-          ? args.maxOutputBytes
-          : DEFAULT_MAX_COMMAND_OUTPUT_BYTES;
-        const result = await runShellCommand(command, {
-          cwd,
-          env: args.env,
-          timeoutMs,
-          maxOutputBytes,
-        });
-        return {
-          exitCode: result.exitCode,
-          signal: result.signal,
-          stdout: result.stdout,
-          stderr: result.stderr,
-          truncated: result.truncated,
-          timedOut: result.timedOut,
-        };
+        return handleRunCommand(this, args);
       }
 
       if (name === "rename_latex_symbol") {
@@ -1627,366 +947,23 @@ class AgentService {
       }
 
       if (name === "propose_write") {
-        const targetPath = normalizePath(args.path);
-        const content = typeof args.content === "string" ? args.content : "";
-        const summary = typeof args.summary === "string" ? args.summary : "";
-        const encoding = normalizeEncoding(args.encoding);
-        const binaryWrite = encoding === "base64";
-        if (!targetPath) {
-          return { error: "path が空です。" };
-        }
-        if (isBlockedPath(targetPath, policy)) {
-          return { error: "対象パスは書き込み禁止です。" };
-        }
-        if (!isTextExtension(targetPath, policy) && !binaryWrite) {
-          return {
-            error:
-              "テキストファイルのみ書き込み可能です。バイナリは encoding: base64 を指定してください。",
-          };
-        }
-        let contentBytes = Buffer.byteLength(content, "utf8");
-        if (binaryWrite) {
-          try {
-            contentBytes = Buffer.from(content, "base64").length;
-          } catch {
-            return { error: "base64 の内容が不正です。" };
-          }
-        }
-        if (contentBytes > policy.maxFileBytes) {
-          return { error: "内容が大きすぎます。" };
-        }
-        let originalContent = "";
-        let isNewFile = true;
-        let isBinary = binaryWrite;
-        const snapshot = this.getContextSnapshot(conversationId, targetPath);
-        if (snapshot && snapshot.content) {
-          if (snapshot.contentLength > policy.maxFileBytes) {
-            return { error: "ファイルが大きすぎます。" };
-          }
-          originalContent = binaryWrite
-            ? Buffer.from(snapshot.content, "utf8").toString("base64")
-            : snapshot.content;
-          isNewFile = false;
-        } else {
-          try {
-            const resolved = this.workspace.resolvePath(targetPath);
-            const result = await readFileFromDisk(resolved, { forceBase64: binaryWrite });
-            originalContent = result.content;
-            isBinary = isBinary || result.binary;
-            isNewFile = false;
-          } catch {
-            originalContent = "";
-            isNewFile = true;
-          }
-        }
-        const id =
-          typeof crypto.randomUUID === "function"
-            ? crypto.randomUUID()
-            : `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
-        const proposal = {
-          id,
-          type: "write",
-          path: targetPath,
-          content,
-          originalContent,
-          encoding: binaryWrite ? "base64" : undefined,
-          isBinary,
-          summary,
-          isNewFile,
-          conversationId,
-        };
-        this.proposals.set(id, proposal);
-        this.sendToRenderer("agent:proposal", { proposal });
-        if (this.agentOptions.autoApply) {
-          await this.applyProposal(id);
-        }
-        return { status: "proposed", proposalId: id };
+        return handleProposeWrite(this, args, policy, conversationId);
       }
 
       if (name === "propose_patch") {
-        const summaryPrefix = typeof args.summary === "string" ? args.summary.trim() : "";
-        const editsArg = Array.isArray(args.edits) ? args.edits : null;
-        const normalizedEdits = [];
-
-        if (editsArg && editsArg.length === 0) {
-          return { error: "edits が空です。" };
-        }
-
-        if (editsArg && editsArg.length > 0) {
-          for (const edit of editsArg) {
-            const targetPath = normalizePath(edit?.path);
-            const search = typeof edit?.search === "string" ? edit.search : "";
-            const replace = typeof edit?.replace === "string" ? edit.replace : "";
-            const replaceAll = edit?.replaceAll === true;
-            if (!targetPath || !search) {
-              return { error: "edits の各項目に path と search は必須です。" };
-            }
-            normalizedEdits.push({ path: targetPath, search, replace, replaceAll });
-          }
-        } else {
-          const targetPath = normalizePath(args.path);
-          const search = typeof args.search === "string" ? args.search : "";
-          const replace = typeof args.replace === "string" ? args.replace : "";
-          const replaceAll = args.replaceAll === true;
-          if (!targetPath || !search) {
-            return { error: "path と search は必須です。" };
-          }
-          normalizedEdits.push({ path: targetPath, search, replace, replaceAll });
-        }
-
-        const editsByPath = new Map();
-        for (const edit of normalizedEdits) {
-          if (isBlockedPath(edit.path, policy)) {
-            return { error: "対象パスは編集禁止です。" };
-          }
-          if (!isTextExtension(edit.path, policy)) {
-            return { error: "テキストファイルのみ編集可能です。" };
-          }
-          if (!editsByPath.has(edit.path)) {
-            editsByPath.set(edit.path, []);
-          }
-          editsByPath.get(edit.path).push(edit);
-        }
-
-        const fileCount = editsByPath.size;
-        const preparedProposals = [];
-
-        const buildSummary = (path, edits, appliedCount) => {
-          if (summaryPrefix && fileCount === 1) {
-            return summaryPrefix;
-          }
-          let base = "";
-          if (edits.length === 1) {
-            const searchPreview = edits[0].search.slice(0, 20);
-            const replacePreview = edits[0].replace.slice(0, 20);
-            base = `"${searchPreview}..." → "${replacePreview}..." (${appliedCount}箇所)`;
-          } else {
-            base = `${edits.length}件の置換（${appliedCount}箇所）`;
-          }
-          if (!summaryPrefix) {
-            return base;
-          }
-          return `${summaryPrefix} (${path}: ${base})`;
-        };
-
-        for (const [targetPath, edits] of editsByPath.entries()) {
-          let originalContent = "";
-          const snapshot = this.getContextSnapshot(conversationId, targetPath);
-          if (snapshot && snapshot.content) {
-            if (snapshot.contentLength > policy.maxFileBytes) {
-              return { error: "ファイルが大きすぎます。" };
-            }
-            originalContent = snapshot.content;
-          } else {
-            try {
-              const resolved = this.workspace.resolvePath(targetPath);
-              const result = await readFileFromDisk(resolved);
-              if (result.binary) {
-                return { error: "バイナリファイルのため部分編集できません。" };
-              }
-              originalContent = result.content;
-            } catch {
-              return { error: "ファイルが見つかりません。" };
-            }
-          }
-          let updatedContent = originalContent;
-          let appliedCount = 0;
-          for (const edit of edits) {
-            const result = edit.replaceAll
-              ? replaceAllWithCount(updatedContent, edit.search, edit.replace)
-              : replaceOnceWithCount(updatedContent, edit.search, edit.replace);
-            if (result.count === 0) {
-              return { error: `${targetPath} に検索文字列が見つかりません。` };
-            }
-            updatedContent = result.text;
-            appliedCount += result.count;
-          }
-          if (appliedCount === 0 || updatedContent === originalContent) {
-            return { error: "変更がありません。" };
-          }
-          if (updatedContent.length > policy.maxFileBytes) {
-            return { error: "内容が大きすぎます。" };
-          }
-          preparedProposals.push({
-            path: targetPath,
-            edits,
-            originalContent,
-            updatedContent,
-            appliedCount,
-          });
-        }
-
-        const proposals = [];
-        for (const prepared of preparedProposals) {
-          const id =
-            typeof crypto.randomUUID === "function"
-              ? crypto.randomUUID()
-              : `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
-          const proposal = {
-            id,
-            type: "patch",
-            path: prepared.path,
-            content: prepared.updatedContent,
-            originalContent: prepared.originalContent,
-            summary: buildSummary(prepared.path, prepared.edits, prepared.appliedCount),
-            isNewFile: false,
-            conversationId,
-          };
-          this.proposals.set(id, proposal);
-          this.sendToRenderer("agent:proposal", { proposal });
-          proposals.push({
-            proposalId: id,
-            path: prepared.path,
-            appliedCount: prepared.appliedCount,
-          });
-        }
-
-        if (this.agentOptions.autoApply) {
-          for (const entry of proposals) {
-            await this.applyProposal(entry.proposalId);
-          }
-        }
-
-        return {
-          status: "proposed",
-          proposalIds: proposals.map((proposal) => proposal.proposalId),
-          files: proposals,
-        };
+        return handleProposePatch(this, args, policy, conversationId);
       }
 
       if (name === "propose_delete") {
-        const targetPath = normalizePath(args.path);
-        const summary = typeof args.summary === "string" ? args.summary : "ファイル削除";
-        if (!targetPath) {
-          return { error: "path が空です。" };
-        }
-        if (isBlockedPath(targetPath, policy)) {
-          return { error: "対象パスは削除禁止です。" };
-        }
-        const resolved = this.workspace.resolvePath(targetPath);
-        const stat = await fsp.stat(resolved).catch(() => null);
-        if (!stat || !stat.isFile()) {
-          return { error: "ファイルが見つかりません。" };
-        }
-        let originalContent = "";
-        let isBinary = false;
-        const snapshot = this.getContextSnapshot(conversationId, targetPath);
-        if (snapshot && snapshot.content) {
-          if (snapshot.contentLength > policy.maxFileBytes) {
-            return { error: "ファイルが大きすぎます。" };
-          }
-          originalContent = snapshot.content;
-        } else {
-          try {
-            const result = await readFileFromDisk(resolved);
-            originalContent = result.content;
-            isBinary = result.binary;
-          } catch {
-            originalContent = "";
-          }
-        }
-        const id =
-          typeof crypto.randomUUID === "function"
-            ? crypto.randomUUID()
-            : `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
-        const proposal = {
-          id,
-          type: "delete",
-          path: targetPath,
-          content: "",
-          originalContent,
-          isBinary,
-          summary,
-          isNewFile: false,
-          conversationId,
-        };
-        this.proposals.set(id, proposal);
-        this.sendToRenderer("agent:proposal", { proposal });
-        return { status: "proposed", proposalId: id };
+        return handleProposeDelete(this, args, policy, conversationId);
       }
 
       if (name === "propose_rename") {
-        const oldPath = normalizePath(args.oldPath);
-        const newPath = normalizePath(args.newPath);
-        const summary = typeof args.summary === "string" ? args.summary : `${oldPath} → ${newPath}`;
-        if (!oldPath || !newPath) {
-          return { error: "oldPath と newPath は必須です。" };
-        }
-        if (isBlockedPath(oldPath, policy) || isBlockedPath(newPath, policy)) {
-          return { error: "対象パスは操作禁止です。" };
-        }
-        const resolved = this.workspace.resolvePath(oldPath);
-        const stat = await fsp.stat(resolved).catch(() => null);
-        if (!stat || !stat.isFile()) {
-          return { error: "ファイルが見つかりません。" };
-        }
-        let originalContent = "";
-        let isBinary = false;
-        const snapshot = this.getContextSnapshot(conversationId, oldPath);
-        if (snapshot && snapshot.content) {
-          if (snapshot.contentLength > policy.maxFileBytes) {
-            return { error: "ファイルが大きすぎます。" };
-          }
-          originalContent = snapshot.content;
-        } else {
-          try {
-            const result = await readFileFromDisk(resolved);
-            originalContent = result.content;
-            isBinary = result.binary;
-          } catch {
-            originalContent = "";
-          }
-        }
-        const id =
-          typeof crypto.randomUUID === "function"
-            ? crypto.randomUUID()
-            : `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
-        const proposal = {
-          id,
-          type: "rename",
-          path: newPath,
-          oldPath,
-          content: originalContent,
-          originalContent,
-          isBinary,
-          summary,
-          isNewFile: false,
-          conversationId,
-        };
-        this.proposals.set(id, proposal);
-        this.sendToRenderer("agent:proposal", { proposal });
-        return { status: "proposed", proposalId: id };
+        return handleProposeRename(this, args, policy, conversationId);
       }
 
       if (name === "propose_create_directory") {
-        const targetPath = normalizePath(args.path);
-        const summary = typeof args.summary === "string" ? args.summary : "ディレクトリ作成";
-        if (!targetPath) {
-          return { error: "path が空です。" };
-        }
-        if (isBlockedPath(targetPath, policy)) {
-          return { error: "対象パスは作成禁止です。" };
-        }
-        const id =
-          typeof crypto.randomUUID === "function"
-            ? crypto.randomUUID()
-            : `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
-        const proposal = {
-          id,
-          type: "mkdir",
-          path: targetPath,
-          content: "",
-          originalContent: "",
-          summary,
-          isNewFile: true,
-          conversationId,
-        };
-        this.proposals.set(id, proposal);
-        this.sendToRenderer("agent:proposal", { proposal });
-        if (this.agentOptions.autoApply) {
-          await this.applyProposal(id);
-        }
-        return { status: "proposed", proposalId: id };
+        return handleProposeCreateDirectory(this, args, policy, conversationId);
       }
 
       return { error: `unknown tool: ${name}` };
@@ -2032,6 +1009,8 @@ class AgentService {
     this.abort();
     this.abortController = new AbortController();
 
+    let proposedInThisRun = false;
+
     for (let i = 0; i < options.maxIterations; i += 1) {
       try {
         const thinkingLabel = i === 0 ? "方針検討中" : "追加検討中";
@@ -2055,6 +1034,40 @@ class AgentService {
           onDelta: handleDelta,
         });
 
+        try {
+          const usage = response?.usageMetadata ?? response?.usage ?? null;
+          if (usage && this.apiUsageService) {
+            const promptTokens =
+              usage.promptTokenCount ??
+              usage.promptTokens ??
+              usage.inputTokenCount ??
+              usage.input_tokens;
+            const outputTokens =
+              usage.candidatesTokenCount ??
+              usage.outputTokenCount ??
+              usage.outputTokens ??
+              usage.output_tokens;
+            const totalTokens =
+              usage.totalTokenCount ??
+              usage.totalTokens ??
+              (Number.isFinite(promptTokens) && Number.isFinite(outputTokens)
+                ? promptTokens + outputTokens
+                : undefined);
+            const snapshot = await this.apiUsageService.recordUsage({
+              model: response?.model,
+              promptTokens,
+              outputTokens,
+              totalTokens,
+              source: "agent",
+            });
+            if (snapshot) {
+              this.sendToRenderer("api:usage", { snapshot });
+            }
+          }
+        } catch {
+          // ignore usage recording failures
+        }
+
         const candidate = response?.candidates?.[0]?.content ?? null;
         const parts = candidate?.parts ?? [];
         const functionCalls = parts.filter((part) => part.functionCall);
@@ -2069,9 +1082,23 @@ class AgentService {
         if (functionCalls.length > 0) {
           for (const part of functionCalls) {
             const call = part.functionCall;
-            const result = await this.executeToolCall(call, conversationId);
+            const toolName = call?.name ?? "";
+            const isProposalTool =
+              typeof toolName === "string" && toolName.startsWith("propose_");
+            let result = null;
+            if (isProposalTool && proposedInThisRun) {
+              result = {
+                error:
+                  "このターンでは変更提案（propose_*）は1つだけです。既に提案を作成しました。次はユーザーの適用を待ってください。",
+              };
+            } else {
+              result = await this.executeToolCall(call, conversationId);
+              if (isProposalTool && result?.status === "proposed") {
+                proposedInThisRun = true;
+              }
+            }
             this.sendToRenderer("agent:tool", {
-              name: call.name,
+              name: toolName,
               summary: result?.error ?? "ok",
               conversationId,
             });
@@ -2080,7 +1107,7 @@ class AgentService {
               parts: [
                 {
                   functionResponse: {
-                    name: call.name,
+                    name: toolName,
                     response: result,
                   },
                 },

@@ -5,10 +5,8 @@ export const initSidebarVisibility = (context, deps) => {
         "files",
         "outline",
         "blocks",
-        "alchemy",
         "ai",
         "issues",
-        "git",
         "project",
     ];
     let sidebarVisibleTabs = new Set(primarySidebarTabs);

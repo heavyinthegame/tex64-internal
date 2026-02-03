@@ -6,8 +6,17 @@ import type {
   IssueItem,
   IssuesStatus,
 } from "./types.js";
-import { buildLineDiff } from "./diff.js";
 import { getIssueResolution } from "./issue-resolution.js";
+import type { DiffContext } from "./diff-modal.js";
+import {
+  createChat as createChatState,
+  ensureChat as ensureChatState,
+  getChat as getChatState,
+  type ChatMessage,
+  type ChatState,
+} from "./ai-chat-state.js";
+import { createMessageElement, updateMessageElement } from "./ai-chat-message.js";
+import { createProposalCard } from "./ai-chat-proposal.js";
 
 type AiChatDeps = {
   postToNative: (payload: { type: string; [key: string]: unknown }, silent?: boolean) => boolean;
@@ -33,19 +42,13 @@ type AiChatDeps = {
     issues: IssueItem[];
     updatedAt: number;
   } | null;
-};
-
-type ChatMessage = {
-  role: "user" | "assistant" | "system";
-  text: string;
-};
-
-type ChatState = {
-  id: string;
-  title: string;
-  messages: ChatMessage[];
-  proposals: Map<string, AgentProposal>;
-  statusMessage: string;
+  showDiffModal?: (
+    original: string,
+    modified: string,
+    lineOffset?: number,
+    options?: { title?: string; fileName?: string; submitLabel?: string }
+  ) => void;
+  setDiffContext?: (context: DiffContext) => void;
 };
 
 export type AiChatApi = {
@@ -85,6 +88,7 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
   let activeChatId: string | null = null;
   let runningConversationId: string | null = null;
   let agentSettings: AgentSettings | null = null;
+  const continueAfterApply = new Set<string>();
   const streamingMessages = new Map<
     string,
     { message: ChatMessage; element: HTMLElement | null }
@@ -95,12 +99,57 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
   // --- Two-Stage View State ---
   let viewMode: "list" | "chat" = "list";
 
+  const storage = {
+    modeKey: "tex64.ai.mode",
+    autoPilotKey: "tex64.ai.autopilot",
+  } as const;
+
+  const loadBool = (key: string, fallback: boolean) => {
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw === "1") return true;
+      if (raw === "0") return false;
+      return fallback;
+    } catch {
+      return fallback;
+    }
+  };
+
+  const saveBool = (key: string, value: boolean) => {
+    try {
+      localStorage.setItem(key, value ? "1" : "0");
+    } catch {
+      // ignore
+    }
+  };
+
+  const loadMode = (): "general" | "paper" => {
+    try {
+      const raw = localStorage.getItem(storage.modeKey);
+      return raw === "paper" ? "paper" : "general";
+    } catch {
+      return "general";
+    }
+  };
+
+  const saveMode = (mode: "general" | "paper") => {
+    try {
+      localStorage.setItem(storage.modeKey, mode);
+    } catch {
+      // ignore
+    }
+  };
+
+  const defaultChatMode = loadMode();
+  const defaultAutoPilot = loadBool(storage.autoPilotKey, false);
+
   // Create Back Button Container (Toolbar)
   const aiChatToolbar = document.createElement("div");
-  aiChatToolbar.style.padding = "8px 0 0";
+  aiChatToolbar.className = "ai-chat-toolbar";
+  aiChatToolbar.style.padding = "10px 16px 0";
   aiChatToolbar.style.display = "none"; // Initially hidden
   aiChatToolbar.style.alignItems = "center"; // Vertical alignment
-  aiChatToolbar.style.gap = "0"; // Gap handling via margin
+  aiChatToolbar.style.gap = "8px";
   
   const aiBack = document.createElement("button");
   aiBack.className = "panel-button ghost";
@@ -124,6 +173,35 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
   aiChatTitle.style.height = "24px"; // Match button height
   aiChatToolbar.appendChild(aiChatTitle);
 
+  const aiModeControls = document.createElement("div");
+  aiModeControls.className = "ai-mode-controls";
+
+  const aiPaperModeButton = document.createElement("button");
+  aiPaperModeButton.type = "button";
+  aiPaperModeButton.className = "panel-button ghost ai-mode-toggle";
+  aiPaperModeButton.textContent = "論文";
+  aiPaperModeButton.setAttribute("aria-pressed", "false");
+
+  const aiAutoPilotButton = document.createElement("button");
+  aiAutoPilotButton.type = "button";
+  aiAutoPilotButton.className = "panel-button ghost ai-mode-toggle";
+  aiAutoPilotButton.textContent = "自律";
+  aiAutoPilotButton.setAttribute("aria-pressed", "false");
+
+  const aiNextButton = document.createElement("button");
+  aiNextButton.type = "button";
+  aiNextButton.className = "panel-button ghost ai-next-button";
+  aiNextButton.textContent = "次へ";
+
+  const aiStopButton = document.createElement("button");
+  aiStopButton.type = "button";
+  aiStopButton.className = "panel-button ghost ai-stop-button";
+  aiStopButton.textContent = "停止";
+  aiStopButton.disabled = true;
+
+  aiModeControls.append(aiPaperModeButton, aiAutoPilotButton, aiNextButton, aiStopButton);
+  aiChatToolbar.appendChild(aiModeControls);
+
   // Insert Toolbar at the top of aiChat
   if (aiChat) {
     aiChat.prepend(aiChatToolbar);
@@ -139,6 +217,7 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
     
     // Toggle Toolbar visibility
     aiChatToolbar.style.display = mode === "chat" ? "flex" : "none";
+    syncModeControls();
     
     // Clear button is removed from header, no need to toggle
   };
@@ -147,12 +226,28 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
     setViewMode("list");
   });
 
-  const getChat = (chatId?: string | null) => {
-    if (chatId && chatIndex.has(chatId)) {
-      return chatIndex.get(chatId) ?? null;
-    }
-    return activeChatId ? chatIndex.get(activeChatId) ?? null : null;
+  const getChat = (chatId?: string | null) =>
+    getChatState(chatIndex, activeChatId, chatId);
+
+  const getChatMode = (chatId?: string | null) => {
+    const chat = getChat(chatId);
+    return chat?.mode ?? defaultChatMode;
   };
+
+  const isAutoPilotEnabled = (chatId?: string | null) => {
+    const chat = getChat(chatId);
+    return Boolean(chat?.autoPilot);
+  };
+
+  function syncModeControls() {
+    const chat = getChat(activeChatId);
+    const mode = chat?.mode ?? defaultChatMode;
+    const autoPilot = Boolean(chat?.autoPilot);
+    aiPaperModeButton.classList.toggle("is-active", mode === "paper");
+    aiPaperModeButton.setAttribute("aria-pressed", mode === "paper" ? "true" : "false");
+    aiAutoPilotButton.classList.toggle("is-active", autoPilot);
+    aiAutoPilotButton.setAttribute("aria-pressed", autoPilot ? "true" : "false");
+  }
 
   const resolveChatTitle = (chatId: string) => {
     if (chatId === "search-rename") {
@@ -161,36 +256,27 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
     return `Chat ${chats.length + 1}`;
   };
 
-  const ensureChat = (chatId?: string | null) => {
-    if (chatId && !chatIndex.has(chatId)) {
-      const chat: ChatState = {
-        id: chatId,
-        title: resolveChatTitle(chatId),
-        messages: [],
-        proposals: new Map(),
-        statusMessage: "待機中",
-      };
-      chats.push(chat);
-      chatIndex.set(chatId, chat);
-      renderChatList();
-    }
-    return getChat(chatId);
-  };
+  const ensureChat = (chatId?: string | null) =>
+    ensureChatState({
+      chatId,
+      activeChatId,
+      chats,
+      chatIndex,
+      defaultChatMode,
+      defaultAutoPilot,
+      resolveChatTitle,
+      onChatCreated: renderChatList,
+    });
 
-  const createChat = () => {
-    const id = makeChatId();
-    const title = `Chat ${chats.length + 1}`;
-    const chat: ChatState = {
-      id,
-      title,
-      messages: [],
-      proposals: new Map(),
-      statusMessage: "待機中",
-    };
-    chats.push(chat);
-    chatIndex.set(id, chat);
-    return chat;
-  };
+  const createChat = () =>
+    createChatState({
+      chats,
+      chatIndex,
+      makeChatId,
+      resolveChatTitle,
+      defaultChatMode,
+      defaultAutoPilot,
+    });
 
   const updateSendState = () => {
     const isRunning = Boolean(runningConversationId);
@@ -201,6 +287,8 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
     if (aiInput instanceof HTMLTextAreaElement) {
       aiInput.disabled = isRunning;
     }
+    aiNextButton.disabled = isRunning;
+    aiStopButton.disabled = !isRunning;
   };
 
   const updateStatusDisplay = () => {
@@ -299,6 +387,10 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
     };
   };
 
+  const buildAgentModeContext = (chatId?: string | null) => ({
+    agentMode: getChatMode(chatId),
+  });
+
   const getChatLog = () =>
     aiChatLog instanceof HTMLElement ? aiChatLog : null;
 
@@ -355,61 +447,13 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
     if (chat) {
       aiChatTitle.textContent = chat.title;
     }
+    syncModeControls();
 
     renderChatList();
     renderChatContent();
     updateStatusDisplay();
     setViewMode("chat");
   }
-
-  const createMessageElement = (message: ChatMessage) => {
-    const wrapper = document.createElement("div");
-    wrapper.className = "ai-message";
-
-    if (message.role === "user") {
-      wrapper.classList.add("is-user");
-    } else if (message.role === "assistant") {
-      wrapper.classList.add("is-assistant");
-    } else if (message.role === "system") {
-      wrapper.classList.add("is-system");
-    }
-
-    const content = document.createElement("div");
-    content.className = "ai-message-content";
-    content.textContent = message.text;
-
-    if (message.role === "assistant") {
-      const avatar = document.createElement("div");
-      avatar.className = "ai-message-avatar";
-      avatar.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16"><path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7V5.73A2 2 0 0 1 10 4a2 2 0 0 1 2-2z" fill="currentColor"/></svg>`;
-      
-      const body = document.createElement("div");
-      body.className = "ai-message-body";
-      
-      const name = document.createElement("div");
-      name.className = "ai-message-name";
-      name.textContent = "AI Assistant";
-      
-      body.appendChild(name);
-      body.appendChild(content); // Move content inside body
-      
-      wrapper.appendChild(avatar);
-      wrapper.appendChild(body);
-    } else {
-      wrapper.appendChild(content);
-    }
-    return wrapper;
-  };
-
-  const updateMessageElement = (wrapper: HTMLElement | null, text: string) => {
-    if (!wrapper) {
-      return;
-    }
-    const content = wrapper.querySelector(".ai-message-content");
-    if (content instanceof HTMLElement) {
-      content.textContent = text;
-    }
-  };
 
   const ensureStreamingMessage = (chatId: string) => {
     const existing = streamingMessages.get(chatId);
@@ -464,200 +508,18 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
     }
   };
 
-  const createProposalCard = (proposal: AgentProposal) => {
-    const card = document.createElement("div");
-    card.className = "ai-proposal";
-    card.dataset.proposalId = proposal.id;
-
-    const header = document.createElement("div");
-    header.className = "ai-proposal-header";
-
-    const icon = document.createElement("div");
-    icon.className = "ai-proposal-icon";
-    icon.innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>`;
-
-    const path = document.createElement("div");
-    path.className = "ai-proposal-path";
-    path.textContent = proposal.path;
-
-    header.append(icon, path);
-
-    const originalContent = proposal.originalContent ?? "";
-    const modifiedContent = proposal.content ?? "";
-    const isBinary = proposal.isBinary === true;
-
-    // Add badge based on proposal type
-    const proposalType = proposal.isNewFile ? "new" : proposal.type || "write";
-    const badge = document.createElement("span");
-    badge.className = "ai-proposal-badge";
-    
-    switch (proposalType) {
-      case "delete":
-        badge.textContent = "削除";
-        badge.style.background = "var(--danger, #dc3545)";
-        break;
-      case "rename":
-        badge.textContent = "移動";
-        badge.style.background = "var(--warning, #ffc107)";
-        badge.style.color = "#000";
-        break;
-      case "mkdir":
-        badge.textContent = "フォルダ";
-        badge.style.background = "var(--info, #17a2b8)";
-        break;
-      case "patch":
-        badge.textContent = "部分編集";
-        badge.style.background = "var(--secondary, #6c757d)";
-        break;
-      case "new":
-        badge.textContent = "新規";
-        break;
-      default:
-        badge.textContent = "編集";
-        break;
-    }
-    header.appendChild(badge);
-
-    const summary = document.createElement("div");
-    summary.className = "ai-proposal-summary";
-    summary.textContent = proposal.summary || "ファイルの変更案";
-
-    const actions = document.createElement("div");
-    actions.className = "ai-proposal-actions";
-
-    const diffToggle = document.createElement("button");
-    diffToggle.type = "button";
-    diffToggle.className = "panel-button ghost";
-    diffToggle.textContent = proposalType === "mkdir" || proposalType === "rename"
-      ? "詳細を見る"
-      : "差分を見る";
-
-    const applyButton = document.createElement("button");
-    applyButton.type = "button";
-    applyButton.className = "panel-button";
-    applyButton.textContent =
-      proposalType === "delete"
-        ? "削除"
-        : proposalType === "mkdir"
-        ? "作成"
-        : proposalType === "rename"
-        ? "移動"
-        : "適用";
-    applyButton.addEventListener("click", (event) => {
-      event.stopPropagation();
-      deps.postToNative({ type: "agent:apply", proposalId: proposal.id });
-    });
-
-    const diffContainer = document.createElement("div");
-    diffContainer.className = "ai-proposal-diff";
-
-    const buildDiffSummary = () => {
-      const beforeText = originalContent.trimEnd();
-      const afterText = modifiedContent.trimEnd();
-      const beforeLines = beforeText.length ? beforeText.split(/\r?\n/) : [""];
-      const afterLines = afterText.length ? afterText.split(/\r?\n/) : [""];
-      const diffLines = buildLineDiff(beforeLines, afterLines);
-      let adds = 0;
-      let dels = 0;
-      diffLines.forEach((entry) => {
-        if (entry.type === "add") {
-          adds += 1;
-        } else if (entry.type === "del") {
-          dels += 1;
-        }
-      });
-      const summaryRow = document.createElement("div");
-      summaryRow.className = "diff-summary ai-proposal-diff-summary";
-      if (adds === 0 && dels === 0) {
-        const text = document.createElement("span");
-        text.textContent = "変更なし";
-        summaryRow.appendChild(text);
-        return summaryRow;
-      }
-      const add = document.createElement("span");
-      add.className = "diff-summary-item is-add";
-      add.textContent = `+${adds}`;
-      const del = document.createElement("span");
-      del.className = "diff-summary-item is-del";
-      del.textContent = `-${dels}`;
-      summaryRow.append(add, del);
-      return summaryRow;
-    };
-
-    const buildDiffLines = () => {
-      const beforeText = originalContent.trimEnd();
-      const afterText = modifiedContent.trimEnd();
-      if (beforeText === afterText) {
-        const empty = document.createElement("div");
-        empty.className = "ai-proposal-diff-empty";
-        empty.textContent = "変更なし";
-        return empty;
-      }
-      const beforeLines = beforeText.length ? beforeText.split(/\r?\n/) : [""];
-      const afterLines = afterText.length ? afterText.split(/\r?\n/) : [""];
-      const diffLines = buildLineDiff(beforeLines, afterLines);
-      const diffBody = document.createElement("div");
-      diffBody.className = "ai-diff";
-      diffLines.forEach((entry) => {
-        const line = document.createElement("div");
-        line.className = `ai-diff-line is-${entry.type}`;
-        const prefix = entry.type === "add" ? "+" : entry.type === "del" ? "-" : " ";
-        line.textContent = `${prefix} ${entry.line}`;
-        diffBody.appendChild(line);
-      });
-      return diffBody;
-    };
-
-    const renderDiff = () => {
-      diffContainer.replaceChildren();
-      const headerRow = document.createElement("div");
-      headerRow.className = "ai-proposal-diff-header";
-      if (proposalType === "rename") {
-        const renameText = document.createElement("div");
-        renameText.className = "ai-proposal-diff-note";
-        const oldPath = proposal.oldPath ? proposal.oldPath : "";
-        renameText.textContent = oldPath ? `${oldPath} → ${proposal.path}` : proposal.path;
-        headerRow.appendChild(renameText);
-      } else if (proposalType === "mkdir") {
-        const note = document.createElement("div");
-        note.className = "ai-proposal-diff-note";
-        note.textContent = "新しいフォルダを作成します。";
-        headerRow.appendChild(note);
-      } else if (isBinary) {
-        const note = document.createElement("div");
-        note.className = "ai-proposal-diff-note";
-        note.textContent = "バイナリファイルのため差分プレビューは省略しています。";
-        headerRow.appendChild(note);
-      } else {
-        headerRow.appendChild(buildDiffSummary());
-      }
-      diffContainer.appendChild(headerRow);
-      if (!(proposalType === "rename" || proposalType === "mkdir" || isBinary)) {
-        diffContainer.appendChild(buildDiffLines());
-      }
-    };
-
-    diffToggle.addEventListener("click", (event) => {
-      event.stopPropagation();
-      const isOpen = diffContainer.classList.toggle("is-open");
-      diffToggle.textContent =
-        proposalType === "mkdir" || proposalType === "rename"
-          ? isOpen
-            ? "詳細を閉じる"
-            : "詳細を見る"
-          : isOpen
-          ? "差分を閉じる"
-          : "差分を見る";
-      if (isOpen && !diffContainer.dataset.ready) {
-        renderDiff();
-        diffContainer.dataset.ready = "true";
-      }
-    });
-
-    actions.append(diffToggle, applyButton);
-    card.append(header, summary, actions, diffContainer);
-    return card;
+  let pendingAiProposalId: string | null = null;
+  const setPendingProposalId = (value: string | null) => {
+    pendingAiProposalId = value;
   };
+  const buildProposalCard = (proposal: AgentProposal) =>
+    createProposalCard(proposal, {
+      postToNative: deps.postToNative,
+      continueAfterApply,
+      setPendingProposalId,
+      showDiffModal: deps.showDiffModal,
+      setDiffContext: deps.setDiffContext,
+    });
 
   function renderChatList() {
     if (!(aiChatList instanceof HTMLElement)) {
@@ -812,7 +674,7 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
       proposals.replaceChildren();
       proposals.classList.toggle("is-hidden", chat.proposals.size === 0);
       chat.proposals.forEach((proposal) => {
-        proposals.appendChild(createProposalCard(proposal));
+        proposals.appendChild(buildProposalCard(proposal));
       });
     }
     const streamingEntry = streamingMessages.get(chat.id);
@@ -845,6 +707,114 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
     updateStatusDisplay();
   };
 
+  const canRunInChat = (chatId: string) => {
+    if (!chatId) {
+      return false;
+    }
+    return !runningConversationId;
+  };
+
+  const buildContinueMessage = (chatId: string) => {
+    const mode = getChatMode(chatId);
+    if (mode === "paper") {
+      return [
+        "続けてください。",
+        "論文が前に進む“次の小さな変更提案”を1つだけ出してください。",
+        "提案は propose_* で行い、最後に「次の提案: ...」を1行で書いてください。",
+      ].join("\n");
+    }
+    return [
+      "続けてください。",
+      "プロジェクトが前に進む“次の小さな変更提案”を1つだけ出してください。",
+      "提案は propose_* で行い、最後に「次の提案: ...」を1行で書いてください。",
+    ].join("\n");
+  };
+
+  const requestAgentRun = (chatId: string, message: string) => {
+    if (!message.trim()) {
+      return;
+    }
+    if (!canRunInChat(chatId)) {
+      return;
+    }
+    const chat = ensureChat(chatId);
+    if (!chat) {
+      return;
+    }
+    chat.statusMessage = "思考中...";
+    runningConversationId = chat.id;
+    updateSendState();
+    updateStatusDisplay();
+    deps.postToNative({
+      type: "agent:run",
+      message,
+      conversationId: chat.id,
+      context: {
+        ...buildActiveFileContext(),
+        ...buildOpenFilesContext(),
+        ...buildIssuesContext(),
+        ...buildAgentModeContext(chat.id),
+      },
+    });
+  };
+
+  const continueChat = (chatId: string) => {
+    if (!chatId) {
+      return;
+    }
+    if (!canRunInChat(chatId)) {
+      return;
+    }
+    appendMessage({ role: "system", text: "次の提案を生成します…" }, chatId);
+    requestAgentRun(chatId, buildContinueMessage(chatId));
+  };
+
+  aiPaperModeButton.addEventListener("click", () => {
+    const chat = getChat(activeChatId);
+    if (!chat) {
+      return;
+    }
+    chat.mode = chat.mode === "paper" ? "general" : "paper";
+    saveMode(chat.mode);
+    syncModeControls();
+    appendMessage(
+      {
+        role: "system",
+        text: chat.mode === "paper" ? "論文モードを有効化しました。" : "論文モードを解除しました。",
+      },
+      chat.id
+    );
+  });
+
+  aiAutoPilotButton.addEventListener("click", () => {
+    const chat = getChat(activeChatId);
+    if (!chat) {
+      return;
+    }
+    chat.autoPilot = !chat.autoPilot;
+    saveBool(storage.autoPilotKey, chat.autoPilot);
+    syncModeControls();
+    appendMessage(
+      {
+        role: "system",
+        text: chat.autoPilot ? "自律モードを有効化しました。" : "自律モードを解除しました。",
+      },
+      chat.id
+    );
+  });
+
+  aiNextButton.addEventListener("click", () => {
+    const chat = getChat(activeChatId);
+    if (!chat) {
+      return;
+    }
+    continueChat(chat.id);
+  });
+
+  aiStopButton.addEventListener("click", () => {
+    deps.postToNative({ type: "agent:abort" }, true);
+  });
+
   const handleSend = () => {
     if (!(aiInput instanceof HTMLTextAreaElement)) {
       return;
@@ -871,9 +841,10 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
     }
     appendMessage({ role: "user", text }, chat.id);
     aiInput.value = "";
-    // No status text - button visual indicates sending
+    chat.statusMessage = "思考中...";
     runningConversationId = chat.id;
     updateSendState();
+    updateStatusDisplay();
     deps.postToNative({
       type: "agent:run",
       message: text,
@@ -882,6 +853,7 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
         ...buildActiveFileContext(),
         ...buildOpenFilesContext(),
         ...buildIssuesContext(),
+        ...buildAgentModeContext(chat.id),
       },
     });
   };
@@ -990,8 +962,18 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
   };
 
   const handleTool = (payload: { name: string; summary?: string; conversationId?: string }) => {
-    // const summary = payload.summary ? `: ${payload.summary}` : "";
-    // appendMessage({ role: "system", text: `ツール: ${payload.name}${summary}` }, payload.conversationId);
+    const chat = ensureChat(payload.conversationId);
+    if (!chat) {
+      return;
+    }
+    if (runningConversationId !== chat.id) {
+      return;
+    }
+    const summary = payload.summary ? ` (${payload.summary})` : "";
+    chat.statusMessage = `思考中: ${payload.name}${summary}`;
+    if (chat.id === activeChatId) {
+      updateStatusDisplay();
+    }
   };
 
   const handleProposal = (proposal: AgentProposal) => {
@@ -1005,7 +987,7 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
       const proposals = ensureProposalsEmbedded();
       if (proposals) {
         proposals.classList.remove("is-hidden");
-        proposals.appendChild(createProposalCard(proposal));
+        proposals.appendChild(buildProposalCard(proposal));
       }
       if (aiChat instanceof HTMLElement) {
         aiChat.scrollTop = aiChat.scrollHeight;
@@ -1032,6 +1014,14 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
         proposals.classList.add("is-hidden");
       }
       appendMessage({ role: "system", text: `適用完了: ${proposal.path}` }, chat.id);
+      const requestedContinue = continueAfterApply.delete(payload.proposalId);
+      const shouldContinue =
+        chat.proposals.size === 0 &&
+        chat.id === activeChatId &&
+        (requestedContinue || chat.autoPilot);
+      if (shouldContinue) {
+        window.setTimeout(() => continueChat(chat.id), 120);
+      }
     } else {
       appendMessage(
         { role: "system", text: `適用失敗: ${payload.error ?? "不明なエラー"}` },
@@ -1056,9 +1046,17 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
     updateStatusDisplay();
   };
 
-  const applyPendingFromDiffModal = () => {};
+  const applyPendingFromDiffModal = () => {
+    if (!pendingAiProposalId) {
+      return;
+    }
+    deps.postToNative({ type: "agent:apply", proposalId: pendingAiProposalId });
+    pendingAiProposalId = null;
+  };
 
-  const clearPending = () => {};
+  const clearPending = () => {
+    pendingAiProposalId = null;
+  };
 
   if (chats.length === 0) {
     const initial = createChat();

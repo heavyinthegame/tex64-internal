@@ -3,8 +3,6 @@ import type { AppContext } from "./context.js";
 
 export type DiffContext =
   | { type: "block" }
-  | { type: "gitCommit" }
-  | { type: "gitRestore"; hash: string }
   | { type: "aiApply"; proposalId: string }
   | null;
 
@@ -14,15 +12,6 @@ export type DiffModalApi = {
     modified: string,
     lineOffset?: number,
     options?: { title?: string; fileName?: string; submitLabel?: string }
-  ) => void;
-  showPatchModal: (
-    patch: string,
-    options: {
-      title: string;
-      fileName?: string;
-      submitLabel: string;
-      context: Exclude<DiffContext, null>;
-    }
   ) => void;
   closeDiffModal: () => void;
   resetDiffEditor: () => void;
@@ -72,54 +61,6 @@ export const initDiffModal = (context: AppContext, deps: DiffModalDeps): DiffMod
     });
     if (adds === 0 && dels === 0) {
       diffSummary.textContent = "変更なし";
-      return;
-    }
-    const add = document.createElement("span");
-    add.className = "diff-summary-item is-add";
-    add.textContent = `+${adds}`;
-    const del = document.createElement("span");
-    del.className = "diff-summary-item is-del";
-    del.textContent = `-${dels}`;
-    diffSummary.append(add, del);
-  };
-
-  const countPatchStats = (patch: string) => {
-    const lines = patch.split(/\r?\n/);
-    let adds = 0;
-    let dels = 0;
-    lines.forEach((line) => {
-      if (!line) {
-        return;
-      }
-      if (
-        line.startsWith("+++ ") ||
-        line.startsWith("--- ") ||
-        line.startsWith("@@") ||
-        line.startsWith("diff ") ||
-        line.startsWith("index ") ||
-        line.startsWith("new file") ||
-        line.startsWith("deleted file") ||
-        line.startsWith("\\")
-      ) {
-        return;
-      }
-      if (line.startsWith("+")) {
-        adds += 1;
-      } else if (line.startsWith("-")) {
-        dels += 1;
-      }
-    });
-    return { adds, dels };
-  };
-
-  const renderPatchSummary = (patch: string) => {
-    if (!(diffSummary instanceof HTMLElement)) {
-      return;
-    }
-    diffSummary.textContent = "";
-    const { adds, dels } = countPatchStats(patch);
-    if (adds === 0 && dels === 0) {
-      diffSummary.textContent = patch.trim() ? "変更あり" : "変更なし";
       return;
     }
     const add = document.createElement("span");
@@ -296,38 +237,6 @@ export const initDiffModal = (context: AppContext, deps: DiffModalDeps): DiffMod
     diffEditorAny.__e2eLineChangesPatched = true;
   };
 
-  const showPatchModal = (
-    patch: string,
-    options: {
-      title: string;
-      fileName?: string;
-      submitLabel: string;
-      context: Exclude<DiffContext, null>;
-    }
-  ) => {
-    const container = blockDiffContainer;
-    if (!container) {
-      return;
-    }
-    resetDiffEditor();
-    diffContext = options.context;
-    if (diffModal) {
-      diffModal.classList.add("is-open");
-      diffModal.setAttribute("aria-hidden", "false");
-    }
-    container.innerHTML = "";
-    const pre = document.createElement("pre");
-    pre.className = "git-diff-text";
-    pre.textContent = patch;
-    container.appendChild(pre);
-    renderPatchSummary(patch);
-    setDiffHeader({
-      title: options.title,
-      fileName: options.fileName,
-      submitLabel: options.submitLabel,
-    });
-  };
-
   const showDiffModal = (
     original: string,
     modified: string,
@@ -453,7 +362,6 @@ export const initDiffModal = (context: AppContext, deps: DiffModalDeps): DiffMod
 
   return {
     showDiffModal,
-    showPatchModal,
     closeDiffModal,
     resetDiffEditor,
     getDiffContext: () => diffContext,

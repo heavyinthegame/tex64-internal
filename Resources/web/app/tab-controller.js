@@ -25,9 +25,6 @@ export const initTabController = (context, deps) => {
         if (tabKey === "files") {
             deps.onFilesTabActive();
         }
-        if (tabKey === "git") {
-            deps.onGitTabActive();
-        }
         if (tabKey === "settings") {
             deps.onSettingsTabActive();
         }

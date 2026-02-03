@@ -200,6 +200,73 @@ const initPdfViewer = () => {
     }
   };
 
+  const postReverseRequest = (payload) => {
+    if (!bridge || typeof bridge.postMessage !== "function") {
+      return;
+    }
+    if (!payload || typeof payload !== "object") {
+      return;
+    }
+    bridge.postMessage({
+      type: "reverse",
+      payload: {
+        page: payload.page,
+        x: payload.x,
+        y: payload.y,
+        path: state.path || null,
+      },
+    });
+  };
+
+  const reverseSynctexKey = "tex64.editor.reverseSynctex";
+  const isReverseSynctexEnabled = () => {
+    try {
+      return localStorage.getItem(reverseSynctexKey) !== "false";
+    } catch (_error) {
+      return true;
+    }
+  };
+
+  const resolveClickPoint = (event) => {
+    if (!event || typeof event !== "object") {
+      return null;
+    }
+    if (!state.doc) {
+      return null;
+    }
+    if (!pagesEl) {
+      return null;
+    }
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return null;
+    }
+    const pageEl = target.closest?.(".page");
+    if (!(pageEl instanceof HTMLElement)) {
+      return null;
+    }
+    const rawPage = pageEl.getAttribute("data-page-number");
+    const page = Number.parseInt(rawPage ?? "", 10);
+    if (!Number.isFinite(page) || page <= 0) {
+      return null;
+    }
+    const pageView = pdfViewer.getPageView(page - 1);
+    if (!pageView?.viewport) {
+      return null;
+    }
+    const rect = pageEl.getBoundingClientRect();
+    const viewX = event.clientX - rect.left;
+    const viewY = event.clientY - rect.top;
+    if (!Number.isFinite(viewX) || !Number.isFinite(viewY)) {
+      return null;
+    }
+    const [x, y] = pageView.viewport.convertToPdfPoint(viewX, viewY);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      return null;
+    }
+    return { page, x, y };
+  };
+
 
   const applySync = (payload) => {
     const pageIndex = payload.page - 1;
@@ -514,6 +581,30 @@ const initPdfViewer = () => {
         bridge.postMessage({ type: "ready" });
       }
     }
+  }
+
+  if (pagesEl) {
+    pagesEl.addEventListener("click", (event) => {
+      if (!event) {
+        return;
+      }
+      if (event.button !== 0) {
+        return;
+      }
+      if (!(event.ctrlKey || event.metaKey)) {
+        return;
+      }
+      if (!isReverseSynctexEnabled()) {
+        return;
+      }
+      const point = resolveClickPoint(event);
+      if (!point) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      postReverseRequest(point);
+    });
   }
 };
 

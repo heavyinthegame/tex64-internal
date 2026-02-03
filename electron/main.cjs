@@ -23,6 +23,7 @@ const { BlocksStore } = require("./services/blocks.cjs");
 const { UserSettingsService } = require("./services/user-settings.cjs");
 const { MathOcrService } = require("./services/math-ocr.cjs");
 const { AgentService } = require("./services/agent.cjs");
+const { ApiUsageService } = require("./services/api-usage.cjs");
 const { createWorkspaceHandlers } = require("./handlers/workspace.cjs");
 const { createBuildHandlers } = require("./handlers/build.cjs");
 
@@ -57,6 +58,7 @@ const synctexService = new SynctexService();
 const blocksStore = new BlocksStore();
 const envService = new EnvService();
 let mathOcrService = null;
+let apiUsageService = null;
 
 const getMathOcrService = () => {
   if (!mathOcrService) {
@@ -130,6 +132,16 @@ const ensureUserSettings = () => {
   return state.userSettings;
 };
 
+const getApiUsageService = () => {
+  if (!apiUsageService) {
+    apiUsageService = new ApiUsageService({
+      userDataPath: app.getPath("userData"),
+      getPricing: async () => ensureUserSettings().getAgentSettings(),
+    });
+  }
+  return apiUsageService;
+};
+
 const workspaceHandlers = createWorkspaceHandlers({
   dialog,
   shell,
@@ -160,6 +172,7 @@ const agentService = new AgentService({
   sendBuildLog,
   sendIssues,
   indexerService,
+  apiUsageService: getApiUsageService(),
 });
 
 const buildHandlers = createBuildHandlers({
@@ -189,6 +202,7 @@ const miscHandlers = createMiscHandlers({
   workspace,
   sendToRenderer,
   blocksStore,
+  apiUsageService: getApiUsageService(),
 });
 
 const agentHandlers = createAgentHandlers({
@@ -353,13 +367,16 @@ ipcMain.on("tex64", (_event, message) => {
     buildHandlers.handleSynctexForward(message);
     return;
   }
+  if (type === "synctex:reverse") {
+    buildHandlers.handleSynctexReverse(message);
+    return;
+  }
   if (type === "build") {
     buildHandlers.handleBuild(message.mainFile, {
       format: message.format,
       formatSettings: message.formatSettings,
       engine: message.engine,
       pdfViewerMode: message.pdfViewerMode,
-      partial: message.partial,
     });
     return;
   }
@@ -446,12 +463,16 @@ ipcMain.on("tex64", (_event, message) => {
     miscHandlers.handleBlocksSave(message.entry);
     return;
   }
-  if (type === "alchemy:settings:get") {
-    miscHandlers.handleAlchemySettingsGet();
+  if (type === "api:usage:get") {
+    miscHandlers.handleApiUsageGet();
     return;
   }
-  if (type === "alchemy:settings:set") {
-    miscHandlers.handleAlchemySettingsSet(message.settings);
+  if (type === "api:usage:reset") {
+    miscHandlers.handleApiUsageReset();
+    return;
+  }
+  if (type === "api:ghostCompletion") {
+    miscHandlers.handleApiGhostCompletion(message);
     return;
   }
   if (type === "consoleLog") {
@@ -513,5 +534,14 @@ ipcMain.on("tex64:pdf", (_event, message) => {
   if (type === "ready") {
     pdfWindowManager.markReady();
     return;
+  }
+  if (type === "reverse") {
+    const payload = message.payload ?? {};
+    buildHandlers.handleSynctexReverse({
+      page: payload.page,
+      x: payload.x,
+      y: payload.y,
+      pdfPath: payload.path,
+    });
   }
 });

@@ -1,9 +1,6 @@
 import type {
   BuildState,
   BridgeWindow,
-  GitActionResultPayload,
-  GitDiffPayload,
-  GitStatusPayload,
   IndexEntry,
   IssueItem,
   IssuesStatus,
@@ -14,8 +11,9 @@ import type {
   RootSource,
   SearchResult,
   SectionEntry,
+  ApiCompletionResultPayload,
+  ApiUsageSnapshot,
 } from "./types.js";
-import type { AlchemySettings } from "./alchemy-convert.js";
 
 type BridgeHandlersDeps = {
   bridgeWindow: BridgeWindow;
@@ -64,11 +62,6 @@ type BridgeHandlersDeps = {
       conversationId?: string;
     }) => void;
   };
-  git: {
-    handleUpdate: (payload: GitStatusPayload) => void;
-    handleDiff: (payload: GitDiffPayload) => void;
-    handleActionResult: (payload: GitActionResultPayload) => void;
-  };
   build: {
     setBuildState: (state: BuildState, message?: string) => void;
     handleFormatResult: (payload: {
@@ -79,10 +72,25 @@ type BridgeHandlersDeps = {
       source?: string;
     }) => void;
     handleBuildLog: (log: string | null) => void;
-    handleSynctexForwardResult: (payload: { ok?: boolean; error?: string }) => void;
-  };
-  alchemy?: {
-    handleSettings: (payload: { settings: AlchemySettings }) => void;
+    handleSynctexForwardResult: (payload: {
+      ok?: boolean;
+      error?: string;
+      page?: number;
+      x?: number;
+      y?: number;
+      pdfPath?: string | null;
+    }) => void;
+    handleSynctexReverseResult: (payload: {
+      ok?: boolean;
+      error?: string;
+      path?: string;
+      line?: number;
+      column?: number;
+      confidence?: boolean;
+      scoreGap?: number | null;
+      distance?: number | null;
+      pdfPath?: string | null;
+    }) => void;
   };
   settings?: {
     updateEnvStatus: (command: string, available: boolean) => void;
@@ -110,6 +118,10 @@ type BridgeHandlersDeps = {
       error?: string;
     }) => void;
     handleError: (message: string, conversationId?: string) => void;
+  };
+  api?: {
+    handleCompletionResult: (payload: ApiCompletionResultPayload) => void;
+    handleUsage: (payload: { snapshot?: ApiUsageSnapshot }) => void;
   };
   editorSession: {
     handleOpenFileResult: (payload: {
@@ -164,18 +176,6 @@ export const initBridgeHandlers = (deps: BridgeHandlersDeps) => {
     deps.search.handleSearchUpdate(payload);
   };
 
-  bridgeWindow.tex64UpdateGit = (payload) => {
-    deps.git.handleUpdate(payload);
-  };
-
-  bridgeWindow.tex64UpdateGitDiff = (payload) => {
-    deps.git.handleDiff(payload);
-  };
-
-  bridgeWindow.tex64UpdateGitActionResult = (payload) => {
-    deps.git.handleActionResult(payload);
-  };
-
   bridgeWindow.tex64OpenFileResult = (payload) => {
     deps.editorSession.handleOpenFileResult(payload);
   };
@@ -190,6 +190,10 @@ export const initBridgeHandlers = (deps: BridgeHandlersDeps) => {
 
   bridgeWindow.tex64SynctexForwardResult = (payload) => {
     deps.build.handleSynctexForwardResult(payload);
+  };
+
+  bridgeWindow.tex64SynctexReverseResult = (payload) => {
+    deps.build.handleSynctexReverseResult(payload);
   };
 
   bridgeWindow.tex64RenameResult = (payload) => {
@@ -289,17 +293,6 @@ export const initBridgeHandlers = (deps: BridgeHandlersDeps) => {
           }
         );
         break;
-      case "updateGit":
-        bridgeWindow.tex64UpdateGit?.(message.payload as GitStatusPayload);
-        break;
-      case "updateGitDiff":
-        bridgeWindow.tex64UpdateGitDiff?.(message.payload as GitDiffPayload);
-        break;
-      case "gitActionResult":
-        bridgeWindow.tex64UpdateGitActionResult?.(
-          message.payload as GitActionResultPayload
-        );
-        break;
       case "openFileResult":
         bridgeWindow.tex64OpenFileResult?.(message.payload as {
           path: string;
@@ -329,9 +322,10 @@ export const initBridgeHandlers = (deps: BridgeHandlersDeps) => {
         deps.build.handleBuildLog((message.payload as { log?: string | null })?.log ?? null);
         break;
       case "synctex:forwardResult":
-        deps.build.handleSynctexForwardResult(
-          message.payload as { ok?: boolean; error?: string }
-        );
+        deps.build.handleSynctexForwardResult(message.payload as any);
+        break;
+      case "synctex:reverseResult":
+        deps.build.handleSynctexReverseResult(message.payload as any);
         break;
       case "renameResult":
         bridgeWindow.tex64RenameResult?.(message.payload as {
@@ -348,11 +342,6 @@ export const initBridgeHandlers = (deps: BridgeHandlersDeps) => {
         break;
       case "launcherStatus":
         deps.handleLauncherStatus(message.payload as { isBusy?: boolean; message?: string });
-        break;
-      case "alchemy:settings":
-        deps.alchemy?.handleSettings(
-          message.payload as { settings: AlchemySettings }
-        );
         break;
       case "agent:settings":
         deps.agent?.handleSettings(
@@ -454,6 +443,16 @@ export const initBridgeHandlers = (deps: BridgeHandlersDeps) => {
           (message.payload as { message?: string; conversationId?: string }).message ??
             "AIエラー",
           (message.payload as { message?: string; conversationId?: string }).conversationId
+        );
+        break;
+      case "api:completionResult":
+        deps.api?.handleCompletionResult(
+          message.payload as ApiCompletionResultPayload
+        );
+        break;
+      case "api:usage":
+        deps.api?.handleUsage(
+          message.payload as { snapshot?: ApiUsageSnapshot }
         );
         break;
       case "agent:applyContent":

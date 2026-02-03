@@ -8,15 +8,10 @@ export const initMathKeyboard = (context, deps) => {
     let mathLiveCheckScheduled = false;
     let mathKeyboardNeedsRerender = false;
     const normalizeMathKeyboardTab = (tab) => {
-        if (tab === "analysis" ||
-            tab === "algebra" ||
-            tab === "sets" ||
-            tab === "logic" ||
-            tab === "arrows" ||
-            tab === "greek") {
+        if (tab === "sets" || tab === "logic" || tab === "arrows") {
             return tab;
         }
-        return "analysis";
+        return "sets";
     };
     const isMathKeyboardShiftActive = () => shiftHeld || shiftLocked;
     const markMathLiveReady = () => {
@@ -176,6 +171,9 @@ export const initMathKeyboard = (context, deps) => {
     };
     const renderMathKeyboardFixed = () => {
         renderMathKeyboardKeys(mathKeyboardFixedGrid, mathKeyboardFixedKeys);
+        if (mathKeyboardDock instanceof HTMLElement) {
+            mathKeyboardDock.classList.toggle("has-fixed-keys", mathKeyboardFixedKeys.length > 0);
+        }
     };
     const updateMathKeyboardShiftState = () => {
         const isActive = isMathKeyboardShiftActive();

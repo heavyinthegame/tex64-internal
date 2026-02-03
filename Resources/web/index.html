@@ -91,35 +91,6 @@
             整形
           </button>
           <button
-            id="partial-build-button"
-            type="button"
-            aria-label="部分ビルド"
-            title="部分ビルド (章/節)"
-          >
-            <span class="partial-build-icon" aria-hidden="true">
-              <svg
-                viewBox="0 0 24 24"
-                width="24"
-                height="24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.6"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <rect
-                  x="3.5"
-                  y="5"
-                  width="9"
-                  height="14"
-                  rx="2"
-                  stroke-dasharray="3 2"
-                ></rect>
-                <path d="M13.5 7.5v9l7-4.5z" fill="currentColor" stroke="none"></path>
-              </svg>
-            </span>
-          </button>
-          <button
             id="build-button"
             type="button"
             aria-label="ビルド"
@@ -190,22 +161,6 @@
               class="tab"
               type="button"
               role="tab"
-              data-tab="alchemy"
-              aria-selected="false"
-              aria-label="取り込み"
-              title="取り込み"
-            >
-              <span class="tab-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24">
-                  <rect x="7" y="4" width="10" height="4" rx="1"></rect>
-                  <rect x="6" y="8" width="12" height="12" rx="2"></rect>
-                </svg>
-              </span>
-            </button>
-            <button
-              class="tab"
-              type="button"
-              role="tab"
               data-tab="ai"
               aria-selected="false"
               aria-label="AI"
@@ -233,24 +188,6 @@
                   <path d="M12 3l9 16H3z"></path>
                   <path d="M12 9v4"></path>
                   <path d="M12 17h.01"></path>
-                </svg>
-              </span>
-            </button>
-            <button
-              class="tab"
-              type="button"
-              role="tab"
-              data-tab="git"
-              aria-selected="false"
-              aria-label="履歴"
-              title="履歴"
-            >
-              <span class="tab-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24">
-                  <circle cx="6" cy="6" r="2"></circle>
-                  <circle cx="6" cy="18" r="2"></circle>
-                  <circle cx="18" cy="12" r="2"></circle>
-                  <path d="M6 8v8M8 12h8"></path>
                 </svg>
               </span>
             </button>
@@ -400,6 +337,12 @@
                         </div>
                       </div>
                       <button
+                        class="panel-button block-suggest-button"
+                        id="block-suggest-button"
+                        type="button"
+                        aria-label="候補を表示"
+                      >候補</button>
+                      <button
                         class="panel-button block-mode-toggle"
                         id="block-mode-toggle"
                         type="button"
@@ -426,16 +369,7 @@
                   </div>
                 </div>
                 <div class="math-keyboard-tabs" role="tablist" aria-label="数式キーボード">
-                  <button class="math-keyboard-tab" type="button" data-math-tab="greek">
-                    ギリシャ
-                  </button>
-                  <button class="math-keyboard-tab is-active" type="button" data-math-tab="analysis">
-                    解析
-                  </button>
-                  <button class="math-keyboard-tab" type="button" data-math-tab="algebra">
-                    代数
-                  </button>
-                  <button class="math-keyboard-tab" type="button" data-math-tab="sets">
+                  <button class="math-keyboard-tab is-active" type="button" data-math-tab="sets">
                     集合
                   </button>
                   <button class="math-keyboard-tab" type="button" data-math-tab="logic">
@@ -448,91 +382,6 @@
                 <div class="math-keyboard-grid" id="math-keyboard-grid"></div>
                 <div class="math-keyboard-divider"></div>
                 <div class="math-keyboard-fixed-grid" id="math-keyboard-fixed-grid"></div>
-              </div>
-            </div>
-          </div>
-          <div class="panel no-header" data-panel="alchemy">
-            <div class="panel-header">
-              <span class="panel-title">取り込み</span>
-            </div>
-            <div class="panel-body">
-              <div
-                class="alchemy-panel"
-                id="alchemy-panel"
-                aria-hidden="false"
-                aria-label="取り込みボード"
-              >
-                <div class="alchemy-panel-header">
-                  <div class="alchemy-title">取り込みボード</div>
-                  <div class="alchemy-header-actions">
-                    <button
-                      class="panel-button ghost icon-only"
-                      id="alchemy-settings-button"
-                      type="button"
-                      aria-label="設定"
-                      title="取り込み設定"
-                    >
-                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/>
-                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-                <div class="alchemy-settings" id="alchemy-settings" aria-hidden="true">
-                  <div class="alchemy-settings-grid">
-                    <div class="alchemy-settings-item">
-                      <div class="settings-title">OCR 言語</div>
-                      <div class="alchemy-settings-inline">
-                        <select class="settings-select alchemy-select" id="alchemy-ocr-language">
-                          <option selected>jpn+eng</option>
-                          <option>eng</option>
-                          <option>jpn</option>
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div class="alchemy-panel-body">
-                  <div class="alchemy-top-area">
-                    <div class="alchemy-drop-zone" id="alchemy-drop-zone">
-                      <div class="alchemy-drop-content">
-                        <svg class="alchemy-drop-icon" viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5">
-                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
-                        </svg>
-                        <div class="alchemy-drop-text">ここにファイルをドロップ</div>
-                        <div class="alchemy-drop-subtext">またはクリックして選択</div>
-                      </div>
-                      <input type="file" id="alchemy-file-input" style="display:none" accept="image/*,.pdf" multiple>
-                    </div>
-                    <button class="panel-button ghost icon-only alchemy-capture-btn" id="alchemy-capture-button" type="button" title="画面キャプチャ">
-                      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-                        <circle cx="12" cy="13" r="4"/>
-                      </svg>
-                    </button>
-                    <div class="alchemy-ground-line"></div>
-                  </div>
-                  
-                  <div class="alchemy-board-list" id="alchemy-board-list">
-                    <!-- Board items will be injected here -->
-                  </div>
-
-                  <template id="alchemy-board-item-template">
-                    <div class="alchemy-board-item">
-                      <div class="alchemy-item-thumb"></div>
-                      <div class="alchemy-item-content">
-                        <div class="alchemy-item-text"></div>
-                        <div class="alchemy-item-actions">
-                          <button class="panel-button small action-insert" type="button">挿入</button>
-                          <button class="panel-button ghost small danger action-delete" type="button">削除</button>
-                        </div>
-                      </div>
-                    </div>
-                  </template>
-
-                  <div class="alchemy-status-line" id="alchemy-status-line"></div>
-                </div>
               </div>
             </div>
           </div>
@@ -569,37 +418,6 @@
                 </div>
               </div>
               <div class="ai-status" id="ai-status" aria-live="polite"></div>
-            </div>
-          </div>
-          <div class="panel no-header" data-panel="git">
-            <div class="panel-header">
-              <span class="panel-title">ソース管理</span>
-            </div>
-            <div class="panel-body git-panel">
-              <!-- Git panel content removed -->
-              <div id="git-status" hidden></div>
-              <div id="git-init-row" hidden></div>
-              <div id="git-init" hidden></div>
-              <div id="git-refresh" hidden></div>
-              <div id="git-commit-section" hidden></div>
-              <div id="git-commit-message" hidden></div>
-              <div id="git-commit-button" hidden></div>
-              <div id="git-history-section" hidden></div>
-              <div id="git-history" hidden></div>
-              <div id="git-pull" hidden></div>
-              <div id="git-push" hidden></div>
-              <div id="git-branch-name" hidden></div>
-              <div id="git-branch-sync" hidden></div>
-              <div id="git-remote-name" hidden></div>
-              <div id="git-changes-count" hidden></div>
-              <div id="git-changes-summary" hidden></div>
-              <div id="git-summary-text" hidden></div>
-              <div id="git-sync-text" hidden></div>
-              <div id="git-sync-section" hidden></div>
-              <div id="git-guide" hidden><div id="git-guide-text"></div></div>
-              <div id="git-remote-section" hidden>
-                  <input id="git-remote-url" hidden>
-              </div>
             </div>
           </div>
           <div class="panel no-header" data-panel="project">
@@ -750,6 +568,57 @@
                           <span class="settings-switch-track" aria-hidden="true"></span>
                         </label>
                       </div>
+                    </div>
+                    <div class="settings-item">
+                      <div class="settings-label">
+                        <span class="settings-title">逆SyncTeX（PDF→ソース）</span>
+                        <span class="settings-desc">PDF上でCtrl/Cmd+Clickした位置へジャンプします。</span>
+                      </div>
+                      <div class="settings-control">
+                        <label class="settings-switch" for="editor-reverse-synctex">
+                          <input class="settings-switch-input" id="editor-reverse-synctex" type="checkbox">
+                          <span class="settings-switch-track" aria-hidden="true"></span>
+                        </label>
+                      </div>
+                    </div>
+                    <div class="settings-item">
+                      <div class="settings-label">
+                        <span class="settings-title">ゴースト補完</span>
+                        <span class="settings-desc">行末で予測を薄く表示します。</span>
+                      </div>
+                      <div class="settings-control">
+                        <label class="settings-switch" for="editor-ghost-completion">
+                          <input class="settings-switch-input" id="editor-ghost-completion" type="checkbox">
+                          <span class="settings-switch-track" aria-hidden="true"></span>
+                        </label>
+                      </div>
+                    </div>
+                    <div class="settings-item" data-ghost-config>
+                      <div class="settings-label">
+                        <span class="settings-title">ゴースト補完の遅延 (ms)</span>
+                        <span class="settings-desc">入力停止から表示までの待ち時間です。</span>
+                      </div>
+                      <div class="settings-control">
+                        <div class="settings-inline settings-inline-compact">
+                          <input class="settings-input is-compact" id="editor-ghost-debounce" type="number" min="0" max="2000" step="10">
+                          <span class="settings-unit">ms</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="settings-item" data-ghost-config>
+                      <div class="settings-label">
+                        <span class="settings-title">ゴースト補完の最大文字数</span>
+                        <span class="settings-desc">長すぎる提案は表示しません。</span>
+                      </div>
+                      <div class="settings-control">
+                        <div class="settings-inline settings-inline-compact">
+                          <input class="settings-input is-compact" id="editor-ghost-max-chars" type="number" min="20" max="400" step="10">
+                          <span class="settings-unit">文字</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="settings-help-text" data-ghost-config>
+                      推奨: 遅延 200–400ms、最大文字数 80–200 くらいが邪魔になりにくいです。
                     </div>
                   </div>
                 </div>
@@ -1230,10 +1099,18 @@
                 <span class="block-settings-item-title">挿入形式</span>
                 <span class="block-settings-item-desc">インライン/別行の囲み方</span>
               </button>
+              <button
+                class="block-settings-item"
+                type="button"
+                data-block-settings-target="suggestions"
+              >
+                <span class="block-settings-item-title">候補/サジェスト</span>
+                <span class="block-settings-item-desc">自動表示・パック・手動表示</span>
+              </button>
             </div>
             <div class="block-settings-page" data-block-settings-page="insert-format">
               <div class="block-settings-nav">
-                <button class="panel-button ghost" id="block-settings-back" type="button">
+                <button class="panel-button ghost block-settings-back" type="button">
                   戻る
                 </button>
               </div>
@@ -1268,83 +1145,54 @@
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="modal" id="capture-window-modal" aria-hidden="true">
-        <div
-          class="modal-card wide capture-window-card"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="capture-window-title"
-        >
-          <div class="modal-header">
-            <div class="modal-title" id="capture-window-title"></div>
-            <button class="panel-button ghost" id="capture-window-cancel" type="button">
-              閉じる
-            </button>
-          </div>
-          <div class="capture-window-body">
-            <div class="capture-window-toolbar">
-              <input
-                class="settings-input capture-window-search"
-                id="capture-window-search"
-                type="text"
-                placeholder="検索"
-              >
-            </div>
-            <div class="capture-window-grid" id="capture-window-grid"></div>
-            <template id="capture-window-item-template">
-              <button class="capture-window-item" type="button">
-                <div class="capture-window-thumb"></div>
-                <div class="capture-window-meta">
-                  <span class="capture-window-title"></span>
-                  <span class="capture-window-app"></span>
-                </div>
-              </button>
-            </template>
-          </div>
-        </div>
-      </div>
-
-      <div class="modal" id="capture-crop-modal" aria-hidden="true">
-        <div
-          class="modal-card wide capture-crop-card"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="capture-crop-title"
-        >
-          <div class="modal-header">
-            <div class="modal-title" id="capture-crop-title">範囲を切り取る</div>
-            <button class="panel-button" id="capture-crop-retry" type="button">
-              戻る
-            </button>
-            <button class="panel-button" id="capture-crop-apply" type="button">
-              確定
-            </button>
-          </div>
-          <div class="capture-crop-body">
-            <div class="capture-crop-canvas" id="capture-crop-canvas">
-              <img
-                class="capture-crop-image"
-                id="capture-crop-image"
-                alt=""
-              >
-              <div class="capture-crop-selection" id="capture-crop-selection">
-                <div class="capture-crop-handle tl"></div>
-                <div class="capture-crop-handle tr"></div>
-                <div class="capture-crop-handle bl"></div>
-                <div class="capture-crop-handle br"></div>
+            <div class="block-settings-page" data-block-settings-page="suggestions">
+              <div class="block-settings-nav">
+                <button class="panel-button ghost block-settings-back" type="button">
+                  戻る
+                </button>
               </div>
-              <div class="capture-crop-guide" id="capture-crop-guide"></div>
-            </div>
-            <div class="capture-crop-footer">
-              <div class="capture-crop-meta">
-                <span class="capture-crop-size" id="capture-crop-size">1120 × 640</span>
-                <span class="capture-crop-hint" id="capture-crop-hint">
-                  ドラッグして範囲を調整
-                </span>
+              <div class="block-settings-section">
+                <div class="block-settings-section-title">候補の表示</div>
+                <div class="block-settings-options">
+                  <button
+                    class="block-settings-option"
+                    type="button"
+                    data-wysiwyg-auto="on"
+                  >自動で表示</button>
+                  <button
+                    class="block-settings-option"
+                    type="button"
+                    data-wysiwyg-auto="off"
+                  >手動のみ</button>
+                </div>
+                <div class="block-settings-section-hint">
+                  手動表示: <span class="block-settings-kbd">Ctrl</span> + <span class="block-settings-kbd">.</span>
+                </div>
+              </div>
+              <div class="block-settings-section">
+                <div class="block-settings-section-title">トリガーパック</div>
+                <div class="block-settings-options">
+                  <button
+                    class="block-settings-option"
+                    type="button"
+                    data-wysiwyg-pack="math"
+                  >数学拡張</button>
+                  <button
+                    class="block-settings-option"
+                    type="button"
+                    data-wysiwyg-pack="physics"
+                  >物理/量子</button>
+                  <button
+                    class="block-settings-option"
+                    type="button"
+                    data-wysiwyg-pack="cs"
+                  >集合/論理</button>
+                  <button
+                    class="block-settings-option"
+                    type="button"
+                    data-wysiwyg-pack="jp"
+                  >日本語トリガー</button>
+                </div>
               </div>
             </div>
           </div>

@@ -1,7 +1,15 @@
-import { dedupeByKey, pickCitationEntries } from "./index-utils.js";
+import { registerCompletionProvider } from "./monaco-completion.js";
+import { createInlineCompletionController } from "./monaco-inline.js";
+import { applyMonacoTheme } from "./monaco-theme.js";
 export const initMonacoSetup = (context, deps) => {
     const { editorHost, editorHostSecondary } = context.dom;
-    let completionRegistered = false;
+    const completionState = { registered: false };
+    const inlineController = createInlineCompletionController({
+        editorSession: deps.editorSession,
+        getGhostCompletionEnabled: deps.getGhostCompletionEnabled,
+        getGhostCompletionConfig: deps.getGhostCompletionConfig,
+        requestApiCompletion: deps.requestApiCompletion,
+    });
     const ghostCaretControllers = [];
     const hideGhostCarets = (activeKey) => {
         ghostCaretControllers.forEach((controller) => {
@@ -10,63 +18,20 @@ export const initMonacoSetup = (context, deps) => {
             }
         });
     };
-    const registerCompletionProvider = (monaco) => {
-        var _a, _b, _c, _d, _e;
-        if (completionRegistered || !((_a = monaco.languages) === null || _a === void 0 ? void 0 : _a.registerCompletionItemProvider)) {
-            return;
-        }
-        (_c = (_b = monaco.languages).register) === null || _c === void 0 ? void 0 : _c.call(_b, { id: "latex" });
-        (_e = (_d = monaco.languages).register) === null || _e === void 0 ? void 0 : _e.call(_d, { id: "bibtex" });
-        const provideItems = (model, position) => {
-            var _a, _b, _c, _d, _e, _f, _g, _h;
-            const activePath = deps.editorSession.getActiveFilePath();
-            if (!activePath || !activePath.endsWith(".tex")) {
-                return { suggestions: [] };
-            }
-            const line = model.getLineContent(position.lineNumber);
-            const linePrefix = line.slice(0, Math.max(position.column - 1, 0));
-            const refMatch = linePrefix.match(/\\ref\{([^}]*)$/);
-            const citeMatch = linePrefix.match(/\\cite\{([^}]*)$/);
-            let entries = [];
-            let partial = "";
-            if (refMatch) {
-                entries = dedupeByKey(deps.getIndexLabels());
-                partial = (_a = refMatch[1]) !== null && _a !== void 0 ? _a : "";
-            }
-            else if (citeMatch) {
-                entries = pickCitationEntries(deps.getIndexCitations());
-                const raw = (_b = citeMatch[1]) !== null && _b !== void 0 ? _b : "";
-                const parts = raw.split(",");
-                partial = parts.length > 0 ? parts[parts.length - 1].trimStart() : "";
-            }
-            else {
-                return { suggestions: [] };
-            }
-            const range = monaco.Range
-                ? new monaco.Range(position.lineNumber, position.column - partial.length, position.lineNumber, position.column)
-                : undefined;
-            const kind = (_h = (_e = (_d = (_c = monaco.languages) === null || _c === void 0 ? void 0 : _c.CompletionItemKind) === null || _d === void 0 ? void 0 : _d.Reference) !== null && _e !== void 0 ? _e : (_g = (_f = monaco.languages) === null || _f === void 0 ? void 0 : _f.CompletionItemKind) === null || _g === void 0 ? void 0 : _g.Value) !== null && _h !== void 0 ? _h : 17;
-            const suggestions = entries.map((entry) => ({
-                label: entry.key,
-                kind,
-                insertText: entry.key,
-                range,
-                detail: entry.path,
-            }));
-            return { suggestions };
-        };
-        ["latex", "plaintext"].forEach((languageId) => {
-            var _a, _b;
-            (_b = (_a = monaco.languages) === null || _a === void 0 ? void 0 : _a.registerCompletionItemProvider) === null || _b === void 0 ? void 0 : _b.call(_a, languageId, {
-                triggerCharacters: ["{", ",", "\\"],
-                provideCompletionItems: provideItems,
-            });
+    const setInlineSuggestEnabled = (enabled) => {
+        deps.editorSession.forEachEditorGroup((group) => {
+            var _a;
+            const editorAny = group.editor;
+            (_a = editorAny === null || editorAny === void 0 ? void 0 : editorAny.updateOptions) === null || _a === void 0 ? void 0 : _a.call(editorAny, { inlineSuggest: { enabled } });
         });
-        completionRegistered = true;
     };
+    const setGhostCompletionConfig = (config) => {
+        inlineController.applyGhostCompletionConfig(config);
+    };
+    const api = { setInlineSuggestEnabled, setGhostCompletionConfig };
     if (!(editorHost instanceof HTMLElement)) {
         deps.updateFallback("エディタ領域が見つかりません。");
-        return;
+        return api;
     }
     const baseUrl = new URL("monaco/vs/", window.location.href).toString();
     const requireBase = baseUrl.replace(/\/$/, "");
@@ -87,67 +52,18 @@ export const initMonacoSetup = (context, deps) => {
     }
     monacoWindow.require.config({ paths: { vs: requireBase } });
     monacoWindow.require(["vs/editor/editor.main"], () => {
-        var _a, _b, _c, _d;
         if (!monacoWindow.monaco || !monacoWindow.monaco.editor) {
             deps.updateFallback("Monacoの初期化に失敗しました。");
             return;
         }
         deps.setMonacoApi(monacoWindow.monaco);
-        registerCompletionProvider(monacoWindow.monaco);
-        const themeName = "tex64-deep-slate";
-        const themeColors = {
-            "editor.background": "#1A1D23",
-            "editor.foreground": "#CDD1D9",
-            "editorLineNumber.foreground": "#5C6370",
-            "editorLineNumber.activeForeground": "#CDD1D9",
-            "editorCursor.foreground": "#5C9CFF",
-            "editor.selectionBackground": "#2F3642",
-            "editor.inactiveSelectionBackground": "#252B35",
-            "editor.selectionHighlightBackground": "rgba(92, 156, 255, 0.15)",
-            "editor.lineHighlightBackground": "#1F2329",
-            "editor.lineHighlightBorder": "#282C34",
-            "editorIndentGuide.background": "#383E49",
-            "editorIndentGuide.activeBackground": "#565C68",
-            "editorWhitespace.foreground": "#383E49",
-            "editorGutter.background": "#1A1D23",
-            "editorWidget.background": "#262A32",
-            "editorWidget.border": "#454C59",
-            "editorHoverWidget.background": "#262A32",
-            "editorHoverWidget.border": "#454C59",
-            "editorSuggestWidget.background": "#262A32",
-            "editorSuggestWidget.border": "#454C59",
-            "editorSuggestWidget.foreground": "#CDD1D9",
-            "editorSuggestWidget.selectedBackground": "rgba(92, 156, 255, 0.2)",
-            "editorSuggestWidget.highlightForeground": "#5C9CFF",
-            "editorBracketMatch.background": "rgba(92, 156, 255, 0.15)",
-            "editorBracketMatch.border": "#5C9CFF",
-            "editor.findMatchBackground": "rgba(92, 156, 255, 0.25)",
-            "editor.findMatchHighlightBackground": "rgba(92, 156, 255, 0.15)",
-            "editor.findRangeHighlightBackground": "rgba(92, 156, 255, 0.1)",
-            "editor.wordHighlightBackground": "rgba(92, 156, 255, 0.1)",
-            "editor.wordHighlightStrongBackground": "rgba(92, 156, 255, 0.15)",
-            "editorError.foreground": "#D56A6A",
-            "editorError.border": "#00000000",
-            "editorOverviewRuler.border": "#00000000",
-            "editorOverviewRuler.findMatchForeground": "#5C9CFF",
-            "editorOverviewRuler.errorForeground": "#D56A6A",
-            "editorMarkerNavigationError.background": "rgba(213, 106, 106, 0.1)",
-            "editorGutter.errorForeground": "#C55A5A",
-            "editorWarning.foreground": "#B89E52",
-            "editorOverviewRuler.background": "#1A1D23",
-            "scrollbar.shadow": "#000000",
-            "scrollbarSlider.background": "rgba(255, 255, 255, 0.12)",
-            "scrollbarSlider.hoverBackground": "rgba(255, 255, 255, 0.2)",
-            "scrollbarSlider.activeBackground": "rgba(255, 255, 255, 0.28)",
-            "editorRuler.foreground": "#383E49",
-        };
-        (_b = (_a = monacoWindow.monaco.editor).defineTheme) === null || _b === void 0 ? void 0 : _b.call(_a, themeName, {
-            base: "vs-dark",
-            inherit: true,
-            rules: [],
-            colors: themeColors,
-        });
-        (_d = (_c = monacoWindow.monaco.editor).setTheme) === null || _d === void 0 ? void 0 : _d.call(_c, themeName);
+        registerCompletionProvider(monacoWindow.monaco, {
+            getActiveFilePath: deps.editorSession.getActiveFilePath,
+            getIndexLabels: deps.getIndexLabels,
+            getIndexCitations: deps.getIndexCitations,
+        }, completionState);
+        inlineController.registerInlineCompletionProvider(monacoWindow.monaco);
+        const themeName = applyMonacoTheme(monacoWindow.monaco);
         const editorOptions = {
             value: "",
             language: "latex",
@@ -167,6 +83,7 @@ export const initMonacoSetup = (context, deps) => {
             suggestOnTriggerCharacters: true,
             occurrencesHighlight: false,
             selectionHighlight: false,
+            inlineSuggest: { enabled: deps.getGhostCompletionEnabled() },
         };
         const createEditorForGroup = (group, host) => {
             var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
@@ -289,6 +206,7 @@ export const initMonacoSetup = (context, deps) => {
                 }
             });
             editor.onDidChangeModelContent(() => {
+                inlineController.recordInlineEdit();
                 if (group.isApplyingFile) {
                     return;
                 }
@@ -340,4 +258,5 @@ export const initMonacoSetup = (context, deps) => {
     }, () => {
         deps.updateFallback("Monacoの読み込みに失敗しました。");
     });
+    return api;
 };

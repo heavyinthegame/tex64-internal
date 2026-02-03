@@ -1,28 +1,31 @@
-import { DEFAULT_ENV_REGISTRY, getEnvBaseName, normalizeEnvName, } from "./env-registry.js";
-const defaultEditorFormatSettings = {
-    indentStyle: "spaces-2",
-    beginEndOnOwnLine: true,
-    documentNoIndent: true,
-    alignMathDelims: true,
-    alignTableDelims: true,
-    blankLines: "condense",
-    customVerbatim: [],
-};
+import { buildFormatSettingsPayload as buildFormatSettingsPayloadFromSettings, defaultEditorFormatSettings, normalizeEditorFormatSettings, normalizeVerbatimInput, } from "./settings-format.js";
+import { clampNumber, loadGhostCompletionConfig, saveGhostCompletionConfig, } from "./settings-completion.js";
+import { createEnvStatusManager } from "./settings-env.js";
 export const initSettingsUi = (context, deps) => {
-    const { settingsPanel, settingsNav, settingsNavItems, settingsPages, settingsPageItems, settingsBackButtons, settingsCompileEngineSelect, settingsEnvRefresh, editorAlignEnvToggle, editorFormatIndentSelect, editorFormatBeginEndToggle, editorFormatDocumentNoIndentToggle, editorFormatAlignMathToggle, editorFormatAlignTableToggle, editorFormatBlankLinesSelect, editorFormatVerbatimInput, editorFormatVerbatimAdd, editorFormatVerbatimHint, editorFormatVerbatimList, editorAutoSynctexBuildToggle, editorPdfWindowToggle, } = context.dom;
+    const { settingsPanel, settingsNav, settingsNavItems, settingsPages, settingsPageItems, settingsBackButtons, settingsCompileEngineSelect, settingsEnvRefresh, editorAlignEnvToggle, editorFormatIndentSelect, editorFormatBeginEndToggle, editorFormatDocumentNoIndentToggle, editorFormatAlignMathToggle, editorFormatAlignTableToggle, editorFormatBlankLinesSelect, editorFormatVerbatimInput, editorFormatVerbatimAdd, editorFormatVerbatimHint, editorFormatVerbatimList, editorAutoSynctexBuildToggle, editorReverseSynctexToggle, editorGhostCompletionToggle, editorGhostCompletionDebounce, editorGhostCompletionMaxChars, editorPdfWindowToggle, } = context.dom;
     let activeSettingsPage = null;
     let editorAlignEnvEnabled = true;
     let editorFormatSettings = {
         ...defaultEditorFormatSettings,
     };
     let autoSynctexOnBuildEnabled = true;
+    let reverseSynctexEnabled = true;
+    let ghostCompletionEnabled = true;
+    let ghostCompletionDebounceMs = 260;
+    let ghostCompletionMaxChars = 140;
     let pdfViewerMode = "window";
     const compileEngineKey = "tex64.compileEngine";
     const editorAutoSynctexOnBuildKey = "tex64.editor.autoSynctexOnBuild";
+    const editorReverseSynctexKey = "tex64.editor.reverseSynctex";
+    const editorGhostCompletionKey = "tex64.editor.ghostCompletion";
+    const editorGhostCompletionDebounceKey = "tex64.editor.ghostCompletion.debounceMs";
+    const editorGhostCompletionMaxCharsKey = "tex64.editor.ghostCompletion.maxChars";
     const editorAutoSynctexOnPdfOpenKey = "tex64.editor.autoSynctexOnPdfOpen";
     const editorPdfViewerModeKey = "tex64.editor.pdfViewerMode";
     const editorAlignEnvKey = "tex64.editor.alignEnv";
     const editorFormatSettingsKey = "tex64.editor.formatSettings";
+    const ghostCompletionDebounceRange = { min: 0, max: 2000 };
+    const ghostCompletionMaxCharsRange = { min: 20, max: 400 };
     const texEngineCommands = new Set(["lualatex", "pdflatex", "xelatex", "uplatex"]);
     const envCheckTargets = [
         "lualatex",
@@ -34,10 +37,13 @@ export const initSettingsUi = (context, deps) => {
         "synctex",
     ];
     const envDisplayTargets = ["lualatex", "latexmk", "latexindent", "synctex"];
-    const envCheckState = new Map();
-    let envCheckRetryTimer = null;
-    let envCheckRetryCount = 0;
-    const envCheckMaxRetries = 4;
+    const envManager = createEnvStatusManager({
+        postToNative: deps.postToNative,
+        envCheckTargets,
+        envDisplayTargets,
+        texEngineCommands,
+    });
+    const { checkEnvironmentStatus, updateEnvStatus } = envManager;
     const updateEngineUI = () => {
         if (!(settingsCompileEngineSelect instanceof HTMLSelectElement)) {
             return;
@@ -46,76 +52,7 @@ export const initSettingsUi = (context, deps) => {
         const hasOption = Array.from(settingsCompileEngineSelect.options).some((option) => option.value === savedEngine);
         settingsCompileEngineSelect.value = hasOption ? savedEngine : "lualatex";
     };
-    const renderEnvStatus = (envName, available) => {
-        const item = document.querySelector(`.env-item[data-env="${envName}"]`);
-        if (!item) {
-            return;
-        }
-        const statusBadge = item.querySelector(".env-badge");
-        const actionBtn = item.querySelector(".env-btn");
-        if (statusBadge) {
-            if (available === null) {
-                statusBadge.className = "env-badge checking";
-                statusBadge.textContent = "確認中...";
-            }
-            else {
-                statusBadge.className = available ? "env-badge ok" : "env-badge error";
-                statusBadge.textContent = available ? "利用可能" : "未検出";
-            }
-        }
-        if (actionBtn instanceof HTMLElement) {
-            actionBtn.classList.remove("is-hidden");
-            if (available === null) {
-                actionBtn.setAttribute("disabled", "true");
-                return;
-            }
-            actionBtn.removeAttribute("disabled");
-            actionBtn.textContent = available ? "更新/再インストール" : "インストール";
-        }
-    };
-    const checkEnvironmentStatus = (isRetry = false) => {
-        if (!isRetry) {
-            envCheckRetryCount = 0;
-        }
-        if (envCheckRetryTimer !== null) {
-            window.clearTimeout(envCheckRetryTimer);
-            envCheckRetryTimer = null;
-        }
-        envDisplayTargets.forEach((envName) => renderEnvStatus(envName, null));
-        envCheckTargets.forEach((command) => envCheckState.delete(command));
-        let postedAll = true;
-        envCheckTargets.forEach((command) => {
-            if (!deps.postToNative({ type: "env:check", command }, true)) {
-                postedAll = false;
-            }
-        });
-        if (postedAll) {
-            envCheckRetryCount = 0;
-            return;
-        }
-        envCheckRetryCount += 1;
-        if (envCheckRetryCount >= envCheckMaxRetries) {
-            envCheckRetryCount = 0;
-            envDisplayTargets.forEach((envName) => renderEnvStatus(envName, false));
-            return;
-        }
-        envCheckRetryTimer = window.setTimeout(() => {
-            envCheckRetryTimer = null;
-            checkEnvironmentStatus(true);
-        }, 400);
-    };
-    const updateEnvStatus = (command, available) => {
-        if (!command) {
-            return;
-        }
-        envCheckState.set(command, available);
-        if (texEngineCommands.has(command)) {
-            const hasEngine = Array.from(texEngineCommands).some((engine) => envCheckState.get(engine) === true);
-            renderEnvStatus("lualatex", hasEngine);
-            return;
-        }
-        renderEnvStatus(command, available);
-    };
+    const buildFormatSettingsPayload = () => buildFormatSettingsPayloadFromSettings(editorFormatSettings, deps.envRegistry);
     const envBtns = Array.from(document.querySelectorAll(".env-btn"));
     envBtns.forEach((btn) => {
         btn.addEventListener("click", () => {
@@ -139,93 +76,6 @@ export const initSettingsUi = (context, deps) => {
             }
         });
     }
-    const normalizeVerbatimInput = (value) => {
-        const trimmed = value.trim();
-        if (!trimmed) {
-            return "";
-        }
-        const match = trimmed.match(/\\(?:begin|end)\{([^}]+)\}/);
-        let name = match ? match[1] : trimmed;
-        name = name.replace(/[{}]/g, "");
-        name = name.replace(/^\\+/, "");
-        return getEnvBaseName(normalizeEnvName(name));
-    };
-    const normalizeEditorVerbatimList = (value) => {
-        if (!Array.isArray(value)) {
-            return [];
-        }
-        const entries = [];
-        const seen = new Set();
-        value.forEach((entry) => {
-            if (typeof entry !== "string") {
-                return;
-            }
-            const normalized = normalizeVerbatimInput(entry);
-            if (!normalized || seen.has(normalized)) {
-                return;
-            }
-            seen.add(normalized);
-            entries.push(normalized);
-        });
-        return entries;
-    };
-    const normalizeEditorFormatSettings = (value) => {
-        const settings = {
-            ...defaultEditorFormatSettings,
-        };
-        if (!value || typeof value !== "object") {
-            return settings;
-        }
-        const data = value;
-        if (data.indentStyle === "spaces-2" ||
-            data.indentStyle === "spaces-4" ||
-            data.indentStyle === "tab") {
-            settings.indentStyle = data.indentStyle;
-        }
-        if (typeof data.beginEndOnOwnLine === "boolean") {
-            settings.beginEndOnOwnLine = data.beginEndOnOwnLine;
-        }
-        if (typeof data.documentNoIndent === "boolean") {
-            settings.documentNoIndent = data.documentNoIndent;
-        }
-        if (typeof data.alignMathDelims === "boolean") {
-            settings.alignMathDelims = data.alignMathDelims;
-        }
-        if (typeof data.alignTableDelims === "boolean") {
-            settings.alignTableDelims = data.alignTableDelims;
-        }
-        if (data.blankLines === "preserve" ||
-            data.blankLines === "condense" ||
-            data.blankLines === "remove") {
-            settings.blankLines = data.blankLines;
-        }
-        settings.customVerbatim = normalizeEditorVerbatimList(data.customVerbatim);
-        return settings;
-    };
-    const buildEditorFormatAlignEnvs = () => {
-        const math = new Set();
-        const table = new Set();
-        DEFAULT_ENV_REGISTRY.concat(deps.envRegistry.getCustomEnvRegistry()).forEach((entry) => {
-            const base = getEnvBaseName(normalizeEnvName(entry.name));
-            if (!base) {
-                return;
-            }
-            if (entry.kind === "table") {
-                table.add(base);
-            }
-            else {
-                math.add(base);
-            }
-        });
-        return {
-            math: Array.from(math).sort((a, b) => a.localeCompare(b, "ja")),
-            table: Array.from(table).sort((a, b) => a.localeCompare(b, "ja")),
-        };
-    };
-    const buildFormatSettingsPayload = () => ({
-        ...editorFormatSettings,
-        alignEnvs: buildEditorFormatAlignEnvs(),
-    });
     const updateSettingsToggle = (element, enabled) => {
         if (element instanceof HTMLInputElement) {
             element.checked = enabled;
@@ -292,6 +142,36 @@ export const initSettingsUi = (context, deps) => {
         if (editorAutoSynctexBuildToggle instanceof HTMLInputElement) {
             editorAutoSynctexBuildToggle.checked = autoSynctexOnBuildEnabled;
         }
+    };
+    const updateEditorReverseSynctexUI = () => {
+        if (editorReverseSynctexToggle instanceof HTMLInputElement) {
+            editorReverseSynctexToggle.checked = reverseSynctexEnabled;
+        }
+    };
+    const updateEditorGhostCompletionUI = () => {
+        if (editorGhostCompletionToggle instanceof HTMLInputElement) {
+            editorGhostCompletionToggle.checked = ghostCompletionEnabled;
+        }
+        const configItems = Array.from(document.querySelectorAll("[data-ghost-config]"));
+        configItems.forEach((item) => {
+            item.classList.toggle("is-disabled", !ghostCompletionEnabled);
+            item.setAttribute("aria-disabled", ghostCompletionEnabled ? "false" : "true");
+        });
+        if (editorGhostCompletionDebounce instanceof HTMLInputElement) {
+            editorGhostCompletionDebounce.disabled = !ghostCompletionEnabled;
+        }
+        if (editorGhostCompletionMaxChars instanceof HTMLInputElement) {
+            editorGhostCompletionMaxChars.disabled = !ghostCompletionEnabled;
+        }
+    };
+    const updateEditorGhostCompletionConfigUI = () => {
+        if (editorGhostCompletionDebounce instanceof HTMLInputElement) {
+            editorGhostCompletionDebounce.value = String(ghostCompletionDebounceMs);
+        }
+        if (editorGhostCompletionMaxChars instanceof HTMLInputElement) {
+            editorGhostCompletionMaxChars.value = String(ghostCompletionMaxChars);
+        }
+        updateEditorGhostCompletionUI();
     };
     const updateEditorPdfViewerModeUI = () => {
         if (editorPdfWindowToggle instanceof HTMLInputElement) {
@@ -372,6 +252,38 @@ export const initSettingsUi = (context, deps) => {
         }
         updateEditorAutoSynctexBuildUI();
     };
+    const loadEditorReverseSynctexState = () => {
+        const stored = localStorage.getItem(editorReverseSynctexKey);
+        if (stored !== null) {
+            reverseSynctexEnabled = stored !== "false";
+        }
+        else {
+            reverseSynctexEnabled = true;
+        }
+        updateEditorReverseSynctexUI();
+    };
+    const loadEditorGhostCompletionState = () => {
+        const stored = localStorage.getItem(editorGhostCompletionKey);
+        if (stored !== null) {
+            ghostCompletionEnabled = stored !== "false";
+        }
+        else {
+            ghostCompletionEnabled = true;
+        }
+        updateEditorGhostCompletionUI();
+    };
+    const loadEditorGhostCompletionConfig = () => {
+        const config = loadGhostCompletionConfig({
+            debounceKey: editorGhostCompletionDebounceKey,
+            maxCharsKey: editorGhostCompletionMaxCharsKey,
+            debounceRange: ghostCompletionDebounceRange,
+            maxCharsRange: ghostCompletionMaxCharsRange,
+            defaults: { debounceMs: 260, maxChars: 140 },
+        });
+        ghostCompletionDebounceMs = config.debounceMs;
+        ghostCompletionMaxChars = config.maxChars;
+        updateEditorGhostCompletionConfigUI();
+    };
     const loadEditorPdfViewerModeState = () => {
         const stored = localStorage.getItem(editorPdfViewerModeKey);
         if (stored === "tab" || stored === "window") {
@@ -395,6 +307,20 @@ export const initSettingsUi = (context, deps) => {
     };
     const saveEditorAutoSynctexBuildState = () => {
         localStorage.setItem(editorAutoSynctexOnBuildKey, autoSynctexOnBuildEnabled ? "true" : "false");
+    };
+    const saveEditorReverseSynctexState = () => {
+        localStorage.setItem(editorReverseSynctexKey, reverseSynctexEnabled ? "true" : "false");
+    };
+    const saveEditorGhostCompletionState = () => {
+        localStorage.setItem(editorGhostCompletionKey, ghostCompletionEnabled ? "true" : "false");
+    };
+    const saveEditorGhostCompletionConfig = () => {
+        saveGhostCompletionConfig({
+            debounceKey: editorGhostCompletionDebounceKey,
+            maxCharsKey: editorGhostCompletionMaxCharsKey,
+            debounceMs: ghostCompletionDebounceMs,
+            maxChars: ghostCompletionMaxChars,
+        });
     };
     const saveEditorPdfViewerModeState = () => {
         localStorage.setItem(editorPdfViewerModeKey, pdfViewerMode);
@@ -475,6 +401,43 @@ export const initSettingsUi = (context, deps) => {
         saveEditorAutoSynctexBuildState();
         updateEditorAutoSynctexBuildUI();
     };
+    const toggleEditorReverseSynctex = () => {
+        reverseSynctexEnabled = !reverseSynctexEnabled;
+        saveEditorReverseSynctexState();
+        updateEditorReverseSynctexUI();
+    };
+    const setEditorReverseSynctexEnabled = (enabled) => {
+        reverseSynctexEnabled = Boolean(enabled);
+        saveEditorReverseSynctexState();
+        updateEditorReverseSynctexUI();
+    };
+    const toggleEditorGhostCompletion = () => {
+        var _a;
+        ghostCompletionEnabled = !ghostCompletionEnabled;
+        saveEditorGhostCompletionState();
+        updateEditorGhostCompletionUI();
+        (_a = deps.onGhostCompletionChange) === null || _a === void 0 ? void 0 : _a.call(deps, ghostCompletionEnabled);
+    };
+    const setGhostCompletionEnabled = (enabled) => {
+        var _a;
+        ghostCompletionEnabled = Boolean(enabled);
+        saveEditorGhostCompletionState();
+        updateEditorGhostCompletionUI();
+        (_a = deps.onGhostCompletionChange) === null || _a === void 0 ? void 0 : _a.call(deps, ghostCompletionEnabled);
+    };
+    const setGhostCompletionConfig = (next) => {
+        var _a;
+        const debounce = clampNumber(typeof next.debounceMs === "number" ? next.debounceMs : ghostCompletionDebounceMs, ghostCompletionDebounceRange.min, ghostCompletionDebounceRange.max, ghostCompletionDebounceMs);
+        const maxChars = clampNumber(typeof next.maxChars === "number" ? next.maxChars : ghostCompletionMaxChars, ghostCompletionMaxCharsRange.min, ghostCompletionMaxCharsRange.max, ghostCompletionMaxChars);
+        ghostCompletionDebounceMs = debounce;
+        ghostCompletionMaxChars = maxChars;
+        saveEditorGhostCompletionConfig();
+        updateEditorGhostCompletionConfigUI();
+        (_a = deps.onGhostCompletionConfigChange) === null || _a === void 0 ? void 0 : _a.call(deps, {
+            debounceMs: ghostCompletionDebounceMs,
+            maxChars: ghostCompletionMaxChars,
+        });
+    };
     const setPdfViewerMode = (mode) => {
         pdfViewerMode = mode;
         saveEditorPdfViewerModeState();
@@ -482,6 +445,9 @@ export const initSettingsUi = (context, deps) => {
     };
     const loadStartupSettings = () => {
         loadEditorAutoSynctexBuildState();
+        loadEditorReverseSynctexState();
+        loadEditorGhostCompletionState();
+        loadEditorGhostCompletionConfig();
         loadEditorPdfViewerModeState();
     };
     const loadWorkspaceSettings = () => {
@@ -492,7 +458,11 @@ export const initSettingsUi = (context, deps) => {
     const getSettingsSnapshot = () => ({
         compileEngine: localStorage.getItem(compileEngineKey) || "lualatex",
         autoSynctexOnBuild: autoSynctexOnBuildEnabled,
+        reverseSynctexEnabled,
         pdfViewerMode,
+        ghostCompletionEnabled,
+        ghostCompletionDebounceMs,
+        ghostCompletionMaxChars,
         alignEnv: editorAlignEnvEnabled,
         formatSettings: {
             ...editorFormatSettings,
@@ -508,6 +478,18 @@ export const initSettingsUi = (context, deps) => {
         }
         if (typeof patch.autoSynctexOnBuild === "boolean") {
             setEditorAutoSynctexBuildEnabled(patch.autoSynctexOnBuild);
+        }
+        if (typeof patch.reverseSynctexEnabled === "boolean") {
+            setEditorReverseSynctexEnabled(patch.reverseSynctexEnabled);
+        }
+        if (typeof patch.ghostCompletionEnabled === "boolean") {
+            setGhostCompletionEnabled(patch.ghostCompletionEnabled);
+        }
+        if (typeof patch.ghostCompletionDebounceMs === "number") {
+            setGhostCompletionConfig({ debounceMs: patch.ghostCompletionDebounceMs });
+        }
+        if (typeof patch.ghostCompletionMaxChars === "number") {
+            setGhostCompletionConfig({ maxChars: patch.ghostCompletionMaxChars });
         }
         if (patch.pdfViewerMode === "window" || patch.pdfViewerMode === "tab") {
             setPdfViewerMode(patch.pdfViewerMode);
@@ -617,6 +599,30 @@ export const initSettingsUi = (context, deps) => {
             toggleEditorAutoSynctexBuild();
         });
     }
+    if (editorReverseSynctexToggle instanceof HTMLInputElement) {
+        editorReverseSynctexToggle.addEventListener("change", () => {
+            toggleEditorReverseSynctex();
+        });
+    }
+    if (editorGhostCompletionToggle instanceof HTMLInputElement) {
+        editorGhostCompletionToggle.addEventListener("change", () => {
+            toggleEditorGhostCompletion();
+        });
+    }
+    if (editorGhostCompletionDebounce instanceof HTMLInputElement) {
+        editorGhostCompletionDebounce.addEventListener("change", () => {
+            setGhostCompletionConfig({
+                debounceMs: editorGhostCompletionDebounce.valueAsNumber,
+            });
+        });
+    }
+    if (editorGhostCompletionMaxChars instanceof HTMLInputElement) {
+        editorGhostCompletionMaxChars.addEventListener("change", () => {
+            setGhostCompletionConfig({
+                maxChars: editorGhostCompletionMaxChars.valueAsNumber,
+            });
+        });
+    }
     if (editorPdfWindowToggle instanceof HTMLInputElement) {
         editorPdfWindowToggle.addEventListener("change", () => {
             setPdfViewerMode(editorPdfWindowToggle.checked ? "window" : "tab");
@@ -630,7 +636,13 @@ export const initSettingsUi = (context, deps) => {
     return {
         getEditorAlignEnvEnabled: () => editorAlignEnvEnabled,
         getAutoSynctexOnBuildEnabled: () => autoSynctexOnBuildEnabled,
+        getReverseSynctexEnabled: () => reverseSynctexEnabled,
         getPdfViewerMode: () => pdfViewerMode,
+        getGhostCompletionEnabled: () => ghostCompletionEnabled,
+        getGhostCompletionConfig: () => ({
+            debounceMs: ghostCompletionDebounceMs,
+            maxChars: ghostCompletionMaxChars,
+        }),
         buildFormatSettingsPayload,
         getSettingsSnapshot,
         applySettingsPatch,

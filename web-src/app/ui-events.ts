@@ -21,11 +21,6 @@ type UiEventsDeps = {
     getDiffContext: () => DiffContext;
     closeDiffModal: () => void;
   };
-  gitOps: {
-    requestCommit: () => void;
-    requestRestore: (hash: string) => void;
-    setupActions: () => void;
-  };
   blockInsert?: {
     applyPendingFromDiffModal: () => void;
     clearPending: () => void;
@@ -83,17 +78,6 @@ export const initUiEvents = (context: AppContext, deps: UiEventsDeps): UiEventsA
     if (diffModalSubmit instanceof HTMLButtonElement) {
       diffModalSubmit.addEventListener("click", () => {
         const diffContext = deps.diffModal.getDiffContext();
-        if (diffContext?.type === "gitCommit") {
-          deps.diffModal.closeDiffModal();
-          deps.gitOps.requestCommit();
-          return;
-        }
-        if (diffContext?.type === "gitRestore") {
-          const targetHash = diffContext.hash;
-          deps.diffModal.closeDiffModal();
-          deps.gitOps.requestRestore(targetHash);
-          return;
-        }
         if (diffContext?.type === "aiApply") {
           deps.aiOps?.applyPendingFromDiffModal();
           deps.diffModal.closeDiffModal();
@@ -119,7 +103,6 @@ export const initUiEvents = (context: AppContext, deps: UiEventsDeps): UiEventsA
     }
 
     deps.buildOps.setupActionButtons();
-    deps.gitOps.setupActions();
     deps.rootSelectorUi.setupActions();
 
     window.addEventListener("keydown", (event) => {

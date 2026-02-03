@@ -1,0 +1,183 @@
+import { getKeyByLatex, normalizeLatexKey } from "./math-wysiwyg-keymap.js";
+import { makeCandidate, TRIGGER_KEYS, TRIGGER_MAP } from "./math-wysiwyg-triggers.js";
+export const OPERATOR_TRIGGERS = {
+    "*": [
+        { latex: "\\cdot", label: "⋅", displayLatex: "\\cdot" },
+        { latex: "\\times", label: "×", displayLatex: "\\times" },
+    ],
+    "<=": [
+        { latex: "\\leq", label: "≤", displayLatex: "\\leq" },
+        { latex: "\\leqq", label: "≦", displayLatex: "\\leqq" },
+        { latex: "\\leqslant", label: "≤", displayLatex: "\\leqslant" },
+    ],
+    ">=": [
+        { latex: "\\geq", label: "≥", displayLatex: "\\geq" },
+        { latex: "\\geqq", label: "≧", displayLatex: "\\geqq" },
+        { latex: "\\geqslant", label: "≥", displayLatex: "\\geqslant" },
+    ],
+    "!=": [
+        { latex: "\\neq", label: "≠", displayLatex: "\\neq" },
+        { latex: "\\approx", label: "≈", displayLatex: "\\approx" },
+        { latex: "\\ne", label: "≠", displayLatex: "\\ne" },
+    ],
+    "||": [
+        { latex: "\\parallel", label: "∥", displayLatex: "\\parallel" },
+        { latex: "\\mid", label: "∣", displayLatex: "\\mid" },
+    ],
+    ":=": [
+        { latex: ":=", label: ":=", displayLatex: ":=" },
+        { latex: "\\stackrel{def}{=}", label: "def=", displayLatex: "\\stackrel{def}{=}" },
+    ],
+    "->": [
+        { latex: "\\to", label: "→", displayLatex: "\\to" },
+        { latex: "\\rightarrow", label: "→", displayLatex: "\\rightarrow" },
+        { latex: "\\Rightarrow", label: "⇒", displayLatex: "\\Rightarrow" },
+    ],
+    "<-": [
+        { latex: "\\leftarrow", label: "←", displayLatex: "\\leftarrow" },
+        { latex: "\\Leftarrow", label: "⇐", displayLatex: "\\Leftarrow" },
+    ],
+    "<->": [
+        { latex: "\\leftrightarrow", label: "↔", displayLatex: "\\leftrightarrow" },
+        { latex: "\\Leftrightarrow", label: "⇔", displayLatex: "\\Leftrightarrow" },
+    ],
+    "=>": [{ latex: "\\Rightarrow", label: "⇒", displayLatex: "\\Rightarrow" }],
+    "<=>": [{ latex: "\\Leftrightarrow", label: "⇔", displayLatex: "\\Leftrightarrow" }],
+    "+-": [{ latex: "\\pm", label: "±", displayLatex: "\\pm" }],
+    "-+": [{ latex: "\\mp", label: "∓", displayLatex: "\\mp" }],
+    "...": [{ latex: "\\ldots", label: "…", displayLatex: "\\ldots" }],
+    "d/dx": [
+        {
+            latex: "\\frac{\\mathrm{d}#?}{\\mathrm{d}#?}",
+            label: "d/dx",
+            displayLatex: "\\frac{\\mathrm{d}x}{\\mathrm{d}t}",
+        },
+    ],
+    "∂/∂x": [
+        {
+            latex: "\\frac{\\partial #?}{\\partial #?}",
+            label: "∂/∂x",
+            displayLatex: "\\frac{\\partial x}{\\partial y}",
+        },
+    ],
+};
+export const OPERATOR_TRIGGER_KEYS = Object.keys(OPERATOR_TRIGGERS);
+export const OPERATOR_MAX_LENGTH = OPERATOR_TRIGGER_KEYS.reduce((max, key) => Math.max(max, key.length), 1);
+export const OPERATOR_MIN_LENGTH = OPERATOR_TRIGGER_KEYS.reduce((min, key) => Math.min(min, key.length), OPERATOR_MAX_LENGTH);
+const TRIGGER_KEYS_SORTED = [...TRIGGER_KEYS].sort();
+const lowerBound = (items, value) => {
+    let low = 0;
+    let high = items.length;
+    while (low < high) {
+        const mid = Math.floor((low + high) / 2);
+        if (items[mid] < value) {
+            low = mid + 1;
+        }
+        else {
+            high = mid;
+        }
+    }
+    return low;
+};
+const getPrefixMatches = (prefix) => {
+    if (!prefix) {
+        return [];
+    }
+    const start = lowerBound(TRIGGER_KEYS_SORTED, prefix);
+    const end = lowerBound(TRIGGER_KEYS_SORTED, `${prefix}\uffff`);
+    if (end <= start) {
+        return [];
+    }
+    return TRIGGER_KEYS_SORTED.slice(start, end);
+};
+export const buildOperatorCandidates = (token) => {
+    const entries = OPERATOR_TRIGGERS[token];
+    if (!entries) {
+        return [];
+    }
+    return entries.map((entry, index) => {
+        const key = getKeyByLatex(entry.latex, entry.label, entry.displayLatex);
+        return makeCandidate(token, key, 120 - index * 2, entry.label, entry.displayLatex);
+    });
+};
+export const buildWordCandidates = (token, options = {}) => {
+    var _a, _b;
+    const normalized = token.toLowerCase();
+    const allowContains = (_a = options.allowContains) !== null && _a !== void 0 ? _a : true;
+    const allowContainsMinLength = (_b = options.allowContainsMinLength) !== null && _b !== void 0 ? _b : 2;
+    const canContains = allowContains && normalized.length >= allowContainsMinLength;
+    const allowedPacks = options.allowedPacks;
+    const prefixMatches = [];
+    const containsMatches = [];
+    const prefixTriggers = getPrefixMatches(normalized);
+    prefixTriggers.forEach((trigger) => {
+        const matchType = trigger === normalized ? "exact" : "prefix";
+        const group = TRIGGER_MAP.get(trigger);
+        if (!group) {
+            return;
+        }
+        if (allowedPacks && !allowedPacks.has(group.pack)) {
+            return;
+        }
+        const baseScoreMap = { exact: 220, prefix: 180 };
+        const lengthPenalty = trigger.length - normalized.length;
+        const baseScore = baseScoreMap[matchType] - lengthPenalty;
+        group.candidates.forEach((candidate) => {
+            const scriptBoost = 0;
+            const isAlias = candidate.hint !== trigger;
+            const aliasPenalty = isAlias && normalized.length <= 2 ? 140 : isAlias && matchType !== "exact" ? 40 : 0;
+            const score = baseScore + candidate.priority + group.priority + scriptBoost - aliasPenalty;
+            prefixMatches.push({ candidate, score });
+        });
+    });
+    if (canContains) {
+        TRIGGER_KEYS.forEach((trigger) => {
+            if (trigger === normalized || trigger.startsWith(normalized)) {
+                return;
+            }
+            if (!trigger.includes(normalized)) {
+                return;
+            }
+            const group = TRIGGER_MAP.get(trigger);
+            if (!group) {
+                return;
+            }
+            if (allowedPacks && !allowedPacks.has(group.pack)) {
+                return;
+            }
+            const baseScoreMap = { contains: 120 };
+            const indexPenalty = trigger.indexOf(normalized) * 2;
+            const lengthPenalty = trigger.length - normalized.length;
+            const baseScore = baseScoreMap.contains - lengthPenalty - indexPenalty;
+            group.candidates.forEach((candidate) => {
+                const scriptBoost = 0;
+                const isAlias = candidate.hint !== trigger;
+                const aliasPenalty = isAlias && normalized.length <= 2 ? 140 : isAlias ? 40 : 0;
+                const score = baseScore + candidate.priority + group.priority + scriptBoost - aliasPenalty;
+                containsMatches.push({ candidate, score });
+            });
+        });
+    }
+    prefixMatches.sort((a, b) => b.score - a.score);
+    containsMatches.sort((a, b) => b.score - a.score);
+    const seen = new Set();
+    const results = [];
+    const pushMatches = (items) => {
+        for (const { candidate } of items) {
+            const keyId = normalizeLatexKey(candidate.key.latex) || candidate.id;
+            if (seen.has(keyId)) {
+                continue;
+            }
+            seen.add(keyId);
+            results.push(candidate);
+            if (results.length >= 10) {
+                break;
+            }
+        }
+    };
+    pushMatches(prefixMatches);
+    if (results.length < 10) {
+        pushMatches(containsMatches);
+    }
+    return results;
+};

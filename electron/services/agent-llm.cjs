@@ -54,6 +54,7 @@ const requestGemini = async ({
     let buffer = "";
     let textBuffer = "";
     const collectedParts = [];
+    let usageMetadata = null;
     const flushText = () => {
       if (textBuffer) {
         collectedParts.push({ text: textBuffer });
@@ -71,6 +72,9 @@ const requestGemini = async ({
         return;
       }
       const parts = json?.candidates?.[0]?.content?.parts ?? [];
+      if (json?.usageMetadata) {
+        usageMetadata = json.usageMetadata;
+      }
       parts.forEach((part) => {
         if (part?.functionCall) {
           flushText();
@@ -120,7 +124,11 @@ const requestGemini = async ({
     if (collectedParts.length === 0) {
       throw new Error("Empty response from AI proxy.");
     }
-    return { candidates: [{ content: { parts: collectedParts } }] };
+    const payload = { candidates: [{ content: { parts: collectedParts } }] };
+    if (usageMetadata) {
+      payload.usageMetadata = usageMetadata;
+    }
+    return payload;
   }
 
   const raw = await response.text().catch(() => "");

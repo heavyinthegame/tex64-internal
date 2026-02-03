@@ -85,7 +85,7 @@ const rules = [
     },
     {
         test: (_issue, message) => message.includes("保存容量が一杯"),
-        resolution: "取り込みボードの古いアイテムを削除して容量を確保してください。",
+        resolution: "不要なファイルやキャッシュを削除して容量を確保してください。",
     },
     {
         test: (_issue, message) => message.includes("名前を入力"),

@@ -29,6 +29,7 @@ export const createViewer = (deps) => {
         }
     };
     window.addEventListener("message", (event) => {
+        var _a;
         if (!(deps.editorViewerPdf instanceof HTMLIFrameElement)) {
             return;
         }
@@ -53,6 +54,18 @@ export const createViewer = (deps) => {
                 postPdfMessage({ type: "sync", payload: pendingPdfSync });
                 pendingPdfSync = null;
             }
+            return;
+        }
+        if (payload.type === "reverse") {
+            const detail = payload.payload;
+            const page = typeof (detail === null || detail === void 0 ? void 0 : detail.page) === "number" ? detail.page : Number(detail === null || detail === void 0 ? void 0 : detail.page);
+            const x = typeof (detail === null || detail === void 0 ? void 0 : detail.x) === "number" ? detail.x : Number(detail === null || detail === void 0 ? void 0 : detail.x);
+            const y = typeof (detail === null || detail === void 0 ? void 0 : detail.y) === "number" ? detail.y : Number(detail === null || detail === void 0 ? void 0 : detail.y);
+            if (!Number.isFinite(page) || !Number.isFinite(x) || !Number.isFinite(y)) {
+                return;
+            }
+            const pdfPath = typeof (detail === null || detail === void 0 ? void 0 : detail.path) === "string" ? detail.path : null;
+            (_a = deps.onPdfReverseRequest) === null || _a === void 0 ? void 0 : _a.call(deps, { page, x, y, pdfPath });
         }
     });
     const clearViewerUrl = () => {

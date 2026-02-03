@@ -18,15 +18,6 @@ export const initBridgeHandlers = (deps) => {
     bridgeWindow.tex64UpdateSearch = (payload) => {
         deps.search.handleSearchUpdate(payload);
     };
-    bridgeWindow.tex64UpdateGit = (payload) => {
-        deps.git.handleUpdate(payload);
-    };
-    bridgeWindow.tex64UpdateGitDiff = (payload) => {
-        deps.git.handleDiff(payload);
-    };
-    bridgeWindow.tex64UpdateGitActionResult = (payload) => {
-        deps.git.handleActionResult(payload);
-    };
     bridgeWindow.tex64OpenFileResult = (payload) => {
         deps.editorSession.handleOpenFileResult(payload);
     };
@@ -38,6 +29,9 @@ export const initBridgeHandlers = (deps) => {
     };
     bridgeWindow.tex64SynctexForwardResult = (payload) => {
         deps.build.handleSynctexForwardResult(payload);
+    };
+    bridgeWindow.tex64SynctexReverseResult = (payload) => {
+        deps.build.handleSynctexReverseResult(payload);
     };
     bridgeWindow.tex64RenameResult = (payload) => {
         deps.editorSession.handleRenameResult(payload);
@@ -75,7 +69,7 @@ export const initBridgeHandlers = (deps) => {
         (_a = deps.agent) === null || _a === void 0 ? void 0 : _a.handleError(payload.message, payload.conversationId);
     };
     const handleBridgeMessage = (message) => {
-        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13;
         if (!(message === null || message === void 0 ? void 0 : message.type)) {
             return;
         }
@@ -98,44 +92,35 @@ export const initBridgeHandlers = (deps) => {
             case "search:renameResult":
                 (_g = (_f = deps.search).handleRenameResult) === null || _g === void 0 ? void 0 : _g.call(_f, message.payload);
                 break;
-            case "updateGit":
-                (_h = bridgeWindow.tex64UpdateGit) === null || _h === void 0 ? void 0 : _h.call(bridgeWindow, message.payload);
-                break;
-            case "updateGitDiff":
-                (_j = bridgeWindow.tex64UpdateGitDiff) === null || _j === void 0 ? void 0 : _j.call(bridgeWindow, message.payload);
-                break;
-            case "gitActionResult":
-                (_k = bridgeWindow.tex64UpdateGitActionResult) === null || _k === void 0 ? void 0 : _k.call(bridgeWindow, message.payload);
-                break;
             case "openFileResult":
-                (_l = bridgeWindow.tex64OpenFileResult) === null || _l === void 0 ? void 0 : _l.call(bridgeWindow, message.payload);
+                (_h = bridgeWindow.tex64OpenFileResult) === null || _h === void 0 ? void 0 : _h.call(bridgeWindow, message.payload);
                 break;
             case "saveResult":
-                (_m = bridgeWindow.tex64SaveResult) === null || _m === void 0 ? void 0 : _m.call(bridgeWindow, message.payload);
+                (_j = bridgeWindow.tex64SaveResult) === null || _j === void 0 ? void 0 : _j.call(bridgeWindow, message.payload);
                 break;
             case "formatResult":
-                (_o = bridgeWindow.tex64FormatResult) === null || _o === void 0 ? void 0 : _o.call(bridgeWindow, message.payload);
+                (_k = bridgeWindow.tex64FormatResult) === null || _k === void 0 ? void 0 : _k.call(bridgeWindow, message.payload);
                 break;
             case "buildLog":
-                deps.build.handleBuildLog((_q = (_p = message.payload) === null || _p === void 0 ? void 0 : _p.log) !== null && _q !== void 0 ? _q : null);
+                deps.build.handleBuildLog((_m = (_l = message.payload) === null || _l === void 0 ? void 0 : _l.log) !== null && _m !== void 0 ? _m : null);
                 break;
             case "synctex:forwardResult":
                 deps.build.handleSynctexForwardResult(message.payload);
                 break;
+            case "synctex:reverseResult":
+                deps.build.handleSynctexReverseResult(message.payload);
+                break;
             case "renameResult":
-                (_r = bridgeWindow.tex64RenameResult) === null || _r === void 0 ? void 0 : _r.call(bridgeWindow, message.payload);
+                (_o = bridgeWindow.tex64RenameResult) === null || _o === void 0 ? void 0 : _o.call(bridgeWindow, message.payload);
                 break;
             case "env:checkResult":
-                (_s = deps.settings) === null || _s === void 0 ? void 0 : _s.updateEnvStatus((_t = message.payload.command) !== null && _t !== void 0 ? _t : "", Boolean(message.payload.available));
+                (_p = deps.settings) === null || _p === void 0 ? void 0 : _p.updateEnvStatus((_q = message.payload.command) !== null && _q !== void 0 ? _q : "", Boolean(message.payload.available));
                 break;
             case "launcherStatus":
                 deps.handleLauncherStatus(message.payload);
                 break;
-            case "alchemy:settings":
-                (_u = deps.alchemy) === null || _u === void 0 ? void 0 : _u.handleSettings(message.payload);
-                break;
             case "agent:settings":
-                (_v = deps.agent) === null || _v === void 0 ? void 0 : _v.handleSettings(message.payload.settings);
+                (_r = deps.agent) === null || _r === void 0 ? void 0 : _r.handleSettings(message.payload.settings);
                 break;
             case "settings:request": {
                 const payload = message.payload;
@@ -146,11 +131,11 @@ export const initBridgeHandlers = (deps) => {
                 let snapshot = null;
                 let ok = false;
                 if ((payload === null || payload === void 0 ? void 0 : payload.action) === "set") {
-                    snapshot = (_z = (_x = (_w = deps.settings) === null || _w === void 0 ? void 0 : _w.applySettingsPatch) === null || _x === void 0 ? void 0 : _x.call(_w, (_y = payload.settings) !== null && _y !== void 0 ? _y : {})) !== null && _z !== void 0 ? _z : null;
+                    snapshot = (_v = (_t = (_s = deps.settings) === null || _s === void 0 ? void 0 : _s.applySettingsPatch) === null || _t === void 0 ? void 0 : _t.call(_s, (_u = payload.settings) !== null && _u !== void 0 ? _u : {})) !== null && _v !== void 0 ? _v : null;
                     ok = Boolean(snapshot);
                 }
                 else {
-                    snapshot = (_2 = (_1 = (_0 = deps.settings) === null || _0 === void 0 ? void 0 : _0.getSettingsSnapshot) === null || _1 === void 0 ? void 0 : _1.call(_0)) !== null && _2 !== void 0 ? _2 : null;
+                    snapshot = (_y = (_x = (_w = deps.settings) === null || _w === void 0 ? void 0 : _w.getSettingsSnapshot) === null || _x === void 0 ? void 0 : _x.call(_w)) !== null && _y !== void 0 ? _y : null;
                     ok = Boolean(snapshot);
                 }
                 const keys = Array.isArray(payload === null || payload === void 0 ? void 0 : payload.keys) ? payload.keys : [];
@@ -175,28 +160,34 @@ export const initBridgeHandlers = (deps) => {
                 break;
             }
             case "agent:status":
-                (_3 = deps.agent) === null || _3 === void 0 ? void 0 : _3.handleStatus(message.payload.state, message.payload.message, message.payload.conversationId);
+                (_z = deps.agent) === null || _z === void 0 ? void 0 : _z.handleStatus(message.payload.state, message.payload.message, message.payload.conversationId);
                 break;
             case "agent:message":
-                (_4 = deps.agent) === null || _4 === void 0 ? void 0 : _4.handleMessage((_5 = message.payload.text) !== null && _5 !== void 0 ? _5 : "", message.payload.conversationId);
+                (_0 = deps.agent) === null || _0 === void 0 ? void 0 : _0.handleMessage((_1 = message.payload.text) !== null && _1 !== void 0 ? _1 : "", message.payload.conversationId);
                 break;
             case "agent:messageDelta":
-                (_7 = (_6 = deps.agent) === null || _6 === void 0 ? void 0 : _6.handleMessageDelta) === null || _7 === void 0 ? void 0 : _7.call(_6, (_8 = message.payload.text) !== null && _8 !== void 0 ? _8 : "", message.payload.conversationId);
+                (_3 = (_2 = deps.agent) === null || _2 === void 0 ? void 0 : _2.handleMessageDelta) === null || _3 === void 0 ? void 0 : _3.call(_2, (_4 = message.payload.text) !== null && _4 !== void 0 ? _4 : "", message.payload.conversationId);
                 break;
             case "agent:tool":
-                (_9 = deps.agent) === null || _9 === void 0 ? void 0 : _9.handleTool(message.payload);
+                (_5 = deps.agent) === null || _5 === void 0 ? void 0 : _5.handleTool(message.payload);
                 break;
             case "agent:proposal":
-                (_10 = deps.agent) === null || _10 === void 0 ? void 0 : _10.handleProposal(message.payload.proposal);
+                (_6 = deps.agent) === null || _6 === void 0 ? void 0 : _6.handleProposal(message.payload.proposal);
                 break;
             case "agent:applyResult":
-                (_11 = deps.agent) === null || _11 === void 0 ? void 0 : _11.handleApplyResult(message.payload);
+                (_7 = deps.agent) === null || _7 === void 0 ? void 0 : _7.handleApplyResult(message.payload);
                 break;
             case "agent:error":
-                (_12 = deps.agent) === null || _12 === void 0 ? void 0 : _12.handleError((_13 = message.payload.message) !== null && _13 !== void 0 ? _13 : "AIエラー", message.payload.conversationId);
+                (_8 = deps.agent) === null || _8 === void 0 ? void 0 : _8.handleError((_9 = message.payload.message) !== null && _9 !== void 0 ? _9 : "AIエラー", message.payload.conversationId);
+                break;
+            case "api:completionResult":
+                (_10 = deps.api) === null || _10 === void 0 ? void 0 : _10.handleCompletionResult(message.payload);
+                break;
+            case "api:usage":
+                (_11 = deps.api) === null || _11 === void 0 ? void 0 : _11.handleUsage(message.payload);
                 break;
             case "agent:applyContent":
-                deps.editorSession.applyContentToOpenFile((_14 = message.payload.path) !== null && _14 !== void 0 ? _14 : "", (_15 = message.payload.content) !== null && _15 !== void 0 ? _15 : "", message.payload.updateSaved !== false
+                deps.editorSession.applyContentToOpenFile((_12 = message.payload.path) !== null && _12 !== void 0 ? _12 : "", (_13 = message.payload.content) !== null && _13 !== void 0 ? _13 : "", message.payload.updateSaved !== false
                     ? { updateSaved: true }
                     : undefined);
                 break;

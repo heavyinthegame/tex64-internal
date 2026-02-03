@@ -17,15 +17,8 @@ export const tabConfig = {
         label: "ブロック",
         outline: "ブロック一覧",
         title: "ブロック",
-        desc: "数式と表をブロックとして挿入します。",
+        desc: "数式をブロックとして挿入します。",
         hint: "プレビュー後に確定します。",
-    },
-    alchemy: {
-        label: "取り込み",
-        outline: "キャプチャ → OCR",
-        title: "取り込み",
-        desc: "ウィンドウを切り取ってOCRし、TeXとして挿入します。",
-        hint: "キャプチャして変換します。",
     },
     ai: {
         label: "AI",
@@ -33,13 +26,6 @@ export const tabConfig = {
         title: "AIアシスタント",
         desc: "チャットでファイル提案やテンプレート作成を行います。",
         hint: "差分を確認して適用します。",
-    },
-    git: {
-        label: "履歴",
-        outline: "変更 / 履歴 / 同期",
-        title: "バージョン管理",
-        desc: "変更を履歴に保存し、他の場所と同期します。",
-        hint: "保存や同期の操作ができます。",
     },
     project: {
         label: "プロジェクト",

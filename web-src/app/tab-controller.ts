@@ -3,7 +3,6 @@ import type { AppContext } from "./context.js";
 
 type TabControllerDeps = {
   onFilesTabActive: () => void;
-  onGitTabActive: () => void;
   onSettingsTabActive: () => void;
   updateMathKeyboardVisibility: () => void;
 };
@@ -50,9 +49,6 @@ export const initTabController = (
     });
     if (tabKey === "files") {
       deps.onFilesTabActive();
-    }
-    if (tabKey === "git") {
-      deps.onGitTabActive();
     }
     if (tabKey === "settings") {
       deps.onSettingsTabActive();

@@ -26,7 +26,7 @@
   --input-border-strong: rgba(240, 246, 252, 0.15);
   
   /* Typography - Softened for better readability */
-  --text: #C9D1D9; /* Reverted to soft gray (GitHub style) */
+  --text: #C9D1D9; /* Reverted to soft gray */
   --text-soft: #8B949E;
   --muted: #6E7681;
   
@@ -481,6 +481,14 @@ body.has-launcher .app {
   justify-content: center;
   transition: all 0.1s ease;
   white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.panel-button.icon-only {
+  padding: 0;
+  width: 24px;
+  min-width: 24px;
+  justify-content: center;
 }
 
 .panel-button:hover {
@@ -592,6 +600,7 @@ body.has-launcher .app {
   gap: 6px;
   overflow: hidden; /* No scroll on container */
   height: 100%;
+  position: relative;
 }
 
 .block-compose {
@@ -617,43 +626,9 @@ body.has-launcher .app {
   padding-right: 4px; /* Align with scrollbar gutter */
 }
 
-.block-toggle {
-  display: inline-flex;
-  gap: 4px; /* Tighter gap */
-}
-
-.block-toggle-button {
-  border: 1px solid var(--control-border);
-  background: var(--control-bg);
-  color: var(--muted);
-  padding: 2px 6px; /* Tighter padding */
-  border-radius: 5px;
-  font-size: 10px;
-  cursor: pointer;
-}
-
-.block-toggle-button.is-active {
-  color: var(--text);
-  border-color: rgba(92, 156, 255, 0.5);
-  background: rgba(92, 156, 255, 0.12);
-}
-
 .block-textarea {
   min-height: 120px;
   resize: vertical;
-}
-
-.block-table-raw {
-  display: none;
-  gap: 6px;
-}
-
-.block-table-raw.is-active {
-  display: grid;
-}
-
-.block-table-grid.is-hidden {
-  display: none;
 }
 
 .block-form {
@@ -819,6 +794,74 @@ math-field.block-math-field {
   scrollbar-gutter: stable both-edges;
 }
 
+.math-wysiwyg-panel {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 12px;
+  border: 1px solid var(--panel-border-strong);
+  background: rgba(18, 22, 28, 0.92);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.28);
+  z-index: 3;
+  overflow-x: auto;
+}
+
+.math-wysiwyg-panel[aria-hidden="true"] {
+  display: none;
+}
+
+.math-wysiwyg-panel::-webkit-scrollbar {
+  height: 6px;
+}
+
+.math-wysiwyg-panel::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+}
+
+.math-wysiwyg-item {
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 4px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.math-wysiwyg-item.is-active {
+  border-color: var(--accent-strong);
+  background: rgba(92, 156, 255, 0.18);
+  color: var(--text);
+}
+
+.math-wysiwyg-item:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.math-wysiwyg-symbol {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.math-wysiwyg-label {
+  font-size: 11px;
+  color: var(--muted);
+}
+
 .block-math-menu-toggle {
   position: absolute;
   top: 8px;
@@ -858,8 +901,8 @@ math-field.block-math-field {
 }
 
 .block-math-input-container:focus-within {
-  border-color: var(--accent-strong);
-  box-shadow: 0 0 0 2px var(--focus-ring);
+  border-color: var(--input-border);
+  box-shadow: none;
   outline: none;
 }
 
@@ -874,12 +917,6 @@ math-field.block-math-field::placeholder {
 
 .ML__keyboard {
   display: none !important;
-}
-
-.block-table-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
 }
 
 .block-field {
@@ -1083,6 +1120,23 @@ math-field.block-math-field::placeholder {
 .block-settings-option.is-active {
   background: var(--accent-soft-strong);
   border-color: var(--accent);
+}
+
+.block-settings-section-hint {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.block-settings-kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--panel-border);
+  background: var(--panel-strong);
+  font-size: 10px;
+  color: var(--text);
 }
 
 .block-divider {
@@ -1516,423 +1570,6 @@ math-field.block-math-field::placeholder {
 .launcher::after {
   content: none;
 }
-.git-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-height: 0;
-  padding: 8px 10px 12px;
-  overflow: hidden;
-  padding: 0;
-}
-
-.git-header {
-  border: 1px solid var(--panel-border-strong);
-  background: var(--panel-strong);
-  border-radius: 10px;
-  padding: 10px 12px;
-  display: grid;
-  gap: 6px;
-  flex: 0 0 auto;
-}
-
-.git-repo-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.git-branch,
-.git-remote {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.git-branch-label,
-.git-remote-label {
-  font-size: 10px;
-  color: var(--muted);
-}
-
-.git-branch-name {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.git-branch-sync {
-  font-size: 10px;
-  color: var(--text-soft);
-  border: 1px solid var(--panel-border);
-  background: var(--panel);
-  border-radius: 999px;
-  padding: 1px 6px;
-  white-space: nowrap;
-}
-
-.git-remote-name {
-  font-size: 10px;
-  color: var(--text-soft);
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.git-summary-text {
-  font-size: 10px;
-  color: var(--text-soft);
-}
-
-.git-guide {
-  border: 1px solid var(--panel-border);
-  background: var(--panel);
-  border-radius: 10px;
-  padding: 8px 10px;
-  display: grid;
-  gap: 4px;
-}
-
-.git-guide-title {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.git-guide-text {
-  font-size: 10px;
-  color: var(--text-soft);
-}
-
-.git-section {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  min-height: 0;
-}
-
-.git-commit-section {
-  display: grid;
-  gap: 6px;
-}
-
-.git-primary-button {
-  background: var(--accent);
-  border-color: transparent;
-  color: #0b1220;
-  font-weight: 600;
-  width: 100%;
-  padding: 8px 10px;
-  font-size: 11px;
-}
-
-.git-primary-button:disabled {
-  background: var(--control-bg);
-  border-color: var(--control-border);
-  color: var(--muted);
-  cursor: not-allowed;
-}
-
-#git-commit-message {
-  padding: 8px 10px;
-  font-size: 11px;
-}
-
-.git-section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.git-section-title-wrap {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.git-section-title {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.git-section-pill {
-  font-size: 10px;
-  color: var(--text-soft);
-  border: 1px solid var(--panel-border);
-  background: var(--panel);
-  border-radius: 999px;
-  padding: 1px 6px;
-  min-width: 20px;
-  text-align: center;
-}
-
-.git-section-desc {
-  font-size: 10px;
-  color: var(--muted);
-  text-align: right;
-  min-width: 0;
-  flex: 1;
-}
-
-.git-section-status {
-  font-size: 10px;
-  color: var(--text-soft);
-  text-align: right;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.git-input-row {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 8px;
-  align-items: center;
-}
-
-.git-action-row {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  align-items: center;
-}
-
-.git-changes-summary {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  overflow-y: auto;
-  min-height: 0;
-  padding-bottom: 8px;
-}
-
-.git-change-hint {
-  font-size: 10px;
-  color: var(--muted);
-}
-
-.git-change-pill {
-  font-size: 10px;
-  color: var(--text-soft);
-  border: 1px solid var(--panel-border);
-  background: var(--panel);
-  border-radius: 999px;
-  padding: 1px 6px;
-  white-space: nowrap;
-}
-
-.git-change-pill.is-new,
-.git-item-status.is-new {
-  border-color: rgba(92, 156, 255, 0.5);
-  color: var(--accent-strong);
-  background: rgba(92, 156, 255, 0.12);
-}
-
-.git-change-pill.is-added,
-.git-item-status.is-added {
-  border-color: rgba(92, 156, 255, 0.35);
-  color: var(--accent);
-  background: rgba(92, 156, 255, 0.08);
-}
-
-.git-change-pill.is-modified,
-.git-item-status.is-modified {
-  border-color: rgba(92, 156, 255, 0.25);
-  color: var(--text-soft);
-  background: rgba(92, 156, 255, 0.05);
-}
-
-.git-change-pill.is-deleted,
-.git-item-status.is-deleted {
-  border-color: var(--danger-border);
-  color: var(--danger-text);
-  background: var(--danger-faint);
-}
-
-.git-change-pill.is-conflict,
-.git-item-status.is-conflict {
-  border-color: var(--warning-border);
-  color: var(--warning-text);
-  background: var(--warning-faint);
-}
-
-.git-change-pill.is-renamed,
-.git-item-status.is-renamed {
-  border-color: rgba(184, 158, 82, 0.3);
-  color: var(--warning-text);
-  background: rgba(184, 158, 82, 0.08);
-}
-
-.git-history {
-  display: grid;
-  gap: 0;
-  overflow: visible;
-  border: 1px solid var(--panel-border);
-  border-radius: 10px;
-  background: var(--panel);
-  padding: 2px;
-}
-
-.git-history-item {
-  border: none;
-  background: transparent;
-  color: var(--text);
-  font-size: 11px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  display: grid;
-  gap: 4px;
-  border-bottom: 1px solid var(--panel-border);
-}
-
-.git-history-item[data-current="true"] {
-  background: rgba(92, 156, 255, 0.08);
-  box-shadow: inset 0 0 0 1px rgba(92, 156, 255, 0.2);
-}
-
-.git-history-item:last-child {
-  border-bottom: none;
-}
-
-.git-history-title {
-  font-weight: 600;
-}
-
-.git-history-meta {
-  font-size: 10px;
-  color: var(--muted);
-}
-
-.git-history-actions {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.git-diff-text {
-  border: 1px solid var(--panel-border-strong);
-  background: var(--panel-strong);
-  color: var(--text);
-  font-size: 11px;
-  font-family: "SF Mono", Menlo, "Courier New", monospace;
-  white-space: pre;
-  padding: 8px;
-  border-radius: 6px;
-  max-height: 60vh;
-  overflow: auto;
-}
-
-.git-status-wrap {
-  flex: 0 0 auto;
-  min-height: 0;
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
-  gap: 8px;
-}
-
-.git-status {
-  display: grid;
-  gap: 0;
-  overflow: visible;
-  border: 1px solid var(--panel-border);
-  border-radius: 10px;
-  background: var(--panel);
-  padding: 2px;
-}
-
-.git-item {
-  border: none;
-  background: transparent;
-  color: var(--text);
-  font-size: 11px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  text-align: left;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  border-bottom: 1px solid var(--panel-border);
-}
-
-.git-item:last-child {
-  border-bottom: none;
-}
-
-.git-item-main {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-}
-
-.git-item-name {
-  font-weight: 600;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.git-item-meta {
-  font-size: 10px;
-  color: var(--muted);
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.git-item-status {
-  font-size: 10px;
-  color: var(--text-soft);
-  border: 1px solid var(--panel-border);
-  background: var(--panel);
-  border-radius: 999px;
-  padding: 1px 6px;
-  white-space: nowrap;
-  min-width: 22px;
-  text-align: center;
-}
-
-.git-details {
-  display: grid;
-  gap: 6px;
-}
-
-.git-details-summary {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  list-style: none;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text);
-  user-select: none;
-  padding: 2px 0;
-}
-
-.git-details-summary::-webkit-details-marker {
-  display: none;
-}
-
-.git-details-summary::before {
-  content: ">";
-  font-size: 10px;
-  color: var(--muted);
-  transform: rotate(0deg);
-  transition: transform 0.15s ease;
-}
-
-.git-details[open] .git-details-summary::before {
-  transform: rotate(90deg);
-}
 
 .settings-panel {
   display: flex;
@@ -2168,6 +1805,10 @@ math-field.block-math-field::placeholder {
   width: 100%;
 }
 
+.settings-inline-compact {
+  justify-content: flex-end;
+}
+
 .settings-input {
   width: 100%;
   min-width: 0;
@@ -2179,6 +1820,29 @@ math-field.block-math-field::placeholder {
   font-size: 12px;
   font-family: inherit;
   transition: all 0.2s ease;
+}
+
+.settings-input.is-compact {
+  max-width: 120px;
+  text-align: right;
+}
+
+.settings-unit {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.settings-item.is-disabled {
+  opacity: 0.6;
+}
+
+.settings-item.is-disabled .settings-input {
+  pointer-events: none;
+}
+
+[data-ghost-config].is-disabled {
+  opacity: 0.6;
 }
 
 .settings-input:focus {
@@ -2995,43 +2659,6 @@ math-field.block-math-field::placeholder {
   animation: build-spin 0.8s linear infinite;
 }
 
-#partial-build-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--panel-border);
-  background: transparent;
-  color: var(--text-soft);
-  border-radius: 6px;
-  padding: 6px 10px;
-  height: 32px;
-  margin: 2px 0;
-  cursor: pointer;
-  z-index: 4;
-  transition: all 0.2s ease;
-}
-
-#partial-build-button svg {
-  width: 18px;
-  height: 18px;
-}
-
-#partial-build-button:hover {
-  border-color: var(--panel-border-strong);
-  color: var(--accent-hover, #4D9CFF);
-  background: var(--accent-light, rgba(58, 169, 255, 0.1));
-}
-
-#partial-build-button:active {
-  background: var(--accent-light, rgba(58, 169, 255, 0.2));
-  transform: scale(0.97);
-}
-
-#partial-build-button:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
 #format-button {
   display: flex;
   align-items: center;
@@ -3154,18 +2781,18 @@ math-field.block-math-field::placeholder {
 
 .math-keyboard-dock {
   display: none;
-  gap: 6px;
-  padding: 6px;
+  gap: 4px;
+  padding: 4px 6px;
   border: 1px solid var(--panel-border);
-  border-radius: 10px;
-  background: linear-gradient(180deg, var(--bg-accent) 0%, var(--bg) 100%);
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(22, 28, 36, 0.95) 0%, var(--bg) 100%);
   box-shadow:
-    0 -14px 28px rgba(0, 0, 0, 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+    0 -10px 22px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
   align-self: auto;
-  margin-top: auto; /* Push to bottom if content is short */
-  flex: none; /* Don't shrink/grow */
-  z-index: 10; /* Ensure on top if needed */
+  margin-top: auto;
+  flex: none;
+  z-index: 10;
 }
 
 .math-keyboard-dock.is-open {
@@ -3177,8 +2804,8 @@ math-field.block-math-field::placeholder {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding-bottom: 4px;
-  border-bottom: 1px solid rgba(133, 181, 255, 0.12);
+  padding-bottom: 2px;
+  border-bottom: 1px solid rgba(133, 181, 255, 0.08);
 }
 
 .math-keyboard-controls {
@@ -3216,20 +2843,20 @@ math-field.block-math-field::placeholder {
 }
 
 .math-keyboard-title {
-  font-size: 10px;
+  font-size: 9px;
   text-transform: none;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.2em;
   color: var(--text-soft);
 }
 
 .math-keyboard-tabs {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   flex-wrap: nowrap;
   justify-content: flex-start;
-  padding: 4px;
-  border-radius: 8px;
+  padding: 2px;
+  border-radius: 9px;
   background: var(--panel-muted);
   border: 1px solid var(--panel-border);
   overflow-x: auto;
@@ -3245,8 +2872,8 @@ math-field.block-math-field::placeholder {
   border-radius: 999px;
   background: var(--panel-strong);
   color: var(--muted);
-  font-size: 10px;
-  padding: 4px 10px;
+  font-size: 9px;
+  padding: 3px 10px;
   cursor: pointer;
   transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
 }
@@ -3260,15 +2887,15 @@ math-field.block-math-field::placeholder {
 
 .math-keyboard-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(50px, auto)); /* Unified min-width */
-  gap: 2px; /* Unified gap */
+  grid-template-columns: repeat(auto-fill, minmax(44px, auto));
+  gap: 3px;
   align-content: start;
-  height: 140px;
+  height: 110px;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 4px;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.15); /* Unified background */
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.18);
   border: 1px solid var(--panel-border);
   scrollbar-gutter: stable;
 }
@@ -3277,6 +2904,11 @@ math-field.block-math-field::placeholder {
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--panel-border-strong), transparent);
   opacity: 0.9;
+}
+
+.math-keyboard-dock:not(.has-fixed-keys) .math-keyboard-divider,
+.math-keyboard-dock:not(.has-fixed-keys) .math-keyboard-fixed-grid {
+  display: none;
 }
 
 .math-keyboard-fixed-label {
@@ -3288,25 +2920,24 @@ math-field.block-math-field::placeholder {
 
 .math-keyboard-fixed-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(50px, auto)); /* Unified min-width */
-  gap: 2px; /* Unified gap */
-  justify-content: start; /* Align to start */
+  grid-template-columns: repeat(auto-fill, minmax(44px, auto));
+  gap: 3px;
+  justify-content: start;
   align-content: start;
   padding: 4px;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.15);
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.18);
   border: 1px solid var(--panel-border);
 }
 
 .math-keyboard-key {
   border: 1px solid var(--control-border);
-  border-radius: 6px;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.04);
   color: var(--text);
-  /* Flexible sizing */
-  min-width: 50px;
-  min-height: 50px; /* Matched to min-width */
-  padding: 4px 8px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 4px 6px;
   text-align: center;
   cursor: pointer;
   font-family: "Hiragino Sans", "Avenir Next", "Yu Gothic", sans-serif;
@@ -4005,601 +3636,6 @@ body.has-editor .editor-group:not(.is-empty) .editor-placeholder {
   border-radius: 1px;
 }
 
-.panel[data-panel="alchemy"] .panel-body {
-  grid-template-rows: 1fr;
-  padding: 0;
-  background: radial-gradient(circle at 50% 10%, rgba(121, 126, 249, 0.05), transparent 40%);
-}
-
-.alchemy-panel {
-  display: grid;
-  grid-template-rows: auto auto 1fr;
-  min-height: 0;
-  height: 100%;
-  width: 100%;
-  background: transparent;
-  border: none;
-  border-radius: 0;
-  box-shadow: none;
-  overflow: hidden;
-}
-
-.alchemy-panel.has-items .alchemy-empty {
-  display: none;
-}
-
-.alchemy-panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--panel-border);
-  background: rgba(20, 24, 30, 0.4);
-  backdrop-filter: blur(10px);
-}
-
-.alchemy-title {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  color: var(--text);
-  text-transform: uppercase;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.alchemy-header-actions {
-  display: inline-flex;
-  gap: 4px;
-  align-items: center;
-}
-
-.alchemy-settings {
-  display: none;
-  padding: 16px;
-  border-bottom: 1px solid var(--panel-border);
-  background: rgba(16, 20, 26, 0.85);
-  backdrop-filter: blur(10px);
-}
-
-.alchemy-settings.is-open {
-  display: grid;
-}
-
-.alchemy-settings-grid {
-  display: grid;
-  gap: 16px;
-}
-
-.alchemy-settings-item {
-  display: grid;
-  gap: 8px;
-}
-
-.settings-title {
-  font-size: 11px;
-  color: var(--muted);
-  font-weight: 500;
-}
-
-.alchemy-settings-inline {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-  gap: 8px;
-  align-items: center;
-}
-
-.alchemy-select,
-.alchemy-input {
-  width: 100%;
-  background: rgba(0, 0, 0, 0.2);
-  border: 1px solid var(--input-border);
-  color: var(--text);
-  padding: 6px 8px;
-  border-radius: 6px;
-  font-size: 11px;
-}
-
-.alchemy-panel-body {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  padding: 16px;
-  min-height: 0;
-  overflow: hidden;
-}
-
-/* --- Import Area --- */
-.alchemy-top-area {
-  position: relative;
-  margin-bottom: 24px;
-  flex-shrink: 0;
-}
-
-.alchemy-drop-zone {
-  width: 100%;
-  min-height: 120px; /* Reduced from 240px */
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px; /* Reduced gap */
-  color: var(--muted);
-  border-radius: 12px;
-  background: rgba(255,255,255,0.005);
-  transition: all 0.2s;
-  cursor: pointer;
-  position: relative;
-}
-
-.alchemy-drop-zone:hover {
-  background: rgba(255,255,255,0.03);
-  color: var(--text);
-}
-
-.alchemy-drop-content {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-    pointer-events: none;
-}
-
-.alchemy-drop-text {
-    font-size: 14px;
-    font-weight: 500;
-}
-
-.alchemy-drop-subtext {
-    font-size: 11px;
-    opacity: 0.7;
-}
-
-.alchemy-capture-btn {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: 10;
-  width: 32px;
-  height: 32px;
-  background: transparent;
-  border: none;
-  color: var(--muted);
-  opacity: 0.6;
-  transition: opacity 0.2s, color 0.2s;
-}
-
-.alchemy-capture-btn:hover {
-  background: transparent;
-  color: var(--text);
-  opacity: 1;
-}
-
-.alchemy-ground-line {
-  position: absolute;
-  bottom: 0px;
-  left: 24px;
-  right: 24px;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
-}
-
-.alchemy-board-list {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 16px;
-  padding: 8px 4px;
-  min-height: 0;
-}
-
-/* Capture Item */
-.alchemy-board-item {
-  display: flex;
-  gap: 12px;
-  padding: 12px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid var(--panel-border);
-  transition: transform 0.2s, box-shadow 0.2s;
-}
-
-.alchemy-board-item:hover {
-  transform: translateY(-2px);
-  border-color: var(--accent);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-  z-index: 1;
-}
-
-.alchemy-item-thumb {
-  width: 100px;
-  aspect-ratio: 16/9;
-  height: auto;
-  border-radius: 6px;
-  background: #000;
-  background-size: cover;
-  background-position: center;
-  flex-shrink: 0;
-  border: 1px solid rgba(255,255,255,0.05);
-}
-
-.alchemy-item-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  min-width: 0;
-  gap: 8px;
-}
-
-.alchemy-item-text {
-  font-size: 11px;
-  color: var(--text);
-  font-family: "SF Mono", Menlo, monospace;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  opacity: 0.8;
-  line-height: 1.5;
-  background: rgba(0,0,0,0.2);
-  padding: 4px 6px;
-  border-radius: 4px;
-}
-
-.alchemy-item-actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-}
-
-/* --- Magic Input Area --- */
-.alchemy-magic-input {
-  display: grid;
-  gap: 12px;
-  padding: 16px;
-  border-radius: 16px;
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-  position: relative;
-  overflow: hidden;
-}
-
-.alchemy-magic-input::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(121, 126, 249, 0.3), transparent);
-}
-
-.alchemy-magic-dropzone {
-  min-height: 48px;
-  background: transparent;
-  border: none;
-  color: var(--text);
-  font-size: 13px;
-  line-height: 1.5;
-  outline: none;
-  white-space: pre-wrap;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-}
-
-.alchemy-magic-dropzone:empty::before {
-  content: attr(data-placeholder);
-  color: rgba(255, 255, 255, 0.3);
-  pointer-events: none;
-}
-
-.alchemy-magic-dropzone:focus {
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 8px;
-}
-
-.alchemy-magic-actions {
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-}
-
-.alchemy-magic-btn {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
-  padding: 8px 16px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  color: var(--muted);
-  font-size: 10px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  min-width: 64px;
-}
-
-.alchemy-magic-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text);
-  transform: translateY(-2px);
-  border-color: rgba(121, 126, 249, 0.3);
-}
-
-.alchemy-magic-btn:active {
-  transform: translateY(0);
-}
-
-.alchemy-magic-icon {
-  color: var(--text);
-  opacity: 0.8;
-  display: flex;
-  align-items: center;
-}
-
-.alchemy-status-line {
-  font-size: 10px;
-  color: var(--accent);
-  text-align: center;
-  min-height: 14px;
-}
-
-/* --- List Area --- */
-.alchemy-list-container {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  position: relative;
-}
-
-.alchemy-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 40px 20px;
-  text-align: center;
-  color: var(--muted);
-  border: 2px dashed rgba(255, 255, 255, 0.05);
-  border-radius: 12px;
-  margin-top: 10px;
-}
-
-.alchemy-empty-icon {
-  color: rgba(255, 255, 255, 0.1);
-}
-
-.alchemy-empty-text {
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--text-soft);
-}
-
-.alchemy-empty-sub {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.2);
-}
-
-.alchemy-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding: 4px; /* Space for focus rings/shadows */
-  padding-bottom: 20px;
-}
-
-/* --- Items --- */
-.alchemy-item {
-  background: rgba(24, 28, 36, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 10px;
-  padding: 12px;
-  display: grid;
-  gap: 10px;
-  transition: border-color 0.2s;
-}
-
-.alchemy-item:hover {
-  border-color: rgba(255, 255, 255, 0.12);
-}
-
-.alchemy-item.is-active {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent-soft);
-  background: rgba(24, 28, 36, 0.9);
-}
-
-.alchemy-item-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.alchemy-item-badges {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
-
-.alchemy-badge {
-  font-size: 9px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  text-transform: uppercase;
-  font-weight: 600;
-}
-
-.kind-badge {
-  background: rgba(121, 126, 249, 0.15);
-  color: var(--accent-strong);
-}
-
-.tag-badge {
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text-soft);
-}
-
-.alchemy-item-score {
-  font-size: 10px;
-  color: var(--accent-strong);
-  opacity: 0.8;
-}
-
-.alchemy-item-preview {
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 6px;
-  padding: 10px;
-  min-height: 60px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-}
-
-.alchemy-preview-image {
-  max-width: 100%;
-  max-height: 120px;
-  border-radius: 4px;
-  object-fit: contain;
-}
-
-.alchemy-preview-text,
-.alchemy-preview-box {
-  width: 100%;
-  font-family: "SF Mono", Menlo, monospace;
-  font-size: 11px;
-  color: var(--text);
-  line-height: 1.4;
-  white-space: pre-wrap;
-  max-height: 120px;
-  overflow: auto;
-}
-
-.alchemy-preview-table-wrap {
-    width: 100%;
-    overflow: auto;
-    max-height: 120px;
-}
-
-.alchemy-preview-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 10px;
-}
-
-.alchemy-preview-table td,
-.alchemy-preview-table th {
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 4px;
-}
-
-.alchemy-item-controls {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  gap: 8px;
-}
-
-.alchemy-item-options {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  flex: 1;
-}
-
-.alchemy-mini-select {
-  background: transparent;
-  border: none;
-  color: var(--text-soft);
-  font-size: 10px;
-  padding: 0;
-  cursor: pointer;
-  width: fit-content;
-}
-
-.alchemy-mini-select:hover {
-  color: var(--text);
-}
-
-.alchemy-item-actions {
-  display: flex;
-  gap: 6px;
-}
-
-.alchemy-action-btn {
-  background: transparent;
-  border: 1px solid transparent;
-  color: var(--muted);
-  padding: 4px;
-  border-radius: 4px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-}
-
-.alchemy-action-btn:hover {
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text);
-}
-
-.alchemy-action-btn.primary {
-  background: var(--accent-soft);
-  color: var(--accent-strong);
-  padding: 4px 10px;
-  gap: 4px;
-  font-size: 11px;
-  font-weight: 500;
-}
-
-.alchemy-action-btn.primary:hover {
-  background: var(--accent);
-  color: white;
-}
-
-.alchemy-item-snippet {
-  margin-top: 8px;
-  background: rgba(0, 0, 0, 0.3);
-  padding: 8px;
-  border-radius: 6px;
-}
-
-.alchemy-snippet-text {
-  width: 100%;
-  min-height: 60px;
-  background: transparent;
-  border: none;
-  font-family: "SF Mono", Menlo, monospace;
-  font-size: 10px;
-  color: var(--text-soft);
-  resize: vertical;
-  outline: none;
-}
-
-.alchemy-panel-footer {
-  display: flex;
-  gap: 12px;
-  padding: 12px 16px;
-  border-top: 1px solid var(--panel-border);
-  background: rgba(20, 24, 30, 0.4);
-  backdrop-filter: blur(10px);
-  justify-content: flex-end;
-}
-
 /* =============================================================================
    AI Chat Panel (Premium Glassmorphism Redesign)
    ============================================================================= */
@@ -4844,6 +3880,49 @@ body.has-editor .editor-group:not(.is-empty) .editor-placeholder {
   background: linear-gradient(180deg, rgba(15, 19, 24, 0.3), rgba(10, 14, 18, 0.5));
 }
 
+.ai-chat-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px 0;
+}
+
+.ai-mode-controls {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ai-mode-toggle {
+  font-size: 11px;
+  padding: 6px 10px;
+  border-radius: 999px;
+}
+
+.ai-mode-toggle.is-active {
+  background: rgba(121, 126, 249, 0.16);
+  border-color: rgba(121, 126, 249, 0.35);
+  color: #fff;
+}
+
+.ai-next-button {
+  font-size: 11px;
+  padding: 6px 10px;
+  border-radius: 999px;
+}
+
+.ai-stop-button {
+  font-size: 11px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  color: var(--danger-text);
+}
+
+.ai-stop-button:disabled {
+  opacity: 0.45;
+}
+
 .ai-chat-log {
   flex: 1;
   overflow-y: auto;
@@ -5051,6 +4130,7 @@ body.has-editor .editor-group:not(.is-empty) .editor-placeholder {
   justify-content: flex-end;
   padding-left: 24px;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .ai-proposal-actions .panel-button {
@@ -5262,6 +4342,10 @@ body.has-editor .editor-group:not(.is-empty) .editor-placeholder {
   display: flex;
   align-items: center;
   gap: 8px;
+  max-width: calc(100% - 32px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .ai-status:not(:empty) {
@@ -5282,24 +4366,6 @@ body.has-editor .editor-group:not(.is-empty) .editor-placeholder {
   0% { transform: scale(0.8); opacity: 0.5; }
   50% { transform: scale(1.2); opacity: 1; }
   100% { transform: scale(0.8); opacity: 0.5; }
-}
-
-
-.alchemy-edit-card {
-  width: min(720px, 94vw);
-}
-
-.alchemy-edit-textarea {
-  width: 100%;
-  min-height: 240px;
-  border: 1px solid var(--input-border);
-  border-radius: 10px;
-  padding: 10px 12px;
-  font-size: 12px;
-  font-family: "SF Mono", Menlo, monospace;
-  background: var(--input-bg);
-  color: var(--text);
-  resize: vertical;
 }
 
 /* Capture Window - Premium Redesign */
@@ -5817,354 +4883,4 @@ body.has-editor .editor-group:not(.is-empty) .editor-placeholder {
 }
 .block-format-selector[data-active="none"]::before {
   transform: translateX(200%);
-}
-
-/* Git Panel Enhancements */
-.git-section-header {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  color: var(--muted);
-  padding: 8px 12px;
-  background: var(--panel-header);
-  border-bottom: 1px solid var(--panel-border);
-  letter-spacing: 0.05em;
-  margin-top: 0;
-}
-
-.git-file-list {
-  display: flex;
-  flex-direction: column;
-}
-
-.git-file-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--panel-border);
-  font-size: 12px;
-  cursor: pointer;
-  transition: background 0.1s;
-}
-
-.git-file-item:hover {
-  background: var(--control-bg);
-}
-
-.git-status-letter {
-  font-weight: 700;
-  width: 16px;
-  text-align: center;
-  flex-shrink: 0;
-}
-
-.git-status-letter.status-M { color: var(--warning-text); }
-.git-status-letter.status-A { color: var(--status); }
-.git-status-letter.status-D { color: var(--danger-text); }
-.git-status-letter.status-\?\? { color: var(--status); } /* Untracked usually green or specific color */
-.git-status-letter.status-U { color: var(--danger-text); }
-
-.git-file-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  line-height: 1.2;
-  overflow: hidden;
-  min-width: 0;
-}
-
-.git-file-name {
-  color: var(--text);
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.git-file-dir {
-  font-size: 10px;
-  color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.git-file-actions {
-  display: flex;
-  gap: 2px;
-  opacity: 0;
-  transition: opacity 0.1s;
-}
-
-.git-file-item:hover .git-file-actions {
-  opacity: 1;
-}
-
-.git-action-btn {
-  background: transparent;
-  border: none;
-  color: var(--muted);
-  border-radius: 4px;
-  padding: 4px;
-  width: 24px;
-  height: 24px;
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-}
-
-.git-action-btn:hover {
-  background: var(--control-bg);
-  color: var(--text);
-}
-
-/* --- New Git Panel Styles (VS Code Style) --- */
-
-.git-section {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-.git-section[open] {
-  flex: 1; /* Expand to fill space */
-  min-height: 0; 
-}
-
-/* If both open, share space? Or usage specific? 
-   Usually "Changes" is roughly 50-70% and Graph is rest. 
-   Let's default to flex-grow: 1 for Changes and flex-grow: 1 for Graph 
-   so they split evenly if neither has content overriding. 
-   But "Changes" content determines height usually.
-*/
-#git-changes-section[open] {
-    flex: 1 1 auto;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-}
-
-#git-history-section[open] {
-    flex: 1 1 auto;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    border-top: 1px solid var(--panel-border);
-}
-
-.git-section-summary {
-  list-style: none; /* Hide default triangle */
-  cursor: pointer;
-  padding: 4px 8px; /* Tighter padding */
-  font-size: 11px;
-  font-weight: 700; 
-  text-transform: uppercase;
-  color: var(--muted);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: var(--bg); /* or standard panel header bg */
-}
-
-/* Custom Arrow */
-.git-section-summary::-webkit-details-marker {
-  display: none;
-}
-.git-section-summary::before {
-  content: "›"; /* Simplistic arrow */
-  display: inline-block;
-  margin-right: 6px;
-  font-weight: 400;
-  transform: rotate(0deg);
-  transition: transform 0.1s;
-  font-size: 12px;
-}
-.git-section[open] > .git-section-summary::before {
-  transform: rotate(90deg);
-}
-
-.git-section-content {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  flex: 1;
-  min-height: 0;
-}
-
-.git-section-actions {
-  display: flex;
-  gap: 4px;
-  opacity: 0; /* Show on hover? VS Code shows usually on hover or always if active */
-  transition: opacity 0.1s;
-}
-.git-section-summary:hover .git-section-actions {
-  opacity: 1;
-}
-
-/* Commit Area */
-.git-commit-area {
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  background: var(--bg); /* Should match panel bg */
-}
-
-.git-commit-input-wrapper {
-  position: relative;
-}
-
-.git-commit-input {
-  width: 100%;
-  background: var(--input-bg);
-  color: var(--text);
-  border: 1px solid var(--input-border);
-  border-radius: 4px;
-  padding: 6px 8px;
-  font-size: 12px;
-  font-family: inherit;
-}
-.git-commit-input:focus {
-  outline: 1px solid var(--accent);
-  border-color: var(--accent);
-}
-
-.git-commit-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  width: 100%;
-  background: #0E639C; /* VS Code Blue */
-  color: white;
-  border: none;
-  border-radius: 2px; /* Square-ish */
-  padding: 6px 12px;
-  font-size: 13px; /* Slightly larger */
-  cursor: pointer;
-  transition: background 0.1s;
-}
-.git-commit-button:hover {
-  background: #1177BB;
-}
-.git-commit-button:disabled {
-  background: #3A3D41;
-  color: #888;
-  cursor: not-allowed;
-}
-
-.git-changes-container {
-    flex: 1;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-}
-
-/* History List / Graph imitation */
-.git-history-list {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  overflow-y: auto;
-  min-height: 0;
-  padding: 0;
-  position: relative;
-}
-
-.git-history-item {
-  position: relative;
-  padding: 6px 12px 6px 24px; /* Left padding for rail */
-  border-bottom: 1px solid var(--panel-border-strong); /* Faint separator */
-  cursor: default;
-}
-
-/* The Rail Line */
-.git-history-item::before {
-  content: "";
-  position: absolute;
-  left: 10px;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: #444; /* Dark gray line */
-}
-
-/* The Node Dot */
-.git-history-item::after {
-  content: "";
-  position: absolute;
-  left: 6px;
-  top: 10px; /* Centered roughly vs first line of text */
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: #007acc; /* Blue node */
-  border: 2px solid var(--bg); /* Gap from line */
-  z-index: 1;
-}
-
-/* First item (HEAD) often different? */
-.git-history-item[data-current="true"]::after {
-   background: transparent;
-   border: 2px solid #007acc; /* Hollow circle */
-}
-
-/* Fix line for first/last items if desired (clip top/bottom) 
-   But simpler is fine. 
-*/
-
-.git-history-title {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text);
-  margin-bottom: 2px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.git-history-meta {
-  font-size: 10px;
-  color: var(--muted);
-}
-
-/* Robust Fixes */
-.panel-button.icon-only {
-  padding: 0;
-  width: 24px;
-  min-width: 24px;
-  justify-content: center;
-}
-
-.git-commit-area {
-  display: flex !important;
-  flex-direction: column !important;
-  gap: 8px !important;
-  width: 100%;
-}
-
-.git-commit-input-wrapper {
-  width: 100%;
-}
-
-.git-commit-button {
-  flex-shrink: 0;
-  height: 28px;
-  white-space: nowrap;
-}
-
-/* Prevent button crushing globally in Git panel */
-.git-action-btn {
-  flex-shrink: 0;
-}
-
-.panel-button {
-  flex-shrink: 0;
-  white-space: nowrap;
-}
-
-/* Ensure Changes/Graph header buttons don't crush */
-.git-section-actions .panel-button {
-  flex-shrink: 0;
 }

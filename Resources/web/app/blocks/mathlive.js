@@ -76,6 +76,7 @@ export const initMathLive = (context, deps) => {
         menuToggle.className = "block-math-menu-toggle";
         menuToggle.setAttribute("aria-label", "数式メニュー");
         menuToggle.setAttribute("aria-haspopup", "menu");
+        menuToggle.tabIndex = -1;
         menuToggle.innerHTML = `
       <span class="block-math-menu-line"></span>
       <span class="block-math-menu-line"></span>
@@ -115,14 +116,16 @@ export const initMathLive = (context, deps) => {
             }
         };
         menuToggle.addEventListener("pointerdown", (event) => {
+            event.preventDefault();
             event.stopPropagation();
         });
+        menuToggle.addEventListener("focus", () => {
+            menuToggle.blur();
+        });
         menuToggle.addEventListener("click", (event) => {
-            var _a;
             event.preventDefault();
             event.stopPropagation();
             toggleMathFieldMenu();
-            (_a = mathfield.focus) === null || _a === void 0 ? void 0 : _a.call(mathfield);
         });
         blockMathInputContainer.addEventListener("pointerdown", (event) => {
             const path = typeof event.composedPath === "function" ? event.composedPath() : [];
@@ -136,10 +139,18 @@ export const initMathLive = (context, deps) => {
                     return true;
                 return (_d = (_c = node.classList) === null || _c === void 0 ? void 0 : _c.contains("ML__menu-toggle")) !== null && _d !== void 0 ? _d : false;
             });
-            if (!clickedMenuToggle) {
+            const clickedMathMenu = path.some((node) => {
+                var _a, _b;
+                if (!(node instanceof HTMLElement))
+                    return false;
+                if ((_a = node.matches) === null || _a === void 0 ? void 0 : _a.call(node, "menu.ui-menu-container"))
+                    return true;
+                return !!((_b = node.closest) === null || _b === void 0 ? void 0 : _b.call(node, "menu.ui-menu-container"));
+            });
+            if (!clickedMenuToggle && !clickedMathMenu) {
                 closeMathFieldMenu();
             }
-            if (typeof mathfield.focus === "function") {
+            if (!clickedMathMenu && !clickedMenuToggle && typeof mathfield.focus === "function") {
                 mathfield.focus();
             }
         });
@@ -147,7 +158,10 @@ export const initMathLive = (context, deps) => {
         if (typeof mathfield.setOptions === "function") {
             mathfield.setOptions({
                 smartMode: false,
+                smartFence: false,
                 defaultMode: "math",
+                inlineShortcuts: {},
+                onInlineShortcut: () => "",
                 virtualKeyboardMode: "off",
                 fontsDirectory: "mathlive/fonts",
                 soundsDirectory: null,
@@ -285,8 +299,27 @@ export const initMathLive = (context, deps) => {
           opacity: 0.85;
         }
         .ML__selection {
-          background: rgba(110, 195, 255, 0.7) !important;
+          background: rgba(110, 195, 255, 0.55) !important;
+          outline: none !important;
+          outline-offset: 0 !important;
+          box-shadow: none !important;
           color: #f8fbff !important;
+        }
+        .ML__prompt {
+          border-radius: 4px !important;
+          background: rgba(110, 195, 255, 0.08) !important;
+        }
+        .ML__editablePromptBox {
+          outline: none !important;
+          box-shadow: none !important;
+          background: rgba(110, 195, 255, 0.16) !important;
+          z-index: 0 !important;
+        }
+        .ML__focused .ML__focusedPromptBox {
+          outline: none !important;
+          box-shadow: none !important;
+          background: rgba(110, 195, 255, 0.32) !important;
+          z-index: 1 !important;
         }
         .ML__caret {
           background-color: var(--accent, #5bc2ff) !important;

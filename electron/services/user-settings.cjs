@@ -2,9 +2,6 @@ const path = require("path");
 const fsp = require("fs/promises");
 
 const DEFAULT_SETTINGS = {
-  alchemy: {
-    ocrLanguage: "jpn+eng",
-  },
   agent: {
     temperature: 0.2,
     maxOutputTokens: 2048,
@@ -16,6 +13,8 @@ const DEFAULT_SETTINGS = {
     maxReadFiles: 0,
     openFileMaxBytes: 0,
     openFileMaxChars: 0,
+    costInputPerMillion: 0,
+    costOutputPerMillion: 0,
   },
 };
 
@@ -40,22 +39,6 @@ class UserSettingsService {
       ...(stored && typeof stored === "object" ? stored : {}),
     };
     return clone(this.state);
-  }
-
-  async getAlchemySettings() {
-    const state = await this.load();
-    return clone(state.alchemy ?? DEFAULT_SETTINGS.alchemy);
-  }
-
-  async updateAlchemySettings(partial) {
-    const state = await this.load();
-    state.alchemy = {
-      ...state.alchemy,
-      ...(partial && typeof partial === "object" ? partial : {}),
-    };
-    this.state = state;
-    await this.save();
-    return clone(state.alchemy);
   }
 
   async getAgentSettings() {

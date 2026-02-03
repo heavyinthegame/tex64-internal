@@ -25,17 +25,6 @@ export const initUiEvents = (context, deps) => {
             diffModalSubmit.addEventListener("click", () => {
                 var _a, _b;
                 const diffContext = deps.diffModal.getDiffContext();
-                if ((diffContext === null || diffContext === void 0 ? void 0 : diffContext.type) === "gitCommit") {
-                    deps.diffModal.closeDiffModal();
-                    deps.gitOps.requestCommit();
-                    return;
-                }
-                if ((diffContext === null || diffContext === void 0 ? void 0 : diffContext.type) === "gitRestore") {
-                    const targetHash = diffContext.hash;
-                    deps.diffModal.closeDiffModal();
-                    deps.gitOps.requestRestore(targetHash);
-                    return;
-                }
                 if ((diffContext === null || diffContext === void 0 ? void 0 : diffContext.type) === "aiApply") {
                     (_a = deps.aiOps) === null || _a === void 0 ? void 0 : _a.applyPendingFromDiffModal();
                     deps.diffModal.closeDiffModal();
@@ -59,7 +48,6 @@ export const initUiEvents = (context, deps) => {
             });
         }
         deps.buildOps.setupActionButtons();
-        deps.gitOps.setupActions();
         deps.rootSelectorUi.setupActions();
         window.addEventListener("keydown", (event) => {
             if (event.metaKey && event.key.toLowerCase() === "s") {

@@ -1,165 +1,14 @@
 import { reconstructionBlock } from "./context.js";
-import { PLACEHOLDER_LATEX } from "./math-input-utils.js";
+import { PLACEHOLDER_LATEX, applyScriptToText, applyTemplateToText, getMathFieldSelectionRange, indexToOffset, offsetToIndex, } from "./math-input-utils.js";
+import { initMathWysiwyg } from "../math-wysiwyg.js";
+import { DEFAULT_WYSIWYG_PACKS } from "../math-wysiwyg-packs.js";
+import { createPlaceholderNavigator, readMathFieldValue, setSelectionRange, writeMathFieldValue, } from "./input-ui-math-field.js";
+import { normalizeMatrixSyntax, shouldWrapAligned, stripEmptyAlignedRows, unwrapAligned, wrapAligned, } from "./input-ui-latex-format.js";
+import { getFormatLabel, getFormatShortLabel, loadMathInsertSettings, saveMathDisplayWrap, saveMathInlineWrap, saveMathInsertMode, } from "./input-ui-settings.js";
+import { ensureMathWysiwygPacks, loadMathWysiwygSettings, saveMathWysiwygAutoSuggest, saveMathWysiwygPacks, } from "./math-wysiwyg-settings.js";
 export const initBlockInputUi = (context, deps) => {
-    const { blockToggleButtons, blockForms, blockTableRows, blockTableCols, blockTableGrid, blockTableRaw, blockTableRawInput, blockSettingsButton, blockCaptureButton, blockSettingsModal, blockSettingsClose, blockSettingsBack, blockSettingsPages, blockSettingsMenuItems, blockSettingsInlineOptions, blockSettingsDisplayOptions, blockFormatButton, blockFormatMenu, blockFormatOptions, } = context.dom;
-    const MATH_INSERT_MODE_KEY = "tex64.math-insert-mode";
-    const MATH_INSERT_INLINE_KEY = "tex64.math-insert-inline-wrap";
-    const MATH_INSERT_DISPLAY_KEY = "tex64.math-insert-display-wrap";
-    const MATH_INSERT_LEGACY_KEY = "tex64.math-insert-format";
-    const MATH_INSERT_MODES = [
-        { value: "inline", label: "インライン", shortLabel: "INL" },
-        { value: "display", label: "別行", shortLabel: "DSP" },
-        { value: "align", label: "align*", shortLabel: "ALN" },
-        { value: "gather", label: "gather*", shortLabel: "GTH" },
-        { value: "none", label: "囲まない", shortLabel: "RAW" },
-    ];
-    const ALIGNED_ENV_BEGIN = "\\begin{aligned}";
-    const ALIGNED_ENV_END = "\\end{aligned}";
-    const isEscapedAt = (text, index) => {
-        let count = 0;
-        for (let i = index - 1; i >= 0 && text[i] === "\\"; i -= 1) {
-            count += 1;
-        }
-        return count % 2 === 1;
-    };
-    const hasUnescapedAmpersand = (text) => {
-        for (let i = 0; i < text.length; i += 1) {
-            if (text[i] === "&" && !isEscapedAt(text, i)) {
-                return true;
-            }
-        }
-        return false;
-    };
-    const hasLineBreak = (text) => {
-        for (let i = 0; i < text.length - 1; i += 1) {
-            if (text[i] === "\\" && text[i + 1] === "\\" && !isEscapedAt(text, i)) {
-                return true;
-            }
-        }
-        return false;
-    };
-    const shouldWrapAligned = (text) => {
-        if (!text) {
-            return false;
-        }
-        if (text.includes("\\begin{") || text.includes("\\end{")) {
-            return false;
-        }
-        return hasUnescapedAmpersand(text) || hasLineBreak(text);
-    };
-    const wrapAligned = (text) => `${ALIGNED_ENV_BEGIN}\n${text}\n${ALIGNED_ENV_END}`;
-    const unwrapAligned = (text) => {
-        const start = text.indexOf(ALIGNED_ENV_BEGIN);
-        const end = text.lastIndexOf(ALIGNED_ENV_END);
-        if (start === -1 || end === -1) {
-            return { value: text, didUnwrap: false };
-        }
-        const before = text.slice(0, start).trim();
-        const after = text.slice(end + ALIGNED_ENV_END.length).trim();
-        if (before || after) {
-            return { value: text, didUnwrap: false };
-        }
-        let inner = text.slice(start + ALIGNED_ENV_BEGIN.length, end);
-        if (inner.startsWith("\n")) {
-            inner = inner.slice(1);
-        }
-        if (inner.endsWith("\n")) {
-            inner = inner.slice(0, -1);
-        }
-        return { value: inner, didUnwrap: true };
-    };
-    const splitAlignedRows = (text) => {
-        const rows = [];
-        let current = "";
-        for (let i = 0; i < text.length; i += 1) {
-            if (text[i] === "\\" && text[i + 1] === "\\" && !isEscapedAt(text, i)) {
-                rows.push(current);
-                current = "";
-                i += 1;
-                continue;
-            }
-            current += text[i];
-        }
-        rows.push(current);
-        return rows;
-    };
-    const isEmptyAlignedRow = (row) => {
-        const cleaned = row.replace(/\\placeholder\{\}/g, "").replace(/\s+/g, "");
-        return cleaned === "" || cleaned === "&";
-    };
-    const stripEmptyAlignedRows = (text) => {
-        const rows = splitAlignedRows(text);
-        if (rows.length <= 1) {
-            return text;
-        }
-        const hasNonEmpty = rows.some((row) => !isEmptyAlignedRow(row));
-        return hasNonEmpty ? text : "";
-    };
-    const normalizeMatrixSyntax = (value) => {
-        if (!value) {
-            return value;
-        }
-        return value.replace(/\\begin\{((?:[p|b|B|v|V])?matrix)\}([\s\S]*?)\\end\{\1\}/g, (match, env, body) => {
-            if (body.includes("&") || body.includes("\\\\")) {
-                return match;
-            }
-            const cells = [];
-            let i = 0;
-            let valid = true;
-            while (i < body.length) {
-                const ch = body[i];
-                if (ch === "{") {
-                    let depth = 0;
-                    const start = i + 1;
-                    for (; i < body.length; i += 1) {
-                        const inner = body[i];
-                        if (inner === "{")
-                            depth += 1;
-                        if (inner === "}") {
-                            depth -= 1;
-                            if (depth === 0) {
-                                cells.push(body.slice(start, i).trim());
-                                i += 1;
-                                break;
-                            }
-                        }
-                    }
-                    if (depth !== 0) {
-                        valid = false;
-                        break;
-                    }
-                    continue;
-                }
-                if (!/\s/.test(ch)) {
-                    const start = i;
-                    while (i < body.length && !/\s/.test(body[i])) {
-                        i += 1;
-                    }
-                    cells.push(body.slice(start, i).trim());
-                    continue;
-                }
-                i += 1;
-            }
-            if (!valid) {
-                return match;
-            }
-            const filtered = cells.filter((cell) => cell.length > 0);
-            if (filtered.length === 0) {
-                return match;
-            }
-            const size = Math.sqrt(filtered.length);
-            const n = Math.round(size);
-            if (!Number.isFinite(size) || n * n !== filtered.length) {
-                return match;
-            }
-            const rows = [];
-            for (let r = 0; r < n; r += 1) {
-                const row = filtered.slice(r * n, (r + 1) * n);
-                rows.push(row.join("&"));
-            }
-            return `\\begin{${env}}${rows.join("\\\\")}\\end{${env}}`;
-        });
-    };
+    const { blockMathInputContainer, blockSettingsButton, blockCaptureButton, blockSettingsModal, blockSettingsClose, blockSettingsBackButtons, blockSettingsPages, blockSettingsMenuItems, blockSettingsInlineOptions, blockSettingsDisplayOptions, blockFormatButton, blockFormatMenu, blockFormatOptions, blockSuggestButton, blocksPanelBody, } = context.dom;
+    const { moveMathFieldPlaceholder } = createPlaceholderNavigator();
     const normalizeMathValueForOutput = (value) => {
         const resolved = mathFieldWrapped ? unwrapAligned(value).value : value;
         return normalizeMatrixSyntax(resolved);
@@ -174,20 +23,25 @@ export const initBlockInputUi = (context, deps) => {
         return wrapAligned(value);
     };
     let activeBlockType = "math";
-    let tableEditMode = "grid";
     let mathInput = null;
     let mathInputFallback = null;
     let currentMathValue = "";
     let mathFieldWrapped = false;
     let mathKeyboardVisibilityHandler = () => { };
+    let mathWysiwygApi = null;
     let mathInsertMode = "inline";
     let mathInlineWrap = "inline-dollar";
     let mathDisplayWrap = "display-bracket";
     let blockSettingsOpen = false;
     let activeBlockSettingsPage = "menu";
     let formatMenuOpen = false;
-    const getFormatLabel = (value) => { var _a, _b; return (_b = (_a = MATH_INSERT_MODES.find((entry) => entry.value === value)) === null || _a === void 0 ? void 0 : _a.label) !== null && _b !== void 0 ? _b : value; };
-    const getFormatShortLabel = (value) => { var _a, _b; return (_b = (_a = MATH_INSERT_MODES.find((entry) => entry.value === value)) === null || _a === void 0 ? void 0 : _a.shortLabel) !== null && _b !== void 0 ? _b : value; };
+    const defaultWysiwygSettings = {
+        autoSuggest: true,
+        enabledPacks: [...DEFAULT_WYSIWYG_PACKS],
+    };
+    let mathWysiwygSettings = loadMathWysiwygSettings(defaultWysiwygSettings);
+    const wysiwygAutoOptions = Array.from(document.querySelectorAll("[data-wysiwyg-auto]"));
+    const wysiwygPackOptions = Array.from(document.querySelectorAll("[data-wysiwyg-pack]"));
     const setFormatMenuOpen = (open) => {
         formatMenuOpen = open;
         if (blockFormatMenu instanceof HTMLElement) {
@@ -213,14 +67,7 @@ export const initBlockInputUi = (context, deps) => {
                 option.setAttribute("aria-selected", isActive ? "true" : "false");
             });
         }
-        if (typeof localStorage !== "undefined") {
-            try {
-                localStorage.setItem(MATH_INSERT_MODE_KEY, value);
-            }
-            catch {
-                // ignore storage failures
-            }
-        }
+        saveMathInsertMode(value);
     };
     const setMathInlineWrap = (value) => {
         mathInlineWrap = value;
@@ -231,14 +78,7 @@ export const initBlockInputUi = (context, deps) => {
                 option.setAttribute("aria-pressed", isActive ? "true" : "false");
             });
         }
-        if (typeof localStorage !== "undefined") {
-            try {
-                localStorage.setItem(MATH_INSERT_INLINE_KEY, value);
-            }
-            catch {
-                // ignore storage failures
-            }
-        }
+        saveMathInlineWrap(value);
     };
     const setMathDisplayWrap = (value) => {
         mathDisplayWrap = value;
@@ -249,53 +89,71 @@ export const initBlockInputUi = (context, deps) => {
                 option.setAttribute("aria-pressed", isActive ? "true" : "false");
             });
         }
-        if (typeof localStorage !== "undefined") {
-            try {
-                localStorage.setItem(MATH_INSERT_DISPLAY_KEY, value);
-            }
-            catch {
-                // ignore storage failures
-            }
-        }
+        saveMathDisplayWrap(value);
     };
-    const loadMathInsertSettings = () => {
-        var _a;
-        if (typeof localStorage === "undefined") {
-            setMathInsertMode(mathInsertMode);
-            setMathInlineWrap(mathInlineWrap);
-            setMathDisplayWrap(mathDisplayWrap);
-            return;
+    const applyMathInsertSettings = () => {
+        const resolved = loadMathInsertSettings({
+            mode: mathInsertMode,
+            inlineWrap: mathInlineWrap,
+            displayWrap: mathDisplayWrap,
+        });
+        setMathInsertMode(resolved.mode);
+        setMathInlineWrap(resolved.inlineWrap);
+        setMathDisplayWrap(resolved.displayWrap);
+    };
+    const applyMathWysiwygSettings = () => {
+        mathWysiwygSettings = {
+            ...mathWysiwygSettings,
+            enabledPacks: ensureMathWysiwygPacks(mathWysiwygSettings.enabledPacks),
+        };
+        const enabledPacks = new Set(mathWysiwygSettings.enabledPacks);
+        if (Array.isArray(wysiwygAutoOptions)) {
+            wysiwygAutoOptions.forEach((button) => {
+                const isAuto = button.dataset.wysiwygAuto === "on";
+                const isActive = isAuto === mathWysiwygSettings.autoSuggest;
+                button.classList.toggle("is-active", isActive);
+                button.setAttribute("aria-pressed", isActive ? "true" : "false");
+            });
         }
-        const storedMode = localStorage.getItem(MATH_INSERT_MODE_KEY);
-        const storedInline = localStorage.getItem(MATH_INSERT_INLINE_KEY);
-        const storedDisplay = localStorage.getItem(MATH_INSERT_DISPLAY_KEY);
-        const legacy = localStorage.getItem(MATH_INSERT_LEGACY_KEY);
-        const modeMatch = (_a = MATH_INSERT_MODES.find((entry) => entry.value === storedMode)) === null || _a === void 0 ? void 0 : _a.value;
-        const inlineMatch = storedInline === "inline-dollar" || storedInline === "inline-paren"
-            ? storedInline
-            : null;
-        const displayMatch = storedDisplay === "display-dollar" || storedDisplay === "display-bracket"
-            ? storedDisplay
-            : null;
-        let resolvedMode = modeMatch !== null && modeMatch !== void 0 ? modeMatch : mathInsertMode;
-        let resolvedInline = inlineMatch !== null && inlineMatch !== void 0 ? inlineMatch : mathInlineWrap;
-        let resolvedDisplay = displayMatch !== null && displayMatch !== void 0 ? displayMatch : mathDisplayWrap;
-        if (!modeMatch && legacy) {
-            if (legacy === "none") {
-                resolvedMode = "none";
-            }
-            else if (legacy === "inline-dollar" || legacy === "inline-paren") {
-                resolvedMode = "inline";
-                resolvedInline = legacy;
-            }
-            else if (legacy === "display-dollar" || legacy === "display-bracket") {
-                resolvedMode = "display";
-                resolvedDisplay = legacy;
-            }
+        if (Array.isArray(wysiwygPackOptions)) {
+            wysiwygPackOptions.forEach((button) => {
+                const packId = button.dataset.wysiwygPack;
+                if (!packId) {
+                    return;
+                }
+                const isActive = enabledPacks.has(packId);
+                button.classList.toggle("is-active", isActive);
+                button.setAttribute("aria-pressed", isActive ? "true" : "false");
+            });
         }
-        setMathInsertMode(resolvedMode);
-        setMathInlineWrap(resolvedInline);
-        setMathDisplayWrap(resolvedDisplay);
+        mathWysiwygApi === null || mathWysiwygApi === void 0 ? void 0 : mathWysiwygApi.updateConfig({
+            autoSuggest: mathWysiwygSettings.autoSuggest,
+            enabledPacks: mathWysiwygSettings.enabledPacks,
+        });
+    };
+    const setMathWysiwygAutoSuggest = (value) => {
+        mathWysiwygSettings = {
+            ...mathWysiwygSettings,
+            autoSuggest: value,
+        };
+        saveMathWysiwygAutoSuggest(value);
+        applyMathWysiwygSettings();
+    };
+    const toggleMathWysiwygPack = (packId) => {
+        const next = new Set(mathWysiwygSettings.enabledPacks);
+        if (next.has(packId)) {
+            next.delete(packId);
+        }
+        else {
+            next.add(packId);
+        }
+        const normalized = ensureMathWysiwygPacks(Array.from(next));
+        mathWysiwygSettings = {
+            ...mathWysiwygSettings,
+            enabledPacks: normalized,
+        };
+        saveMathWysiwygPacks(normalized);
+        applyMathWysiwygSettings();
     };
     const updateMathPreview = () => {
         // preview disabled
@@ -303,34 +161,10 @@ export const initBlockInputUi = (context, deps) => {
     const setMathKeyboardVisibilityHandler = (handler) => {
         mathKeyboardVisibilityHandler = handler;
     };
-    const setTableEditMode = (mode) => {
-        tableEditMode = mode;
-        if (blockTableGrid instanceof HTMLElement) {
-            blockTableGrid.classList.toggle("is-hidden", mode === "raw");
-        }
-        if (blockTableRaw instanceof HTMLElement) {
-            blockTableRaw.classList.toggle("is-active", mode === "raw");
-        }
-    };
     const setActiveBlockType = (type) => {
-        const resolvedType = deps.enableTableBlocks ? type : "math";
-        activeBlockType = resolvedType;
-        blockToggleButtons.forEach((button) => {
-            const isActive = button.dataset.block === resolvedType;
-            button.classList.toggle("is-active", isActive);
-        });
-        blockForms.forEach((form) => {
-            const isActive = form.dataset.form === resolvedType;
-            form.classList.toggle("is-active", isActive);
-        });
         mathKeyboardVisibilityHandler();
-        if (resolvedType === "math") {
-            updateMathPreview();
-            setTableEditMode("grid");
-        }
-        else if (deps.getActiveBlockEditMode() !== "detected") {
-            setTableEditMode("grid");
-        }
+        activeBlockType = type;
+        updateMathPreview();
     };
     const isMathInputFocused = () => {
         if (!mathInput) {
@@ -346,33 +180,6 @@ export const initBlockInputUi = (context, deps) => {
             return true;
         }
         return false;
-    };
-    const readMathFieldValue = (mathField) => {
-        if (!mathField) {
-            return "";
-        }
-        if (typeof mathField.getValue === "function") {
-            const nextValue = mathField.getValue("latex");
-            if (typeof nextValue === "string") {
-                return nextValue;
-            }
-        }
-        if (typeof mathField.value === "string") {
-            return mathField.value;
-        }
-        return "";
-    };
-    const writeMathFieldValue = (mathField, value) => {
-        if (!mathField) {
-            return;
-        }
-        if (typeof mathField.setValue === "function") {
-            mathField.setValue(value);
-            return;
-        }
-        if ("value" in mathField) {
-            mathField.value = value;
-        }
     };
     const setMathInputElement = (element) => {
         mathInput = element;
@@ -443,17 +250,6 @@ export const initBlockInputUi = (context, deps) => {
         currentMathValue = value;
         writeMathFieldValue(mathInput, preparedValue);
     };
-    const getTableRawValue = () => {
-        if (blockTableRawInput instanceof HTMLTextAreaElement) {
-            return blockTableRawInput.value;
-        }
-        return "";
-    };
-    const setTableRawValue = (value) => {
-        if (blockTableRawInput instanceof HTMLTextAreaElement) {
-            blockTableRawInput.value = value;
-        }
-    };
     const attachMathInputListener = () => {
         if (!mathInput) {
             return;
@@ -495,6 +291,9 @@ export const initBlockInputUi = (context, deps) => {
                     executeCommand.call(mathfield, "toggleContextMenu");
                 }
             }
+        };
+        const closeWysiwygSuggestions = () => {
+            mathWysiwygApi === null || mathWysiwygApi === void 0 ? void 0 : mathWysiwygApi.close();
         };
         let mathFieldNormalizing = false;
         const syncMathFieldValue = () => {
@@ -539,20 +338,409 @@ export const initBlockInputUi = (context, deps) => {
         };
         mathfield.addEventListener("input", syncMathFieldValue);
         mathfield.addEventListener("change", syncMathFieldValue);
+        const applyStructuredInput = (key) => {
+            var _a;
+            if (key !== "^" && key !== "_") {
+                return false;
+            }
+            const mathfieldApi = mathfield;
+            const insertValue = key === "^" ? `^{${PLACEHOLDER_LATEX}}` : `_{${PLACEHOLDER_LATEX}}`;
+            const insertOptions = {
+                selectionMode: "placeholder",
+                focus: true,
+                feedback: false,
+            };
+            try {
+                (_a = mathfieldApi.focus) === null || _a === void 0 ? void 0 : _a.call(mathfieldApi);
+                if (typeof mathfieldApi.insert === "function") {
+                    mathfieldApi.insert(insertValue, insertOptions);
+                    if (typeof mathfieldApi.executeCommand === "function") {
+                        try {
+                            mathfieldApi.executeCommand("moveToPreviousPlaceholder");
+                        }
+                        catch {
+                            // ignore
+                        }
+                    }
+                    mathfield.dispatchEvent(new Event("input", { bubbles: true }));
+                    return true;
+                }
+                if (typeof mathfieldApi.executeCommand === "function") {
+                    const ok = mathfieldApi.executeCommand("insert", insertValue, insertOptions);
+                    if (ok) {
+                        mathfield.dispatchEvent(new Event("input", { bubbles: true }));
+                        return true;
+                    }
+                }
+            }
+            catch {
+                // ignore
+            }
+            return false;
+        };
+        const openSlashCandidates = () => {
+            if (!mathWysiwygApi) {
+                return false;
+            }
+            const mathfieldApi = mathfield;
+            if (typeof mathfieldApi.getValue !== "function") {
+                return false;
+            }
+            const applyFraction = () => {
+                var _a;
+                const rawValue = (_a = mathfieldApi.getValue) === null || _a === void 0 ? void 0 : _a.call(mathfieldApi, "latex");
+                if (typeof rawValue !== "string") {
+                    return;
+                }
+                const selection = getMathFieldSelectionRange(mathfieldApi);
+                const selectionIndex = {
+                    start: offsetToIndex(mathfieldApi, selection.start),
+                    end: offsetToIndex(mathfieldApi, selection.end),
+                };
+                const result = applyTemplateToText(rawValue, selectionIndex, "\\\\frac{#?}{#?}", {
+                    placeholder: PLACEHOLDER_LATEX,
+                    baseMode: "wrap",
+                    baseIndex: 0,
+                    baseScope: "selection-or-atom",
+                });
+                if (typeof mathfieldApi.setValue === "function") {
+                    mathfieldApi.setValue(result.text);
+                }
+                else if (typeof mathfieldApi.value === "string") {
+                    mathfieldApi.value = result.text;
+                }
+                const startOffset = indexToOffset(mathfieldApi, result.selectionStart);
+                const endOffset = indexToOffset(mathfieldApi, result.selectionEnd);
+                setSelectionRange(mathfieldApi, startOffset, endOffset);
+                mathfield.dispatchEvent(new Event("input", { bubbles: true }));
+            };
+            const applySlash = () => {
+                insertMathKey({ label: "/", latex: "/" });
+            };
+            mathWysiwygApi.openCustomCandidates([
+                {
+                    id: "fraction",
+                    label: "a/b",
+                    hint: "/",
+                    displayLatex: "\\\\frac{a}{b}",
+                    apply: applyFraction,
+                },
+                {
+                    id: "slash",
+                    label: "/",
+                    hint: "/",
+                    displayLatex: "/",
+                    apply: applySlash,
+                },
+            ], { selectedIndex: 0 });
+            return true;
+        };
+        const MATRIX_ENV_NAMES = new Set([
+            "matrix",
+            "pmatrix",
+            "bmatrix",
+            "Bmatrix",
+            "vmatrix",
+            "Vmatrix",
+            "smallmatrix",
+            "cases",
+            "dcases",
+            "rcases",
+        ]);
+        const findMatrixEnvironment = (latex, cursorIndex) => {
+            const tokenRegex = /\\(begin|end)\{([A-Za-z*]+)\}/g;
+            const stack = [];
+            let match = null;
+            let found = null;
+            while ((match = tokenRegex.exec(latex))) {
+                const kind = match[1];
+                const name = match[2];
+                const tokenStart = match.index;
+                const tokenText = match[0];
+                if (kind === "begin") {
+                    stack.push({
+                        name,
+                        start: tokenStart,
+                        bodyStart: tokenStart + tokenText.length,
+                        beginToken: tokenText,
+                    });
+                    continue;
+                }
+                for (let i = stack.length - 1; i >= 0; i -= 1) {
+                    if (stack[i].name !== name) {
+                        continue;
+                    }
+                    const entry = stack.splice(i, 1)[0];
+                    const base = name.replace(/\*$/, "");
+                    const bodyEnd = tokenStart;
+                    if (cursorIndex >= entry.bodyStart && cursorIndex <= bodyEnd) {
+                        if (MATRIX_ENV_NAMES.has(base)) {
+                            if (!found || entry.bodyStart >= found.bodyStart) {
+                                found = {
+                                    name,
+                                    start: entry.start,
+                                    end: tokenStart + tokenText.length,
+                                    bodyStart: entry.bodyStart,
+                                    bodyEnd,
+                                    beginToken: entry.beginToken,
+                                    endToken: tokenText,
+                                };
+                            }
+                        }
+                    }
+                    break;
+                }
+            }
+            return found;
+        };
+        const splitRows = (body) => {
+            const rows = [];
+            let depth = 0;
+            let rowStart = 0;
+            for (let i = 0; i < body.length; i += 1) {
+                const ch = body[i];
+                if (ch === "{") {
+                    depth += 1;
+                }
+                else if (ch === "}") {
+                    depth = Math.max(0, depth - 1);
+                }
+                if (ch === "\\" && body[i + 1] === "\\" && depth === 0) {
+                    rows.push({ text: body.slice(rowStart, i), start: rowStart, end: i });
+                    i += 1;
+                    rowStart = i + 1;
+                }
+            }
+            rows.push({ text: body.slice(rowStart), start: rowStart, end: body.length });
+            return rows;
+        };
+        const splitCells = (rowText) => {
+            const cells = [];
+            let depth = 0;
+            let cellStart = 0;
+            for (let i = 0; i < rowText.length; i += 1) {
+                const ch = rowText[i];
+                if (ch === "{") {
+                    depth += 1;
+                }
+                else if (ch === "}") {
+                    depth = Math.max(0, depth - 1);
+                }
+                if (ch === "&" && depth === 0) {
+                    cells.push({ text: rowText.slice(cellStart, i), start: cellStart, end: i });
+                    cellStart = i + 1;
+                }
+            }
+            cells.push({ text: rowText.slice(cellStart), start: cellStart, end: rowText.length });
+            return cells;
+        };
+        const rebuildMatrixBody = (rows, selectionTarget) => {
+            let body = "";
+            let selectionIndex = 0;
+            rows.forEach((cells, rowIndex) => {
+                if (rowIndex > 0) {
+                    body += "\\\\";
+                }
+                let rowOffset = body.length;
+                cells.forEach((cell, colIndex) => {
+                    if (colIndex > 0) {
+                        body += "&";
+                    }
+                    if (selectionTarget && rowIndex === selectionTarget.row && colIndex === selectionTarget.col) {
+                        selectionIndex = rowOffset + body.length - rowOffset;
+                    }
+                    body += cell;
+                });
+            });
+            if (selectionTarget) {
+                const targetRow = rows[selectionTarget.row];
+                if (targetRow) {
+                    let cursor = 0;
+                    for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+                        if (rowIndex > 0) {
+                            cursor += 2;
+                        }
+                        const cells = rows[rowIndex];
+                        for (let colIndex = 0; colIndex < cells.length; colIndex += 1) {
+                            if (colIndex > 0) {
+                                cursor += 1;
+                            }
+                            if (rowIndex === selectionTarget.row && colIndex === selectionTarget.col) {
+                                selectionIndex = cursor;
+                                return { body, selectionIndex };
+                            }
+                            cursor += cells[colIndex].length;
+                        }
+                    }
+                }
+            }
+            return { body, selectionIndex: 0 };
+        };
+        const tryApplyMatrixEdit = (mode) => {
+            var _a;
+            const mathfieldApi = mathfield;
+            if (typeof mathfieldApi.getValue !== "function") {
+                return false;
+            }
+            const selection = getMathFieldSelectionRange(mathfieldApi);
+            if (selection.start !== selection.end) {
+                return false;
+            }
+            const latex = mathfieldApi.getValue("latex");
+            if (typeof latex !== "string") {
+                return false;
+            }
+            const cursorIndex = offsetToIndex(mathfieldApi, selection.end);
+            const env = findMatrixEnvironment(latex, cursorIndex);
+            if (!env) {
+                return false;
+            }
+            const body = latex.slice(env.bodyStart, env.bodyEnd);
+            const rows = splitRows(body);
+            if (rows.length === 0) {
+                return false;
+            }
+            const parsedRows = rows.map((row) => ({
+                ...row,
+                cells: splitCells(row.text),
+            }));
+            const cursorInBody = Math.max(0, cursorIndex - env.bodyStart);
+            let rowIndex = parsedRows.findIndex((row) => cursorInBody >= row.start && cursorInBody <= row.end);
+            if (rowIndex < 0) {
+                rowIndex = Math.max(0, parsedRows.length - 1);
+            }
+            const row = parsedRows[rowIndex];
+            const cursorInRow = cursorInBody - row.start;
+            let colIndex = row.cells.findIndex((cell) => cursorInRow >= cell.start && cursorInRow <= cell.end);
+            if (colIndex < 0) {
+                colIndex = Math.max(0, row.cells.length - 1);
+            }
+            const colCount = Math.max(1, ...parsedRows.map((entry) => Math.max(1, entry.cells.length)));
+            let nextRows = parsedRows.map((entry) => entry.cells.map((cell) => cell.text));
+            let selectionTarget = null;
+            if (mode === "row") {
+                const newRow = Array.from({ length: colCount }, () => PLACEHOLDER_LATEX);
+                const insertAt = Math.min(rowIndex + 1, nextRows.length);
+                nextRows = [
+                    ...nextRows.slice(0, insertAt),
+                    newRow,
+                    ...nextRows.slice(insertAt),
+                ];
+                selectionTarget = { row: insertAt, col: 0 };
+            }
+            else {
+                const insertAt = Math.min(colIndex + 1, colCount);
+                nextRows = nextRows.map((cells, index) => {
+                    const normalized = [...cells];
+                    while (normalized.length < colCount) {
+                        normalized.push("");
+                    }
+                    normalized.splice(insertAt, 0, PLACEHOLDER_LATEX);
+                    return normalized;
+                });
+                selectionTarget = { row: rowIndex, col: insertAt };
+            }
+            const { body: nextBody, selectionIndex } = rebuildMatrixBody(nextRows, selectionTarget);
+            const nextLatex = `${env.beginToken}${nextBody}${env.endToken}`;
+            const startOffset = indexToOffset(mathfieldApi, env.start);
+            const endOffset = indexToOffset(mathfieldApi, env.end);
+            setSelectionRange(mathfieldApi, startOffset, endOffset);
+            (_a = mathfieldApi.focus) === null || _a === void 0 ? void 0 : _a.call(mathfieldApi);
+            let replaced = false;
+            if (typeof mathfieldApi.executeCommand === "function") {
+                try {
+                    replaced = mathfieldApi.executeCommand("insert", nextLatex);
+                }
+                catch {
+                    replaced = false;
+                }
+            }
+            if (!replaced && typeof mathfieldApi.insert === "function") {
+                mathfieldApi.insert(nextLatex, { focus: true, feedback: false });
+                replaced = true;
+            }
+            if (!replaced) {
+                return false;
+            }
+            if (Number.isFinite(selectionIndex)) {
+                const nextSelection = env.start + env.beginToken.length + selectionIndex;
+                const nextOffset = indexToOffset(mathfieldApi, nextSelection);
+                setSelectionRange(mathfieldApi, nextOffset, nextOffset);
+            }
+            mathfield.dispatchEvent(new Event("input", { bubbles: true }));
+            return true;
+        };
+        const tryInsertMatrixRow = () => tryApplyMatrixEdit("row");
+        const tryInsertMatrixColumn = () => tryApplyMatrixEdit("column");
+        const handleMathFieldKeydown = (event) => {
+            if (event.isComposing) {
+                return;
+            }
+            if (mathWysiwygApi === null || mathWysiwygApi === void 0 ? void 0 : mathWysiwygApi.handleKeydown(event)) {
+                event.stopPropagation();
+                return;
+            }
+            if (event.key === "Tab" && !event.metaKey && !event.ctrlKey && !event.altKey) {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                moveMathFieldPlaceholder(mathfield, event.shiftKey ? "backward" : "forward");
+                return;
+            }
+            if (event.defaultPrevented) {
+                return;
+            }
+        };
+        mathfield.addEventListener("keydown", handleMathFieldKeydown, { capture: true });
+        const shadowRoot = mathfield.shadowRoot;
+        if (shadowRoot) {
+            shadowRoot.addEventListener("keydown", handleMathFieldKeydown, { capture: true });
+        }
         mathfield.addEventListener("keydown", (e) => {
             var _a;
+            if (mathWysiwygApi === null || mathWysiwygApi === void 0 ? void 0 : mathWysiwygApi.handleKeydown(e)) {
+                return;
+            }
+            if (e.isComposing) {
+                return;
+            }
+            if (!e.metaKey && !e.altKey && e.ctrlKey && e.key === ".") {
+                const opened = mathWysiwygApi === null || mathWysiwygApi === void 0 ? void 0 : mathWysiwygApi.openExplicitSuggestions();
+                if (opened) {
+                    e.preventDefault();
+                }
+                return;
+            }
+            if (e.key === "Enter" && !e.shiftKey && !e.altKey && !e.metaKey && !e.ctrlKey) {
+                if (tryInsertMatrixRow()) {
+                    closeWysiwygSuggestions();
+                    e.preventDefault();
+                    return;
+                }
+            }
+            if (e.key === "Enter" && !e.shiftKey && !e.altKey && (e.metaKey || e.ctrlKey)) {
+                if (tryInsertMatrixColumn()) {
+                    closeWysiwygSuggestions();
+                    e.preventDefault();
+                    return;
+                }
+            }
+            if (!e.metaKey && !e.ctrlKey && !e.altKey) {
+                if (e.key === "/" && openSlashCandidates()) {
+                    e.preventDefault();
+                    return;
+                }
+            }
             if (e.key === "Escape") {
+                closeWysiwygSuggestions();
                 mathfield.blur();
                 return;
             }
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                closeWysiwygSuggestions();
                 e.preventDefault();
                 (_a = deps.onMathFieldSubmit) === null || _a === void 0 ? void 0 : _a.call(deps);
                 return;
             }
-            if (e.key === "Tab")
-                return;
-            e.stopPropagation();
         });
         mathfield.addEventListener("focus", () => {
             mathKeyboardVisibilityHandler();
@@ -560,19 +748,27 @@ export const initBlockInputUi = (context, deps) => {
         });
         mathfield.addEventListener("blur", () => {
             mathfield.classList.remove("is-focused");
+            closeWysiwygSuggestions();
         });
-        mathfield.addEventListener("compositionstart", (e) => e.stopPropagation());
-        mathfield.addEventListener("compositionend", (e) => e.stopPropagation());
-    };
-    const buildTableSnippetFromRaw = (raw) => {
-        const trimmed = raw.trim();
-        if (!trimmed) {
-            return "";
-        }
-        if (trimmed.startsWith("\\begin{")) {
-            return trimmed;
-        }
-        return ["\\begin{tabular}{|c|}", trimmed, "\\end{tabular}", ""].join("\n");
+        mathfield.addEventListener("compositionstart", (e) => {
+            e.stopPropagation();
+            mathWysiwygApi === null || mathWysiwygApi === void 0 ? void 0 : mathWysiwygApi.setComposing(true);
+        });
+        mathfield.addEventListener("compositionend", (e) => {
+            e.stopPropagation();
+            mathWysiwygApi === null || mathWysiwygApi === void 0 ? void 0 : mathWysiwygApi.setComposing(false);
+        });
+        mathfield.addEventListener("pointerdown", () => {
+            // Keep suggestions in sync with caret movement.
+        });
+        mathfield.addEventListener("selection-change", () => {
+            // Handled by the MathWysiwyg auto-suggest listener.
+        });
+        mathfield.addEventListener("move-out", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+        });
+        mathWysiwygApi === null || mathWysiwygApi === void 0 ? void 0 : mathWysiwygApi.attach(mathfield);
     };
     const buildMathSnippet = (formula) => {
         const context = deps.getActiveBlockContext();
@@ -619,61 +815,14 @@ export const initBlockInputUi = (context, deps) => {
                 return `$${trimmed}$`;
         }
     };
-    const parseTableSize = () => {
-        const rows = blockTableRows instanceof HTMLInputElement
-            ? Number.parseInt(blockTableRows.value, 10)
-            : NaN;
-        const cols = blockTableCols instanceof HTMLInputElement
-            ? Number.parseInt(blockTableCols.value, 10)
-            : NaN;
-        if (!Number.isFinite(rows) || rows < 1 || rows > 20) {
-            return null;
-        }
-        if (!Number.isFinite(cols) || cols < 1 || cols > 12) {
-            return null;
-        }
-        return { rows, cols };
-    };
-    const buildTableSnippet = (rows, cols) => {
-        const columnSpec = `|${"c|".repeat(cols)}`;
-        const rowCells = Array.from({ length: cols }, () => " ").join(" & ");
-        const lines = [];
-        lines.push(`\\begin{tabular}{${columnSpec}}`);
-        for (let row = 0; row < rows; row += 1) {
-            lines.push("\\hline");
-            lines.push(`${rowCells} \\\\`);
-        }
-        lines.push("\\hline");
-        lines.push("\\end{tabular}");
-        lines.push("");
-        return lines.join("\n");
-    };
     const getBlockDraft = () => {
-        if (activeBlockType === "math") {
-            const formula = getMathInputValue();
-            const normalizedFormula = normalizeMathValueForOutput(formula);
-            const snippet = buildMathSnippet(normalizedFormula);
-            if (!snippet.trim()) {
-                return null;
-            }
-            return { snippet, content: { formula: normalizedFormula.trim() } };
-        }
-        if (tableEditMode === "raw") {
-            const raw = getTableRawValue();
-            const snippet = buildTableSnippetFromRaw(raw);
-            if (!snippet.trim()) {
-                return null;
-            }
-            return { snippet, content: { raw } };
-        }
-        const size = parseTableSize();
-        if (!size) {
+        const formula = getMathInputValue();
+        const normalizedFormula = normalizeMathValueForOutput(formula);
+        const snippet = buildMathSnippet(normalizedFormula);
+        if (!snippet.trim()) {
             return null;
         }
-        return {
-            snippet: buildTableSnippet(size.rows, size.cols),
-            content: { rows: size.rows, cols: size.cols },
-        };
+        return { snippet, content: { formula: normalizedFormula.trim() } };
     };
     const resolveInsertValue = (key, isTextArea) => {
         const source = isTextArea && key.fallback ? key.fallback : key.latex;
@@ -681,14 +830,113 @@ export const initBlockInputUi = (context, deps) => {
         return source.replace(/#\?/g, placeholder);
     };
     const insertMathKey = (key) => {
-        var _a, _b, _c;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o;
         if (!mathInput) {
             return;
         }
         const isTextArea = mathInput instanceof HTMLTextAreaElement;
-        const insertValue = resolveInsertValue(key, isTextArea);
+        const placeholder = isTextArea ? "" : PLACEHOLDER_LATEX;
+        const scriptKind = key.scriptKind;
+        const templateKind = key.templateKind;
+        if (mathInput instanceof HTMLTextAreaElement) {
+            const textArea = mathInput;
+            const start = (_a = textArea.selectionStart) !== null && _a !== void 0 ? _a : textArea.value.length;
+            const end = (_b = textArea.selectionEnd) !== null && _b !== void 0 ? _b : textArea.value.length;
+            const selection = { start, end };
+            if (scriptKind) {
+                const result = applyScriptToText(textArea.value, selection, scriptKind, {
+                    placeholder,
+                    base: (_c = key.scriptBase) !== null && _c !== void 0 ? _c : null,
+                    subValue: scriptKind === "sub"
+                        ? (_d = key.scriptValue) !== null && _d !== void 0 ? _d : null
+                        : (_e = key.scriptSubValue) !== null && _e !== void 0 ? _e : null,
+                    supValue: scriptKind === "sup"
+                        ? (_f = key.scriptValue) !== null && _f !== void 0 ? _f : null
+                        : (_g = key.scriptSupValue) !== null && _g !== void 0 ? _g : null,
+                });
+                textArea.value = result.text;
+                textArea.setSelectionRange(result.selectionStart, result.selectionEnd);
+                textArea.focus();
+                textArea.dispatchEvent(new Event("input", { bubbles: true }));
+                return;
+            }
+            if (templateKind) {
+                const result = applyTemplateToText(textArea.value, selection, key.latex, {
+                    placeholder,
+                    baseMode: templateKind,
+                    baseIndex: key.templateTarget,
+                    baseSeparator: key.templateSeparator,
+                    baseScope: key.templateScope,
+                });
+                textArea.value = result.text;
+                textArea.setSelectionRange(result.selectionStart, result.selectionEnd);
+                textArea.focus();
+                textArea.dispatchEvent(new Event("input", { bubbles: true }));
+                return;
+            }
+            const insertValue = resolveInsertValue(key, true);
+            if (!insertValue) {
+                return;
+            }
+            textArea.value =
+                textArea.value.slice(0, start) + insertValue + textArea.value.slice(end);
+            const nextPos = start + insertValue.length;
+            textArea.setSelectionRange(nextPos, nextPos);
+            textArea.focus();
+            textArea.dispatchEvent(new Event("input", { bubbles: true }));
+            return;
+        }
         const mathField = mathInput;
-        (_a = mathField.focus) === null || _a === void 0 ? void 0 : _a.call(mathField);
+        (_h = mathField.focus) === null || _h === void 0 ? void 0 : _h.call(mathField);
+        const applyMathFieldTextEdit = (next) => {
+            if (typeof mathField.setValue === "function") {
+                mathField.setValue(next.text);
+            }
+            else if (typeof mathField.value === "string") {
+                mathField.value = next.text;
+            }
+            const startOffset = indexToOffset(mathField, next.selectionStart);
+            const endOffset = indexToOffset(mathField, next.selectionEnd);
+            setSelectionRange(mathField, startOffset, endOffset);
+            mathInput.dispatchEvent(new Event("input", { bubbles: true }));
+        };
+        if ((scriptKind || templateKind) &&
+            typeof mathField.getValue === "function") {
+            const rawValue = mathField.getValue("latex");
+            if (typeof rawValue === "string") {
+                const selectionOffset = getMathFieldSelectionRange(mathField);
+                const selectionIndex = {
+                    start: offsetToIndex(mathField, selectionOffset.start),
+                    end: offsetToIndex(mathField, selectionOffset.end),
+                };
+                if (scriptKind) {
+                    const result = applyScriptToText(rawValue, selectionIndex, scriptKind, {
+                        placeholder,
+                        base: (_j = key.scriptBase) !== null && _j !== void 0 ? _j : null,
+                        subValue: scriptKind === "sub"
+                            ? (_k = key.scriptValue) !== null && _k !== void 0 ? _k : null
+                            : (_l = key.scriptSubValue) !== null && _l !== void 0 ? _l : null,
+                        supValue: scriptKind === "sup"
+                            ? (_m = key.scriptValue) !== null && _m !== void 0 ? _m : null
+                            : (_o = key.scriptSupValue) !== null && _o !== void 0 ? _o : null,
+                    });
+                    applyMathFieldTextEdit(result);
+                    return;
+                }
+                if (templateKind) {
+                    const result = applyTemplateToText(rawValue, selectionIndex, key.latex, {
+                        placeholder,
+                        baseMode: templateKind,
+                        baseIndex: key.templateTarget,
+                        baseSeparator: key.templateSeparator,
+                        baseScope: key.templateScope,
+                    });
+                    applyMathFieldTextEdit(result);
+                    return;
+                }
+            }
+        }
+        const insertValue = resolveInsertValue(key, false);
         if (!insertValue) {
             return;
         }
@@ -707,20 +955,17 @@ export const initBlockInputUi = (context, deps) => {
             updateMathPreview();
             return;
         }
-        if (mathInput instanceof HTMLTextAreaElement) {
-            const start = (_b = mathInput.selectionStart) !== null && _b !== void 0 ? _b : mathInput.value.length;
-            const end = (_c = mathInput.selectionEnd) !== null && _c !== void 0 ? _c : mathInput.value.length;
-            mathInput.value =
-                mathInput.value.slice(0, start) + insertValue + mathInput.value.slice(end);
-            const nextPos = start + insertValue.length;
-            mathInput.setSelectionRange(nextPos, nextPos);
-            mathInput.focus();
-        }
-        else if (typeof mathField.value === "string") {
+        if (typeof mathField.value === "string") {
             mathField.value += insertValue;
         }
         mathInput.dispatchEvent(new Event("input", { bubbles: true }));
     };
+    mathWysiwygApi = initMathWysiwyg({
+        container: blockMathInputContainer instanceof HTMLElement ? blockMathInputContainer : null,
+        insertKey: (key) => insertMathKey(key),
+        autoSuggest: mathWysiwygSettings.autoSuggest,
+        enabledPacks: mathWysiwygSettings.enabledPacks,
+    });
     const setBlockSettingsPage = (page) => {
         activeBlockSettingsPage = page;
         if (Array.isArray(blockSettingsPages)) {
@@ -751,10 +996,20 @@ export const initBlockInputUi = (context, deps) => {
     if (blockCaptureButton instanceof HTMLButtonElement) {
         blockCaptureButton.addEventListener("click", () => {
             var _a;
-            if (activeBlockType !== "math") {
-                setActiveBlockType("math");
-            }
             (_a = deps.onMathCaptureRequest) === null || _a === void 0 ? void 0 : _a.call(deps);
+        });
+    }
+    if (blockSuggestButton instanceof HTMLButtonElement) {
+        blockSuggestButton.addEventListener("click", () => {
+            var _a, _b;
+            if (!mathInput) {
+                return;
+            }
+            if (mathWysiwygApi === null || mathWysiwygApi === void 0 ? void 0 : mathWysiwygApi.openExplicitSuggestions()) {
+                if (typeof mathInput.focus === "function") {
+                    (_b = (_a = mathInput).focus) === null || _b === void 0 ? void 0 : _b.call(_a);
+                }
+            }
         });
     }
     if (blockSettingsClose instanceof HTMLButtonElement) {
@@ -776,12 +1031,17 @@ export const initBlockInputUi = (context, deps) => {
                 if (target === "insert-format") {
                     setBlockSettingsPage("insert-format");
                 }
+                else if (target === "suggestions") {
+                    setBlockSettingsPage("suggestions");
+                }
             });
         });
     }
-    if (blockSettingsBack instanceof HTMLButtonElement) {
-        blockSettingsBack.addEventListener("click", () => {
-            setBlockSettingsPage("menu");
+    if (Array.isArray(blockSettingsBackButtons)) {
+        blockSettingsBackButtons.forEach((button) => {
+            button.addEventListener("click", () => {
+                setBlockSettingsPage("menu");
+            });
         });
     }
     if (Array.isArray(blockSettingsInlineOptions)) {
@@ -803,6 +1063,30 @@ export const initBlockInputUi = (context, deps) => {
                     return;
                 }
                 setMathDisplayWrap(next);
+            });
+        });
+    }
+    if (Array.isArray(wysiwygAutoOptions)) {
+        wysiwygAutoOptions.forEach((option) => {
+            option.addEventListener("click", () => {
+                const value = option.dataset.wysiwygAuto;
+                if (value === "on") {
+                    setMathWysiwygAutoSuggest(true);
+                }
+                else if (value === "off") {
+                    setMathWysiwygAutoSuggest(false);
+                }
+            });
+        });
+    }
+    if (Array.isArray(wysiwygPackOptions)) {
+        wysiwygPackOptions.forEach((option) => {
+            option.addEventListener("click", () => {
+                const packId = option.dataset.wysiwygPack;
+                if (!packId) {
+                    return;
+                }
+                toggleMathWysiwygPack(packId);
             });
         });
     }
@@ -850,31 +1134,14 @@ export const initBlockInputUi = (context, deps) => {
             setFormatMenuOpen(false);
         }
     });
-    blockToggleButtons.forEach((button) => {
-        button.addEventListener("click", () => {
-            const type = button.dataset.block === "table" ? "table" : "math";
-            setActiveBlockType(type);
-        });
-    });
-    if (blockTableRows instanceof HTMLInputElement) {
-        blockTableRows.addEventListener("input", () => { });
-    }
-    if (blockTableCols instanceof HTMLInputElement) {
-        blockTableCols.addEventListener("input", () => { });
-    }
-    if (blockTableRawInput instanceof HTMLTextAreaElement) {
-        blockTableRawInput.addEventListener("input", () => { });
-    }
-    loadMathInsertSettings();
+    applyMathInsertSettings();
+    applyMathWysiwygSettings();
     return {
         getActiveBlockType: () => activeBlockType,
         setActiveBlockType,
         setMathKeyboardVisibilityHandler,
-        setTableEditMode,
         getMathInputValue,
         setMathInputValue,
-        getTableRawValue,
-        setTableRawValue,
         getBlockDraft,
         insertMathKey,
         setMathInputElement,

@@ -14,10 +14,10 @@ export type IssueItem = {
 };
 export type IndexEntry = { key: string; path: string; line: number };
 export type SectionEntry = { title: string; path: string; line: number; level: number };
-export type BlockType = "math" | "table";
+export type BlockType = "math";
 export type BlockMode = "insert" | "edit";
 export type MathKeyboardTab = "analysis" | "algebra" | "sets" | "logic" | "arrows" | "greek";
-export type BlockContent = { formula?: string; rows?: number; cols?: number; raw?: string };
+export type BlockContent = { formula?: string };
 export type BlockEditMode = "none" | "detected";
 export type BlockApplyMode = "detected" | "new";
 export type MathKey = {
@@ -50,45 +50,6 @@ export type MathKey = {
   shiftTemplateScope?: "selection-or-atom" | "selection";
 };
 export type SearchResult = { path: string; line: number; preview: string };
-export type GitEntry = { status: string; path: string; staged?: boolean };
-export type GitHistoryEntry = {
-  hash: string;
-  shortHash: string;
-  date: string;
-  message: string;
-};
-export type GitRepoState = { ok: boolean; reason?: string };
-export type GitRemoteState = { exists: boolean; name?: string; url?: string | null };
-export type GitBranchState = {
-  name?: string | null;
-  upstream?: string | null;
-  ahead?: number;
-  behind?: number;
-  detached?: boolean;
-};
-export type GitStatusPayload = {
-  entries: GitEntry[];
-  message?: string;
-  repo?: GitRepoState;
-  remote?: GitRemoteState;
-  branch?: GitBranchState;
-  history?: GitHistoryEntry[];
-  historyMessage?: string;
-};
-export type GitDiffPayload = {
-  ok: boolean;
-  mode: "commit" | "restore";
-  hash?: string;
-  patch?: string;
-  message?: string | null;
-};
-export type GitActionResultPayload = {
-  action: "init" | "commit" | "remote" | "pull" | "push" | "restore";
-  ok: boolean;
-  status?: "success" | "info" | "error";
-  message?: string | null;
-  hint?: string | null;
-};
 export type FileNode = { name: string; path: string; type: "file" | "dir"; children: FileNode[] };
 export type RootSource = "auto" | "manual";
 export type LauncherTemplate = "paper" | "lecture";
@@ -110,11 +71,48 @@ export type AgentSettings = {
   blockedTopLevel?: string[];
   textExtensions?: string[];
   extraTextExtensions?: string[];
+  costInputPerMillion?: number;
+  costOutputPerMillion?: number;
+};
+
+export type ApiUsageSnapshot = {
+  currency: string;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalTokens: number;
+  totalRequests: number;
+  totalCostUsd: number;
+  formattedTotalCostUsd?: string;
+  lastUpdatedAt?: number | null;
+  pricing?: { inputPerMillion: number; outputPerMillion: number; currency?: string };
+  byModel?: Record<
+    string,
+    {
+      inputTokens: number;
+      outputTokens: number;
+      totalTokens: number;
+      totalCostUsd: number;
+      totalRequests: number;
+      lastSource?: string | null;
+    }
+  >;
+};
+
+export type ApiCompletionResultPayload = {
+  requestId: string;
+  ok: boolean;
+  text?: string | null;
+  error?: string;
+  usageSnapshot?: ApiUsageSnapshot;
 };
 export type AppSettingsSnapshot = {
   compileEngine: string;
   autoSynctexOnBuild: boolean;
+  reverseSynctexEnabled: boolean;
   pdfViewerMode: "window" | "tab";
+  ghostCompletionEnabled: boolean;
+  ghostCompletionDebounceMs: number;
+  ghostCompletionMaxChars: number;
   alignEnv: boolean;
   formatSettings: EditorFormatSettings;
 };
@@ -212,9 +210,6 @@ export type BridgeWindow = Window &
       todos?: IndexEntry[];
     }) => void;
     tex64UpdateSearch?: (payload: { query: string; results: SearchResult[]; message?: string }) => void;
-    tex64UpdateGit?: (payload: GitStatusPayload) => void;
-    tex64UpdateGitDiff?: (payload: GitDiffPayload) => void;
-    tex64UpdateGitActionResult?: (payload: GitActionResultPayload) => void;
     tex64OpenFileResult?: (payload: { path: string; content?: string; error?: string }) => void;
     tex64SaveResult?: (payload: {
       path: string;
@@ -236,6 +231,17 @@ export type BridgeWindow = Window &
       page?: number;
       x?: number;
       y?: number;
+      pdfPath?: string | null;
+    }) => void;
+    tex64SynctexReverseResult?: (payload: {
+      ok?: boolean;
+      error?: string;
+      path?: string;
+      line?: number;
+      column?: number;
+      confidence?: boolean;
+      scoreGap?: number | null;
+      distance?: number | null;
       pdfPath?: string | null;
     }) => void;
     tex64RenameResult?: (payload: {

@@ -30,7 +30,7 @@ E2E:
 - UI の見た目は `Resources/web/index.html` / `Resources/web/theme.css` / `Resources/web/pdf-viewer.*` を編集（ロジックは `web-src` 側）。
 - 整形のベースは `Resources/latexindent.yaml`。実際の上書き設定は `.tex64/.format/` に生成される。
 - `.tex64/` はワークスペースの内部状態（settings/blocks/trash）。手で編集しない。
-- 実装を変えたら対応する機能別 implementation（`AI implementation.md` など。一覧は `docs/implementation.md`）を必ず更新する。
+- 実装を変えたら `implementation.md`（ユーザーができること/仕様一覧）を必ず更新する。
 
 ## 安全な変更ガイド（AI/自動化向け）
 
@@ -72,7 +72,7 @@ E2E:
 
 - Electron メイン: `electron/main.cjs` がウィンドウ/IPC/サービスを統括。
 - Bridge: `electron/preload.cjs` が `window.tex64Bridge` を公開。PDF 窓は `electron/pdf-preload.cjs`。
-- Services: `electron/services/*` (build/formatter/indexer/search/git/synctex/pdf/env/workspace/blocks)。
+- Services: `electron/services/*` (build/formatter/indexer/search/synctex/pdf/env/workspace/blocks)。
 - Web UI ソース: `web-src/main.ts`（エントリ） + `web-src/app/**`。
 - Web UI 生成物: `Resources/web/main.js` + `Resources/web/app/*.js`。
 - Web UI 手書き: `Resources/web/index.html` / `Resources/web/theme.css` / `Resources/web/pdf-viewer.*`。
@@ -82,14 +82,13 @@ E2E:
 ## UI マップ（主要 ID）
 
 - Top actions: `#editor-split-button`, `#format-button`, `#build-button`
-- Tabs: `data-tab="files|outline|blocks|alchemy|issues|git|project|search|settings"`
+- Tabs: `data-tab="files|outline|blocks|ai|issues|project|search|settings"`
 - Files: `#workspace-label`, `#file-tree`
 - Editor: `#editor`, `#editor-tabs-list`, `#editor-viewer`（secondary: `#editor-secondary`, `#editor-tabs-list-secondary`, `#editor-viewer-secondary`）
 - Issues: `#issues-list`, `#issues-log`, `#issues-log-content`
 - Blocks: `#block-math-input-container`, `#block-mode-toggle`, `#block-insert-button`, `#math-keyboard-dock`
 - Diff modal: `#diff-modal`, `#diff-modal-submit`, `#diff-modal-cancel`
-- Git: `#git-commit-message`, `#git-commit-button`, `#git-history`, `#git-pull`, `#git-push`, `#git-remote-url`, `#git-remote-save`
-- Project/Settings: `#settings-root-select`, `#settings-root-auto`, `#settings-compile-engine`, `#editor-auto-synctex-build`, `#editor-pdf-window`
+- Project/Settings: `#settings-root-select`, `#settings-root-auto`, `#settings-compile-engine`, `#editor-auto-synctex-build`, `#editor-reverse-synctex`, `#editor-pdf-window`
 
 ## 現行仕様（要点）
 
@@ -112,7 +111,7 @@ E2E:
 - ビルドは `latexmk` を使用。エンジンは `lualatex` / `pdflatex` / `xelatex` / `uplatex` から選択。
 - 成功時のみ PDF を更新し、失敗時は前回成功 PDF を保持。ビルドログは Issues に表示。
 - 整形は `latexindent` を使用し、インデント/Begin-End/align/空行/カスタム verbatim を設定可能。未導入/失敗時は簡易インデントでフォールバック。数式環境内の空行は削除する。
-- SyncTeX は「ビルド時のみ forward」。手動ボタンは無効。エラーは Issues に集約。
+- SyncTeX はビルド成功時の forward と、PDF上での Ctrl/Cmd+Click による reverse に対応。各動作は設定でON/OFFできる。手動ボタンは無効。エラーは Issues に集約。
 - PDF の表示先はタブ/別ウィンドウを設定で切り替える。
 
 ### 実行環境（ユーザー）
@@ -129,19 +128,14 @@ E2E:
 
 ### ブロック/差分プレビュー
 
-- 数式/表をブロックとして検出・編集。MathLive が使えない場合はテキスト入力にフォールバック。
+- 数式をブロックとして検出・編集。MathLive が使えない場合はテキスト入力にフォールバック。
 - 自動検出はカーソル位置に追従し、`verbatim` 系は除外。
 - 挿入/変更は共通の差分プレビューで確定。変更対象がズレた場合はエラー。
 - ブロック履歴は `.tex64/blocks.json` に保存。
 
-### 履歴/同期 (Git)
-
-- Git の init/commit/restore/pull/push/remote 設定に対応。
-- 保存/復元は差分プレビュー経由。同期失敗時はヒントを表示。
-
 ### 設定
 
-- プロジェクトタブ: メイン TeX 選択と環境登録（数式/表の検出対象）。
+- プロジェクトタブ: メイン TeX 選択と環境登録（数式の検出対象）。
 - 設定タブ: コンパイルエンジン、SyncTeX、PDF 表示モード、整形設定、環境チェック/インストール。
 
 ## 方針（UX/安定性）
@@ -157,29 +151,6 @@ E2E:
 ## 設計指針（コード構成）
 
 - `web-src/main.ts` は配線に徹し、機能追加はモジュール化して import する。
-
-## 取り込み機能（現行仕様）: ウィンドウキャプチャ → TeX 変換
-
-### 入口 / 画面構成
-
-- サイドバーの「取り込み」タブで「キャプチャして変換」を押す。
-- ウィンドウ選択 → 範囲切り取り → OCR を実行し、結果を .tex に挿入する。
-- 設定は「OCR言語」のみ。
-
-### 取り込み対象と挙動
-
-- ウィンドウ/画面サムネイルを選択してキャプチャ。
-- 選択範囲を切り取り、OCRで文字抽出 → LaTeXテキストとして挿入する。
-
-### 挿入
-
-- 挿入位置はカーソル位置、または選択範囲の置換。
-- `.tex` 以外では挿入不可でエラー表示。
-
-### 現状の制限
-
-- PDF/画像ファイルの読み込み・貼り付けは未対応。
-- 数式OCR / 表抽出 / レイアウト分解は未対応。
 
 ## タスク
 

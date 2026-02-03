@@ -1,0 +1,121 @@
+const stripMathCaptureWrapper = (value) => {
+    const trimmed = value.trim();
+    const wrappers = [
+        ["$$", "$$"],
+        ["$", "$"],
+        ["\\(", "\\)"],
+        ["\\[", "\\]"],
+    ];
+    for (const [start, end] of wrappers) {
+        if (trimmed.startsWith(start) && trimmed.endsWith(end)) {
+            const inner = trimmed.slice(start.length, -end.length).trim();
+            if (inner) {
+                return inner;
+            }
+        }
+    }
+    return trimmed;
+};
+const stripLatexCommandBlocks = (value, commands) => {
+    let result = "";
+    for (let i = 0; i < value.length; i += 1) {
+        if (value[i] !== "\\") {
+            result += value[i];
+            continue;
+        }
+        let name = "";
+        let cursor = i + 1;
+        while (cursor < value.length && /[A-Za-z]/.test(value[cursor])) {
+            name += value[cursor];
+            cursor += 1;
+        }
+        if (!name || !commands.has(name)) {
+            result += value[i];
+            continue;
+        }
+        while (cursor < value.length && /\s/.test(value[cursor])) {
+            cursor += 1;
+        }
+        if (value[cursor] !== "{") {
+            result += value[i];
+            continue;
+        }
+        let depth = 0;
+        let end = cursor;
+        for (; end < value.length; end += 1) {
+            if (value[end] === "{") {
+                depth += 1;
+            }
+            else if (value[end] === "}") {
+                depth -= 1;
+                if (depth === 0) {
+                    break;
+                }
+            }
+        }
+        if (depth === 0) {
+            i = end;
+            continue;
+        }
+        result += value[i];
+    }
+    return result;
+};
+const normalizeMathCaptureText = (value) => {
+    const trimmed = value.trim();
+    if (!trimmed) {
+        return "";
+    }
+    const unwrapped = stripMathCaptureWrapper(trimmed);
+    const noWhitespace = unwrapped.replace(/\s+/g, "");
+    const textCommands = new Set([
+        "text",
+        "mbox",
+        "textnormal",
+        "textrm",
+        "textsf",
+        "texttt",
+        "textbf",
+        "textit",
+    ]);
+    let cleaned = stripLatexCommandBlocks(noWhitespace, textCommands);
+    cleaned = cleaned.replace(/\\newline/g, "").replace(/\\\\/g, "");
+    cleaned = cleaned.replace(/[^A-Za-z0-9\\{}_^=+\-*/().,\[\]|<>!:]/g, "");
+    return cleaned;
+};
+export const createMathCaptureHandler = (params) => {
+    let mathCaptureBusy = false;
+    const reportError = (message) => {
+        params.updateIssues(1, message, "error", [{ severity: "error", message }]);
+    };
+    const handleMathCaptureImage = (imageDataUrl) => {
+        if (mathCaptureBusy) {
+            return;
+        }
+        if (!imageDataUrl) {
+            reportError("キャプチャ画像がありません。");
+            return;
+        }
+        mathCaptureBusy = true;
+        params
+            .recognizeMath(imageDataUrl)
+            .then((latex) => {
+            const normalized = normalizeMathCaptureText(latex);
+            if (!normalized) {
+                reportError("OCR結果が空でした。");
+                return;
+            }
+            params.onInsertMath(normalized);
+        })
+            .catch((error) => {
+            const message = error instanceof Error ? error.message : "OCRに失敗しました。";
+            reportError(message);
+        })
+            .finally(() => {
+            mathCaptureBusy = false;
+        });
+    };
+    return {
+        handleMathCaptureImage,
+    };
+};

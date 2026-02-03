@@ -7,6 +7,12 @@ export type ViewerDeps = {
   editorViewerImage: HTMLImageElement | null;
   editorViewerPdf: HTMLIFrameElement | null;
   editorHost: HTMLElement | null;
+  onPdfReverseRequest?: (payload: {
+    page: number;
+    x: number;
+    y: number;
+    pdfPath: string | null;
+  }) => void;
 };
 
 export const createViewer = (deps: ViewerDeps) => {
@@ -66,6 +72,21 @@ export const createViewer = (deps: ViewerDeps) => {
         postPdfMessage({ type: "sync", payload: pendingPdfSync });
         pendingPdfSync = null;
       }
+      return;
+    }
+    if (payload.type === "reverse") {
+      const detail = (payload as { payload?: unknown }).payload as
+        | { page?: unknown; x?: unknown; y?: unknown; path?: unknown }
+        | null
+        | undefined;
+      const page = typeof detail?.page === "number" ? detail.page : Number(detail?.page);
+      const x = typeof detail?.x === "number" ? detail.x : Number(detail?.x);
+      const y = typeof detail?.y === "number" ? detail.y : Number(detail?.y);
+      if (!Number.isFinite(page) || !Number.isFinite(x) || !Number.isFinite(y)) {
+        return;
+      }
+      const pdfPath = typeof detail?.path === "string" ? detail.path : null;
+      deps.onPdfReverseRequest?.({ page, x, y, pdfPath });
     }
   });
 

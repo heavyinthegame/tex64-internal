@@ -10,11 +10,9 @@
 - `web-src/app/root-selector-ui.ts`: ルート設定/検出でワークスペース未選択。
 - `web-src/app/build-ops-ui.ts`: SyncTeX 対象が .tex 以外 / format 요청の postToNative 失敗 / format 結果が `ok=false` / SyncTeX 結果が `ok=false`。
 - `web-src/app/blocks/insert-flow.ts`: ブロック挿入時に .tex 以外。
-- `web-src/app/alchemy-convert.ts`: 取り込みの挿入先が .tex 以外 / Monaco未準備。
 - `web-src/main.ts`: 数式キャプチャ画像なし / OCR結果が空 / OCR 例外 / MathLive 初期化例外。
 - `web-src/app/math-capture.ts`: キャプチャAPI未提供 / listSources 失敗 / 取得件数0 / crop 失敗。
 - `web-src/app/math-ocr.ts`: 画像ロード失敗 / canvas 初期化失敗 / 数式OCRブリッジ未提供 / OCR結果空。
-- `web-src/app/ocr.ts`: 画像なし / Tesseract 例外。
 
 ## Web: Fallback / Inline / Status (Issues 以外)
 - `web-src/app/monaco-setup.ts`: editor host/loader/monaco 初期化失敗 → フォールバック表示。
@@ -22,8 +20,6 @@
 - `web-src/app/blocks/insert-flow.ts`: Monaco 未準備 → フォールバック表示。
 - `web-src/app/blocks/mathlive.ts`: MathLive 未ロード/タイムアウト → UI エラー表示。
 - `web-src/app/file-tree-ui.ts`: リネーム入力が空/`/`を含む → モーダル内ヘルプのみ。
-- `web-src/app/alchemy-convert.ts`: OCR失敗/容量/入力不正 → ステータス行。
-- `web-src/app/magic-capture.ts`: キャプチャ失敗 → Alchemy のステータス行。
 - `web-src/app/ai-chat-ui.ts`: 提案適用失敗/handleError → チャット内表示。
 
 ## Native: Build / SyncTeX / Format

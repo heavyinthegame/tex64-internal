@@ -46,7 +46,7 @@ class SynctexService {
     return { ok: true, ...selected };
   }
 
-  async reverse({ page, x, y, pdfPath }) {
+  async reverse({ page, x, y, pdfPath, refineLines = 3 }) {
     const synctexPath = this.findSynctex();
     if (!synctexPath) {
       return { ok: false, error: "synctex が見つかりません。" };
@@ -69,7 +69,7 @@ class SynctexService {
     if (!candidates.length) {
       return { ok: false, error: "SyncTeX の参照先が見つかりません。" };
     }
-    const selected = await this.selectReverseCandidate({
+    let selected = await this.selectReverseCandidate({
       candidates,
       click: { page, x, y },
       synctexPath,
@@ -80,7 +80,68 @@ class SynctexService {
     if (!selected) {
       return { ok: false, error: "SyncTeX の参照先が見つかりません。" };
     }
+    const range = Number.isFinite(refineLines)
+      ? Math.min(10, Math.max(0, Math.floor(refineLines)))
+      : 0;
+    if (range > 0) {
+      selected = await this.refineReverseCandidate({
+        candidate: selected,
+        click: { page, x, y },
+        synctexPath,
+        pdfPath,
+        cwd,
+        env,
+        range,
+      });
+    }
     return { ok: true, ...selected };
+  }
+
+  async refineReverseCandidate({ candidate, click, synctexPath, pdfPath, cwd, env, range }) {
+    if (!candidate || typeof candidate !== "object") {
+      return candidate;
+    }
+    const sourcePath = candidate.path;
+    const baseLine = candidate.line;
+    const baseColumn = Number.isFinite(candidate.column) ? candidate.column : 1;
+    if (!sourcePath || !Number.isFinite(baseLine) || baseLine < 1) {
+      return candidate;
+    }
+    const startLine = Math.max(1, baseLine - range);
+    const endLine = baseLine + range;
+    let bestLine = baseLine;
+    let bestDistance = Number.isFinite(candidate.distance) ? candidate.distance : null;
+    for (let line = startLine; line <= endLine; line += 1) {
+      const distance = await this.measureForwardDistance({
+        synctexPath,
+        pdfPath,
+        sourcePath,
+        line,
+        column: baseColumn,
+        click,
+        cwd,
+        env,
+      });
+      if (!Number.isFinite(distance)) {
+        continue;
+      }
+      if (!Number.isFinite(bestDistance) || distance < bestDistance) {
+        bestDistance = distance;
+        bestLine = line;
+      }
+    }
+    if (bestLine === baseLine) {
+      if (Number.isFinite(bestDistance)) {
+        return { ...candidate, distance: bestDistance };
+      }
+      return candidate;
+    }
+    return {
+      ...candidate,
+      line: bestLine,
+      distance: Number.isFinite(bestDistance) ? bestDistance : candidate.distance ?? null,
+      refined: true,
+    };
   }
 
   parseForwardBlocks(output) {

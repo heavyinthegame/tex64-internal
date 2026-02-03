@@ -36,17 +36,10 @@ export const initMathKeyboard = (
   let mathKeyboardNeedsRerender = false;
 
   const normalizeMathKeyboardTab = (tab?: string | null): MathKeyboardTab => {
-    if (
-      tab === "analysis" ||
-      tab === "algebra" ||
-      tab === "sets" ||
-      tab === "logic" ||
-      tab === "arrows" ||
-      tab === "greek"
-    ) {
+    if (tab === "sets" || tab === "logic" || tab === "arrows") {
       return tab;
     }
-    return "analysis";
+    return "sets";
   };
 
   const isMathKeyboardShiftActive = () => shiftHeld || shiftLocked;
@@ -217,6 +210,9 @@ export const initMathKeyboard = (
 
   const renderMathKeyboardFixed = () => {
     renderMathKeyboardKeys(mathKeyboardFixedGrid, mathKeyboardFixedKeys);
+    if (mathKeyboardDock instanceof HTMLElement) {
+      mathKeyboardDock.classList.toggle("has-fixed-keys", mathKeyboardFixedKeys.length > 0);
+    }
   };
 
   const updateMathKeyboardShiftState = () => {

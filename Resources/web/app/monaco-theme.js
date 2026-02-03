@@ -1,0 +1,58 @@
+export const applyMonacoTheme = (monaco) => {
+    var _a, _b, _c, _d;
+    const themeName = "tex64-deep-slate";
+    const themeColors = {
+        "editor.background": "#1A1D23",
+        "editor.foreground": "#CDD1D9",
+        "editorLineNumber.foreground": "#5C6370",
+        "editorLineNumber.activeForeground": "#CDD1D9",
+        "editorCursor.foreground": "#5C9CFF",
+        "editor.selectionBackground": "#2F3642",
+        "editor.inactiveSelectionBackground": "#252B35",
+        "editor.selectionHighlightBackground": "rgba(92, 156, 255, 0.15)",
+        "editor.lineHighlightBackground": "#1F2329",
+        "editor.lineHighlightBorder": "#282C34",
+        "editorIndentGuide.background": "#383E49",
+        "editorIndentGuide.activeBackground": "#565C68",
+        "editorWhitespace.foreground": "#383E49",
+        "editorGutter.background": "#1A1D23",
+        "editorWidget.background": "#262A32",
+        "editorWidget.border": "#454C59",
+        "editorHoverWidget.background": "#262A32",
+        "editorHoverWidget.border": "#454C59",
+        "editorSuggestWidget.background": "#262A32",
+        "editorSuggestWidget.border": "#454C59",
+        "editorSuggestWidget.foreground": "#CDD1D9",
+        "editorSuggestWidget.selectedBackground": "rgba(92, 156, 255, 0.2)",
+        "editorSuggestWidget.highlightForeground": "#5C9CFF",
+        "editorBracketMatch.background": "rgba(92, 156, 255, 0.15)",
+        "editorBracketMatch.border": "#5C9CFF",
+        "editor.findMatchBackground": "rgba(92, 156, 255, 0.25)",
+        "editor.findMatchHighlightBackground": "rgba(92, 156, 255, 0.15)",
+        "editor.findRangeHighlightBackground": "rgba(92, 156, 255, 0.1)",
+        "editor.wordHighlightBackground": "rgba(92, 156, 255, 0.1)",
+        "editor.wordHighlightStrongBackground": "rgba(92, 156, 255, 0.15)",
+        "editorError.foreground": "#D56A6A",
+        "editorError.border": "#00000000",
+        "editorOverviewRuler.border": "#00000000",
+        "editorOverviewRuler.findMatchForeground": "#5C9CFF",
+        "editorOverviewRuler.errorForeground": "#D56A6A",
+        "editorMarkerNavigationError.background": "rgba(213, 106, 106, 0.1)",
+        "editorGutter.errorForeground": "#C55A5A",
+        "editorWarning.foreground": "#B89E52",
+        "editorOverviewRuler.background": "#1A1D23",
+        "scrollbar.shadow": "#000000",
+        "scrollbarSlider.background": "rgba(255, 255, 255, 0.12)",
+        "scrollbarSlider.hoverBackground": "rgba(255, 255, 255, 0.2)",
+        "scrollbarSlider.activeBackground": "rgba(255, 255, 255, 0.28)",
+        "editorRuler.foreground": "#383E49",
+    };
+    (_b = (_a = monaco.editor) === null || _a === void 0 ? void 0 : _a.defineTheme) === null || _b === void 0 ? void 0 : _b.call(_a, themeName, {
+        base: "vs-dark",
+        inherit: true,
+        rules: [],
+        colors: themeColors,
+    });
+    (_d = (_c = monaco.editor) === null || _c === void 0 ? void 0 : _c.setTheme) === null || _d === void 0 ? void 0 : _d.call(_c, themeName);
+    return themeName;
+};
