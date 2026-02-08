@@ -4,8 +4,6 @@ let postMessageHandler = (payload) => {
   ipcRenderer.send("tex64", payload);
 };
 
-const isE2E = process.env.TEX180_E2E === "1";
-
 const messageHandlers = new Set();
 const pendingMessages = [];
 
@@ -72,12 +70,6 @@ Object.defineProperty(bridgeApi, "postMessage", {
   enumerable: true,
 });
 
-if (isE2E) {
-  globalThis.tex64Bridge = bridgeApi;
-  globalThis.tex64Capture = captureApi;
-  globalThis.tex64MathOcr = mathOcrApi;
-} else {
-  contextBridge.exposeInMainWorld("tex64Bridge", bridgeApi);
-  contextBridge.exposeInMainWorld("tex64Capture", captureApi);
-  contextBridge.exposeInMainWorld("tex64MathOcr", mathOcrApi);
-}
+contextBridge.exposeInMainWorld("tex64Bridge", bridgeApi);
+contextBridge.exposeInMainWorld("tex64Capture", captureApi);
+contextBridge.exposeInMainWorld("tex64MathOcr", mathOcrApi);

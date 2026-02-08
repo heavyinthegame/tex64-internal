@@ -116,6 +116,18 @@ export const initBuildOpsUi = (context, deps) => {
             deps.updateIssues(0, "ビルドを開始します。", "info", []);
         }
     };
+    const startBuildWithSave = () => {
+        deps
+            .saveDirtyFiles()
+            .then((ok) => {
+            if (ok) {
+                startBuild();
+            }
+        })
+            .catch((message) => {
+            deps.updateIssues(1, message, "error", [{ severity: "error", message }]);
+        });
+    };
     const requestFormatCurrentFile = (source) => {
         const activeGroup = deps.getActiveGroup();
         const activePath = activeGroup.currentFilePath;
@@ -273,28 +285,24 @@ export const initBuildOpsUi = (context, deps) => {
         deps.updateIssues(1, errorMessage, "error", [issue]);
     };
     const setupActionButtons = () => {
+        const runAfterSavingDirty = (action) => {
+            deps
+                .saveDirtyFiles()
+                .then((ok) => {
+                if (ok) {
+                    action();
+                }
+            })
+                .catch((message) => {
+                deps.updateIssues(1, message, "error", [{ severity: "error", message }]);
+            });
+        };
         if (buildButton instanceof HTMLButtonElement) {
             buildButton.addEventListener("click", () => {
                 if (buildButton.disabled) {
                     return;
                 }
-                const activeGroup = deps.getActiveGroup();
-                if (activeGroup.isDirty && activeGroup.currentFilePath) {
-                    deps
-                        .saveCurrentFile()
-                        .then((ok) => {
-                        if (ok) {
-                            startBuild();
-                        }
-                    })
-                        .catch((message) => {
-                        deps.updateIssues(1, message, "error", [
-                            { severity: "error", message },
-                        ]);
-                    });
-                    return;
-                }
-                startBuild();
+                startBuildWithSave();
             });
         }
         if (formatButton instanceof HTMLButtonElement) {
@@ -307,23 +315,7 @@ export const initBuildOpsUi = (context, deps) => {
                 if (synctexButton.disabled) {
                     return;
                 }
-                const activeGroup = deps.getActiveGroup();
-                if (activeGroup.isDirty && activeGroup.currentFilePath) {
-                    deps
-                        .saveCurrentFile()
-                        .then((ok) => {
-                        if (ok) {
-                            requestSynctexForward(null, { fallbackToTop: true });
-                        }
-                    })
-                        .catch((message) => {
-                        deps.updateIssues(1, message, "error", [
-                            { severity: "error", message },
-                        ]);
-                    });
-                    return;
-                }
-                requestSynctexForward(null, { fallbackToTop: true });
+                runAfterSavingDirty(() => requestSynctexForward(null, { fallbackToTop: true }));
             });
         }
         if (lintButton instanceof HTMLButtonElement) {
@@ -339,23 +331,7 @@ export const initBuildOpsUi = (context, deps) => {
                 if (lintButton.disabled) {
                     return;
                 }
-                const activeGroup = deps.getActiveGroup();
-                if (activeGroup.isDirty && activeGroup.currentFilePath) {
-                    deps
-                        .saveCurrentFile()
-                        .then((ok) => {
-                        if (ok) {
-                            runLint();
-                        }
-                    })
-                        .catch((message) => {
-                        deps.updateIssues(1, message, "error", [
-                            { severity: "error", message },
-                        ]);
-                    });
-                    return;
-                }
-                runLint();
+                runAfterSavingDirty(() => runLint());
             });
         }
     };
@@ -363,6 +339,7 @@ export const initBuildOpsUi = (context, deps) => {
         updateSynctexButtonState,
         setBuildState,
         startBuild,
+        startBuildWithSave,
         requestFormatCurrentFile,
         requestFormatPreview,
         handleFormatResult,

@@ -9,7 +9,7 @@ export const createInlineCompletionController = (deps) => {
     const apiCache = new Map();
     const apiNegativeCache = new Map();
     const inlineConfig = {
-        debounceMs: 260,
+        debounceMs: 120,
         minPrefix: 2,
         maxChars: 140,
         cacheTtlMs: 30000,
@@ -17,13 +17,13 @@ export const createInlineCompletionController = (deps) => {
     };
     const apiConfig = {
         enabled: true,
-        minPrefix: 12,
-        idleMs: 700,
-        cooldownMs: 4000,
-        maxPerMinute: 8,
+        minPrefix: 10,
+        idleMs: 550,
+        cooldownMs: 3000,
+        maxPerMinute: 12,
         timeoutMs: 3500,
         cacheTtlMs: 120000,
-        negativeCacheTtlMs: 15000,
+        negativeCacheTtlMs: 10000,
         maxCacheEntries: 120,
         maxOutputTokens: 40,
         temperature: 0.2,
@@ -168,7 +168,14 @@ export const createInlineCompletionController = (deps) => {
         if (!deps.getGhostCompletionEnabled()) {
             return false;
         }
-        if (prefix.trim().length < apiConfig.minPrefix) {
+        const trimmedPrefix = prefix.trim();
+        if (trimmedPrefix.startsWith("\\")) {
+            return false;
+        }
+        if (hasUnescapedPercent(prefix)) {
+            return false;
+        }
+        if (trimmedPrefix.length < apiConfig.minPrefix) {
             return false;
         }
         if (suffix.trim().length > 0) {
@@ -266,7 +273,8 @@ export const createInlineCompletionController = (deps) => {
         const columnIndex = Math.max(position.column - 1, 0);
         const linePrefix = line.slice(0, columnIndex);
         const lineSuffix = line.slice(columnIndex);
-        if (lineSuffix.trim().length > 0) {
+        const allowAutoClosedBraceSuffix = lineSuffix === "}" && /\\begin\{[A-Za-z*]*$/.test(linePrefix);
+        if (lineSuffix.trim().length > 0 && !allowAutoClosedBraceSuffix) {
             return null;
         }
         if (hasUnescapedPercent(linePrefix)) {

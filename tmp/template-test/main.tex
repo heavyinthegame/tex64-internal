@@ -1,0 +1,70 @@
+% !TEX program = lualatex
+% !TeX program = lualatex
+\documentclass[a4paper,11pt]{ltjsarticle}
+
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{amsmath,amssymb}
+\usepackage{hyperref}
+
+\geometry{margin=25mm}
+\hypersetup{colorlinks=true,linkcolor=blue,urlcolor=blue,citecolor=blue}
+
+\title{タイトル}
+\author{著者名}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+概要をここに書きます。目的・手法・結果を2〜3文でまとめます。
+\end{abstract}
+
+\section{はじめに}
+ここに本文を書きます。段落の最初は全角スペースで始めても良いです。
+
+\subsection{箇条書き}
+\begin{itemize}
+  \item ポイント1
+  \item ポイント2
+\end{itemize}
+
+\subsection{数式}
+式\eqref{eq:sample}のように参照できます。
+\begin{align}
+  E &= mc^2 \label{eq:sample}
+\end{align}
+
+\subsection{図と表}
+図\ref{fig:sample}、表\ref{tab:sample}のように参照できます。
+\begin{figure}[t]
+  \centering
+  \fbox{\rule{0pt}{120pt}\rule{0.9\linewidth}{0pt}}
+  \caption{図の例（画像を入れる場合は \texttt{\\includegraphics} を使います）}
+  \label{fig:sample}
+\end{figure}
+
+\begin{table}[t]
+  \centering
+  \caption{表の例}
+  \label{tab:sample}
+  \begin{tabular}{lrr}
+    \hline
+    項目 & 値1 & 値2 \\
+    \hline
+    A & 1 & 2 \\
+    B & 3 & 4 \\
+    \hline
+  \end{tabular}
+\end{table}
+
+\section{まとめ}
+結論や今後の課題を書きます。
+
+\begin{thebibliography}{9}
+  \bibitem{sample}
+    著者名, \emph{文献タイトル}, 出版社, 2026.
+\end{thebibliography}
+
+\end{document}

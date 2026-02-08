@@ -354,22 +354,39 @@ export const createEditorSessionFileOps = (ctx: FileOpsDeps) => {
     }
     const editor = activeGroup.editor as { getValue: () => string };
     const content = editor.getValue();
-    return new Promise<boolean>((resolve, reject) => {
-      state.pendingSave = { path: activePath as string, content, resolve, reject };
-      const shouldFormat = false;
-      const ok = deps.postToNative({
-        type: "saveFile",
-        path: activePath,
-        content,
-        format: shouldFormat,
-        formatSource: "save",
-        formatSettings: deps.settings.buildFormatSettingsPayload(),
+    const savePathContent = (
+      path: string,
+      value: string,
+      timeoutMs = 8000
+    ): Promise<boolean> =>
+      new Promise<boolean>((resolve, reject) => {
+        const startedAt = Date.now();
+        const enqueue = () => {
+          if (state.pendingSave) {
+            if (Date.now() - startedAt >= timeoutMs) {
+              reject("保存の待機がタイムアウトしました。");
+              return;
+            }
+            window.setTimeout(enqueue, 25);
+            return;
+          }
+          state.pendingSave = { path, content: value, resolve, reject };
+          const ok = deps.postToNative({
+            type: "saveFile",
+            path,
+            content: value,
+            format: false,
+            formatSource: "save",
+            formatSettings: deps.settings.buildFormatSettingsPayload(),
+          });
+          if (!ok) {
+            state.pendingSave = null;
+            reject("ネイティブ連携が利用できません。");
+          }
+        };
+        enqueue();
       });
-      if (!ok) {
-        state.pendingSave = null;
-        reject("ネイティブ連携が利用できません。");
-      }
-    });
+    return savePathContent(activePath as string, content);
   };
 
   const saveCurrentFile = () => {
@@ -382,6 +399,92 @@ export const createEditorSessionFileOps = (ctx: FileOpsDeps) => {
         saveCurrentFileInternal().then(resolve).catch(reject);
       });
     });
+  };
+
+  const saveDirtyFiles = async () => {
+    const dirtyPaths = Array.from(dirtyFiles).filter((path) => isTextFilePath(path));
+    if (dirtyPaths.length === 0) {
+      return true;
+    }
+    const activePath = getActiveGroup().currentFilePath;
+    const ordered = dirtyPaths.slice().sort((a, b) => {
+      if (a === activePath) {
+        return -1;
+      }
+      if (b === activePath) {
+        return 1;
+      }
+      return a.localeCompare(b, "ja");
+    });
+    const readBuffer = (path: string): string | null => {
+      const entry = monacoModels.get(path);
+      if (entry?.model?.getValue) {
+        return entry.model.getValue();
+      }
+      const owner = Object.values(editorGroups).find((group) => group.currentFilePath === path);
+      if (!owner?.editor) {
+        return null;
+      }
+      const editor = owner.editor as { getValue?: () => string };
+      return editor.getValue?.() ?? null;
+    };
+    const waitForCompositionIfNeeded = (path: string) =>
+      new Promise<void>((resolve) => {
+        const owner = Object.values(editorGroups).find((group) => group.currentFilePath === path);
+        if (!owner?.isComposing) {
+          resolve();
+          return;
+        }
+        scheduleAfterComposition(owner, () => resolve());
+      });
+    for (const path of ordered) {
+      if (!dirtyFiles.has(path)) {
+        continue;
+      }
+      await waitForCompositionIfNeeded(path);
+      const content = readBuffer(path);
+      if (content === null) {
+        deps.updateIssues(1, `保存対象の内容を取得できません: ${path}`, "error", [
+          { severity: "error", message: `保存対象の内容を取得できません: ${path}` },
+        ]);
+        return false;
+      }
+      try {
+        await new Promise<boolean>((resolve, reject) => {
+          const startedAt = Date.now();
+          const enqueue = () => {
+            if (state.pendingSave) {
+              if (Date.now() - startedAt >= 8000) {
+                reject("保存の待機がタイムアウトしました。");
+                return;
+              }
+              window.setTimeout(enqueue, 25);
+              return;
+            }
+            state.pendingSave = { path, content, resolve, reject };
+            const ok = deps.postToNative({
+              type: "saveFile",
+              path,
+              content,
+              format: false,
+              formatSource: "save",
+              formatSettings: deps.settings.buildFormatSettingsPayload(),
+            });
+            if (!ok) {
+              state.pendingSave = null;
+              reject("ネイティブ連携が利用できません。");
+            }
+          };
+          enqueue();
+        });
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "保存に失敗しました。";
+        deps.updateIssues(1, message, "error", [{ severity: "error", message }]);
+        return false;
+      }
+    }
+    return true;
   };
 
   const clearAutoSaveTimer = () => {
@@ -569,7 +672,7 @@ export const createEditorSessionFileOps = (ctx: FileOpsDeps) => {
     }
     if (state.autoSavePending) {
       state.autoSavePending = false;
-      if (activeGroup.currentFilePath === payload.path && activeGroup.isDirty) {
+      if (activeGroup.currentFilePath && activeGroup.isDirty) {
         scheduleAutoSave();
       }
     }
@@ -589,6 +692,7 @@ export const createEditorSessionFileOps = (ctx: FileOpsDeps) => {
     applyFormattedContent,
     requestOpenFile,
     saveCurrentFile,
+    saveDirtyFiles,
     scheduleAutoSave,
     handleOpenFileResult,
     handleSaveResult,

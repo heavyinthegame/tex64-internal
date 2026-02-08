@@ -51,23 +51,6 @@ export const initMathLive = (context, deps) => {
         const mathfield = document.createElement("math-field");
         mathfield.id = "block-math-input";
         mathfield.className = "block-math-field";
-        if (context.isE2E) {
-            try {
-                let e2eValue = "";
-                Object.defineProperty(mathfield, "value", {
-                    get() {
-                        return e2eValue;
-                    },
-                    set(next) {
-                        e2eValue = typeof next === "string" ? next : String(next !== null && next !== void 0 ? next : "");
-                    },
-                    configurable: true,
-                });
-            }
-            catch {
-                // ignore value override failures
-            }
-        }
         const scrollHost = document.createElement("div");
         scrollHost.className = "block-math-scroll";
         scrollHost.appendChild(mathfield);

@@ -394,6 +394,19 @@ export const initFileTreeUi = (
   };
 
   const requestDeleteItem = (path: string, kind: "file" | "dir") => {
+    const dirtyPaths = deps.getDirtyPaths();
+    const hasDirtyAffected = Array.from(dirtyPaths).some((entryPath) => {
+      if (entryPath === path) {
+        return true;
+      }
+      return kind === "dir" ? entryPath.startsWith(`${path}/`) : false;
+    });
+    if (hasDirtyAffected) {
+      deps.updateIssues(1, "未保存の変更があります。削除前に保存してください。", "error", [
+        { severity: "error", message: "未保存の変更があります。削除前に保存してください。" },
+      ]);
+      return;
+    }
     deps.postToNative({ type: "deleteItem", path });
   };
 
@@ -606,11 +619,14 @@ export const initFileTreeUi = (
       });
       openFolders = updated;
       saveOpenState();
-      if (selectedTreeType === "dir" && selectedTreePath) {
+      if (selectedTreePath) {
         if (selectedTreePath === oldPath || selectedTreePath.startsWith(`${oldPath}/`)) {
           selectedTreePath = newPath + selectedTreePath.slice(oldPath.length);
         }
       }
+    }
+    if (!payload.isDirectory && selectedTreePath === oldPath) {
+      selectedTreePath = newPath;
     }
   };
 

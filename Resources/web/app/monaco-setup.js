@@ -90,8 +90,11 @@ export const initMonacoSetup = (context, deps) => {
             scrollBeyondLastLine: false,
             wordWrap: "off",
             wordBasedSuggestions: "off",
-            quickSuggestions: false,
+            quickSuggestions: { other: true, comments: false, strings: true },
+            quickSuggestionsDelay: 25,
             suggestOnTriggerCharacters: true,
+            tabCompletion: "off",
+            acceptSuggestionOnEnter: "on",
             occurrencesHighlight: false,
             selectionHighlight: false,
             inlineSuggest: { enabled: deps.getGhostCompletionEnabled() },
@@ -101,6 +104,19 @@ export const initMonacoSetup = (context, deps) => {
             const editor = (_b = (_a = monacoWindow.monaco) === null || _a === void 0 ? void 0 : _a.editor) === null || _b === void 0 ? void 0 : _b.create(host, editorOptions);
             const editorAny = editor;
             group.editor = editor;
+            host.addEventListener("keydown", (event) => {
+                var _a;
+                if (event.key !== "Tab") {
+                    return;
+                }
+                if (!document.querySelector(".suggest-widget.visible")) {
+                    return;
+                }
+                event.preventDefault();
+                event.stopPropagation();
+                const command = event.shiftKey ? "selectPrevSuggestion" : "selectNextSuggestion";
+                (_a = editorAny.trigger) === null || _a === void 0 ? void 0 : _a.call(editorAny, "tex64", command, {});
+            }, true);
             const ghostCaretNode = document.createElement("div");
             ghostCaretNode.className = "monaco-ghost-caret";
             ghostCaretNode.style.height = `${editorOptions.lineHeight}px`;
@@ -162,14 +178,6 @@ export const initMonacoSetup = (context, deps) => {
                 (_c = editorAny.layoutContentWidget) === null || _c === void 0 ? void 0 : _c.call(editorAny, ghostCaretWidget);
             };
             ghostCaretControllers.push({ key: group.key, hide: hideGhostCaret });
-            if (context.isE2E) {
-                if (group.key === "primary") {
-                    window.__tex64Editor = editor;
-                }
-                else {
-                    window.__tex64SecondaryEditor = editor;
-                }
-            }
             host.addEventListener("compositionstart", () => {
                 group.isComposing = true;
                 group.compositionText = "";

@@ -1,0 +1,38 @@
+% !TEX program = lualatex
+% !TeX program = lualatex
+
+% LuaLaTeX: ltjsarticle / pdfLaTeX: CJKutf8 fallback
+\ifdefined\directlua
+  \documentclass[a4paper,11pt]{ltjsarticle}
+\else
+  \documentclass[a4paper,11pt]{article}
+  \usepackage{CJKutf8}
+\fi
+
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{amsmath,amssymb}
+\usepackage{hyperref}
+
+\geometry{margin=25mm}
+\hypersetup{colorlinks=true,linkcolor=blue,urlcolor=blue,citecolor=blue}
+
+\title{タイトル}
+\author{著者名}
+\date{\today}
+
+\begin{document}
+\ifdefined\directlua\else\begin{CJK}{UTF8}{min}\fi
+
+\maketitle
+
+\section{はじめに}
+これは日本語のサンプル文です。\cite{sample}
+
+\begin{thebibliography}{9}
+  \bibitem{sample}
+    著者名, \emph{文献タイトル}, 出版社, 2026.
+\end{thebibliography}
+
+\ifdefined\directlua\else\end{CJK}\fi
+\end{document}

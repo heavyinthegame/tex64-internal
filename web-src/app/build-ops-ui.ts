@@ -41,6 +41,7 @@ type BuildOpsDeps = {
   getStoredCursorPosition: (path: string) => { line: number; column: number } | null;
   cacheCurrentBuffer: (group: EditorGroupState) => void;
   saveCurrentFile: () => Promise<boolean>;
+  saveDirtyFiles: () => Promise<boolean>;
   postToNative: (
     payload: { type: string; [key: string]: unknown },
     silent?: boolean
@@ -78,6 +79,7 @@ export type BuildOpsApi = {
   updateSynctexButtonState: () => void;
   setBuildState: (state: BuildState, message?: string) => void;
   startBuild: () => void;
+  startBuildWithSave: () => void;
   requestFormatCurrentFile: (source: string) => void;
   requestFormatPreview: (payload: {
     path: string;
@@ -275,6 +277,19 @@ export const initBuildOpsUi = (
     }
   };
 
+  const startBuildWithSave = () => {
+    deps
+      .saveDirtyFiles()
+      .then((ok) => {
+        if (ok) {
+          startBuild();
+        }
+      })
+      .catch((message: string) => {
+        deps.updateIssues(1, message, "error", [{ severity: "error", message }]);
+      });
+  };
+
   const requestFormatCurrentFile = (source: string) => {
     const activeGroup = deps.getActiveGroup();
     const activePath = activeGroup.currentFilePath;
@@ -465,28 +480,24 @@ export const initBuildOpsUi = (
   };
 
   const setupActionButtons = () => {
+    const runAfterSavingDirty = (action: () => void) => {
+      deps
+        .saveDirtyFiles()
+        .then((ok) => {
+          if (ok) {
+            action();
+          }
+        })
+        .catch((message: string) => {
+          deps.updateIssues(1, message, "error", [{ severity: "error", message }]);
+        });
+    };
     if (buildButton instanceof HTMLButtonElement) {
       buildButton.addEventListener("click", () => {
         if (buildButton.disabled) {
           return;
         }
-        const activeGroup = deps.getActiveGroup();
-        if (activeGroup.isDirty && activeGroup.currentFilePath) {
-          deps
-            .saveCurrentFile()
-            .then((ok) => {
-              if (ok) {
-                startBuild();
-              }
-            })
-            .catch((message: string) => {
-              deps.updateIssues(1, message, "error", [
-                { severity: "error", message },
-              ]);
-            });
-          return;
-        }
-        startBuild();
+        startBuildWithSave();
       });
     }
 
@@ -501,23 +512,7 @@ export const initBuildOpsUi = (
         if (synctexButton.disabled) {
           return;
         }
-        const activeGroup = deps.getActiveGroup();
-        if (activeGroup.isDirty && activeGroup.currentFilePath) {
-          deps
-            .saveCurrentFile()
-            .then((ok) => {
-              if (ok) {
-                requestSynctexForward(null, { fallbackToTop: true });
-              }
-            })
-            .catch((message: string) => {
-              deps.updateIssues(1, message, "error", [
-                { severity: "error", message },
-              ]);
-            });
-          return;
-        }
-        requestSynctexForward(null, { fallbackToTop: true });
+        runAfterSavingDirty(() => requestSynctexForward(null, { fallbackToTop: true }));
       });
     }
 
@@ -536,23 +531,7 @@ export const initBuildOpsUi = (
         if (lintButton.disabled) {
           return;
         }
-        const activeGroup = deps.getActiveGroup();
-        if (activeGroup.isDirty && activeGroup.currentFilePath) {
-          deps
-            .saveCurrentFile()
-            .then((ok) => {
-              if (ok) {
-                runLint();
-              }
-            })
-            .catch((message: string) => {
-              deps.updateIssues(1, message, "error", [
-                { severity: "error", message },
-              ]);
-            });
-          return;
-        }
-        runLint();
+        runAfterSavingDirty(() => runLint());
       });
     }
   };
@@ -561,6 +540,7 @@ export const initBuildOpsUi = (
     updateSynctexButtonState,
     setBuildState,
     startBuild,
+    startBuildWithSave,
     requestFormatCurrentFile,
     requestFormatPreview,
     handleFormatResult,

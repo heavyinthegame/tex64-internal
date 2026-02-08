@@ -162,6 +162,7 @@ export type EditorSessionApi = {
     options?: { updateSaved?: boolean }
   ) => boolean;
   saveCurrentFile: () => Promise<boolean>;
+  saveDirtyFiles: () => Promise<boolean>;
   requestInitialOpen: () => void;
   openPendingFileIfReady: () => void;
   clearIssueHighlight: () => void;
@@ -212,6 +213,7 @@ export const initEditorSession = (
     editorHost,
     editorHostSecondary,
     editorSplitButton,
+    editorSplitter,
   } = context.dom;
 
   const editorGroupsRootEl =
@@ -264,6 +266,9 @@ export const initEditorSession = (
 
   let activeEditorGroup: EditorGroupKey = "primary";
   let splitViewEnabled = false;
+  const splitRatioKey = "tex64.editorSplitRatio";
+  let splitRatio = 0.5;
+  let layoutFrame: number | null = null;
   const fileOpsState: FileOpsState = {
     pendingOpenRequests: [],
     pendingReveal: null,
@@ -417,6 +422,76 @@ export const initEditorSession = (
     (Object.keys(editorGroups) as EditorGroupKey[]).forEach((key) => {
       handler(editorGroups[key]);
     });
+  };
+
+  const scheduleEditorLayout = () => {
+    if (layoutFrame !== null) {
+      return;
+    }
+    layoutFrame = requestAnimationFrame(() => {
+      layoutFrame = null;
+      forEachEditorGroup((group) => {
+        const editor = group.editor as { layout?: () => void };
+        editor?.layout?.();
+      });
+    });
+  };
+
+  const getSplitSizing = () => {
+    const style = editorGroupsRootEl ? getComputedStyle(editorGroupsRootEl) : null;
+    const min = Number.parseFloat(style?.getPropertyValue("--split-min") ?? "");
+    const handle = Number.parseFloat(style?.getPropertyValue("--split-handle") ?? "");
+    const width = editorGroupsRootEl?.getBoundingClientRect().width ?? 0;
+    return {
+      min: Number.isFinite(min) && min > 0 ? min : 280,
+      handle: Number.isFinite(handle) && handle > 0 ? handle : 8,
+      width,
+    };
+  };
+
+  const clampSplitRatio = (ratio: number) => {
+    const { min, handle, width } = getSplitSizing();
+    const available = Math.max(width - handle, 1);
+    let minRatio = min / available;
+    if (!Number.isFinite(minRatio) || minRatio < 0) {
+      minRatio = 0;
+    }
+    if (minRatio > 0.5) {
+      return 0.5;
+    }
+    const maxRatio = 1 - minRatio;
+    if (!Number.isFinite(ratio)) {
+      return 0.5;
+    }
+    return Math.min(Math.max(ratio, minRatio), maxRatio);
+  };
+
+  const applySplitRatio = (ratio: number, options: { persist?: boolean } = {}) => {
+    if (!editorGroupsRootEl) {
+      return;
+    }
+    const normalized = clampSplitRatio(ratio);
+    splitRatio = normalized;
+    editorGroupsRootEl.style.setProperty("--split-primary", `${normalized}fr`);
+    editorGroupsRootEl.style.setProperty("--split-secondary", `${1 - normalized}fr`);
+    if (editorSplitter instanceof HTMLElement) {
+      editorSplitter.setAttribute("aria-valuenow", String(Math.round(normalized * 100)));
+    }
+    if (options.persist && typeof localStorage !== "undefined") {
+      localStorage.setItem(splitRatioKey, String(normalized));
+    }
+  };
+
+  const restoreSplitRatio = () => {
+    if (typeof localStorage === "undefined") {
+      return 0.5;
+    }
+    const raw = localStorage.getItem(splitRatioKey);
+    const parsed = raw ? Number.parseFloat(raw) : Number.NaN;
+    if (!Number.isFinite(parsed)) {
+      return 0.5;
+    }
+    return Math.min(Math.max(parsed, 0.1), 0.9);
   };
 
   const setEditorGroupEmptyState = (group: EditorGroupState, isEmpty: boolean) => {
@@ -731,18 +806,101 @@ export const initEditorSession = (
     if (editorGroupSecondary instanceof HTMLElement) {
       editorGroupSecondary.setAttribute("aria-hidden", enabled ? "false" : "true");
     }
+    if (editorSplitter instanceof HTMLElement) {
+      editorSplitter.setAttribute("aria-hidden", enabled ? "false" : "true");
+    }
+    if (enabled) {
+      applySplitRatio(splitRatio);
+    }
     if (!enabled && activeEditorGroup === "secondary") {
       setActiveGroup("primary", { focusEditor: false });
     }
-    requestAnimationFrame(() => {
-      forEachEditorGroup((group) => {
-        const editor = group.editor as { layout?: () => void };
-        editor?.layout?.();
-      });
+    scheduleEditorLayout();
+  };
+
+  const setupSplitResizer = () => {
+    if (!(editorSplitter instanceof HTMLElement) || !editorGroupsRootEl) {
+      return;
+    }
+    let isResizing = false;
+
+    const startResize = () => {
+      if (isResizing) {
+        return;
+      }
+      isResizing = true;
+      editorGroupsRootEl.classList.add("is-resizing");
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+      if (editorHost instanceof HTMLElement) {
+        editorHost.style.pointerEvents = "none";
+      }
+      if (editorHostSecondary instanceof HTMLElement) {
+        editorHostSecondary.style.pointerEvents = "none";
+      }
+    };
+
+    const doResize = (event: PointerEvent) => {
+      if (!isResizing || !splitViewEnabled) {
+        return;
+      }
+      const rect = editorGroupsRootEl.getBoundingClientRect();
+      const { handle } = getSplitSizing();
+      const available = Math.max(rect.width - handle, 1);
+      const offset = event.clientX - rect.left - handle / 2;
+      const ratio = offset / available;
+      applySplitRatio(ratio);
+      scheduleEditorLayout();
+    };
+
+    const stopResize = () => {
+      if (!isResizing) {
+        return;
+      }
+      isResizing = false;
+      editorGroupsRootEl.classList.remove("is-resizing");
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      if (editorHost instanceof HTMLElement) {
+        editorHost.style.pointerEvents = "";
+      }
+      if (editorHostSecondary instanceof HTMLElement) {
+        editorHostSecondary.style.pointerEvents = "";
+      }
+      applySplitRatio(splitRatio, { persist: true });
+      scheduleEditorLayout();
+      window.removeEventListener("pointermove", doResize);
+      window.removeEventListener("pointerup", stopResize, true);
+      window.removeEventListener("pointercancel", stopResize, true);
+    };
+
+    editorSplitter.addEventListener("pointerdown", (event) => {
+      if (!splitViewEnabled || event.button !== 0) {
+        return;
+      }
+      event.preventDefault();
+      editorSplitter.setPointerCapture?.(event.pointerId);
+      startResize();
+      doResize(event);
+      window.addEventListener("pointermove", doResize);
+      window.addEventListener("pointerup", stopResize, true);
+      window.addEventListener("pointercancel", stopResize, true);
+    });
+
+    window.addEventListener("resize", () => {
+      if (!splitViewEnabled) {
+        return;
+      }
+      applySplitRatio(splitRatio);
+      scheduleEditorLayout();
     });
   };
 
   const getSplitViewEnabled = () => splitViewEnabled;
+
+  splitRatio = restoreSplitRatio();
+  applySplitRatio(splitRatio);
+  setupSplitResizer();
 
   const getLanguageIdForPath = (path: string) => {
     const ext = getFileExtension(path);
@@ -938,10 +1096,10 @@ export const initEditorSession = (
       if (entry === keepPath) {
         return true;
       }
-      if (!isPersistentTabPath(entry)) {
-        return false;
-      }
       if (dirtyFiles.has(entry)) {
+        return true;
+      }
+      if (!isPersistentTabPath(entry)) {
         return false;
       }
       return true;
@@ -957,6 +1115,7 @@ export const initEditorSession = (
     applyFormattedContent,
     requestOpenFile,
     saveCurrentFile,
+    saveDirtyFiles,
     scheduleAutoSave,
     handleOpenFileResult,
     handleSaveResult,
@@ -1214,6 +1373,7 @@ export const initEditorSession = (
     applyFormattedContent,
     applyContentToOpenFile,
     saveCurrentFile,
+    saveDirtyFiles,
     requestInitialOpen,
     openPendingFileIfReady,
     clearIssueHighlight,

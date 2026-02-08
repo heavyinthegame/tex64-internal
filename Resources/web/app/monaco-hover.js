@@ -1,6 +1,7 @@
 import { pickCitationEntries } from "./index-utils.js";
 const getCursorIndex = (position) => { var _a; return Math.max(0, ((_a = position.column) !== null && _a !== void 0 ? _a : 1) - 1); };
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const escapeHtmlAttr = (value) => value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const findCommandMatchAt = (line, cursorIndex, regex, extractKey) => {
     regex.lastIndex = 0;
     let match = regex.exec(line);
@@ -123,7 +124,7 @@ const buildViewOnPdfLink = (payload) => {
         return null;
     }
     const href = `tex64://view-on-pdf?path=${encodeURIComponent(pathValue)}&line=${encodeURIComponent(String(line))}&column=${encodeURIComponent(String(column))}`;
-    return `[View on PDF](${href})`;
+    return `<span class="tex64-hover-view-on-pdf" data-tex64-href="${escapeHtmlAttr(href)}">View on PDF</span>`;
 };
 const findFirstUnescapedPercent = (line) => {
     for (let i = 0; i < line.length; i += 1) {
@@ -629,7 +630,7 @@ export const registerHoverProvider = (monaco, deps, state) => {
                         { value: `定義:\n${locations}` },
                     ];
                     if (viewOnPdfLink) {
-                        contents.push({ value: viewOnPdfLink, isTrusted: true });
+                        contents.push({ value: viewOnPdfLink, isTrusted: true, supportHtml: true });
                     }
                     if (snippet) {
                         contents.push({ value: snippet });
@@ -651,12 +652,12 @@ export const registerHoverProvider = (monaco, deps, state) => {
                 contents: [
                     { value: `**\\\\${refMatch.command || "ref"}{${refMatch.key}}**` },
                     { value: `定義:\n${locations}` },
-                    ...(viewOnPdfLink ? [{ value: viewOnPdfLink, isTrusted: true }] : []),
+                    ...(viewOnPdfLink ? [{ value: viewOnPdfLink, isTrusted: true, supportHtml: true }] : []),
                 ],
                 range,
             };
         }
-        const citeMatch = findCommandMatchAt(line, cursorIndex, /\\(cite|citet|citep|citeauthor|citeyear|autocite|parencite|textcite|footcite|supercite)(?:\\[[^\\]]*\\])*\{([^}]+)\}/g, extractCiteKey);
+        const citeMatch = findCommandMatchAt(line, cursorIndex, /\\(cite|citet|citep|citeauthor|citeyear|autocite|parencite|textcite|footcite|supercite)(?:\[[^\]]*\])*\{([^}]+)\}/g, extractCiteKey);
         if (citeMatch) {
             const entries = pickCitationEntries(deps.getIndexCitations()).filter((entry) => entry.key === citeMatch.key);
             const locations = entries.length > 0

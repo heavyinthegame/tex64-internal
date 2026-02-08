@@ -90,10 +90,8 @@
 - **既存フォルダを開く**
   - フォルダ選択ダイアログを開き、選択したフォルダをワークスペースとして設定する
 - **新規プロジェクト作成**
-  - 「新規プロジェクト」ダイアログでフォルダを作成/選択し、テンプレートから `main.tex` を生成して開く
-  - 生成対象フォルダが空でない場合（ドットファイルを除く）エラー
-- **テンプレート選択**
-  - `"paper"` / `"lecture"` を切り替え、生成される `main.tex` の中身が変わる
+  - 「新規プロジェクト」ダイアログでフォルダを作成/選択し、`main.tex` を生成して開く
+  - `main.tex` が既に存在する場合は `main2.tex` / `main3.tex` … のように空いている名前で生成する（上書きしない）
 
 ### 2.3 キーボード操作
 
@@ -471,6 +469,12 @@ Renderer 側の TEXT_FILE_EXTENSIONS（`txt` を含む）:
   - アクティブファイル基準の相対パス
 - `\\begin{}`:
   - figure/table/align/itemize などのスニペットを展開（プレースホルダ付き）
+- 候補ナビゲーション:
+  - Suggest Widget 表示中、`Tab` で次候補、`Shift+Tab` で前候補に移動
+  - 確定は `Enter`
+- 表示頻度:
+  - quick suggestions を有効化（低遅延）
+  - 補完候補は LaTeX 文脈を優先（汎用語彙候補は抑制）
 
 ### 7.2 Hover（ref/cite/画像/数式）
 
@@ -491,12 +495,13 @@ Renderer 側の TEXT_FILE_EXTENSIONS（`txt` を含む）:
 
 - 有効/無効: `tex64.editor.ghostCompletion`（デフォルト有効）
 - 調整:
-  - debounce: `tex64.editor.ghostCompletion.debounceMs`（0..2000, default 260）
+  - debounce: `tex64.editor.ghostCompletion.debounceMs`（0..2000, default 120）
   - maxChars: `tex64.editor.ghostCompletion.maxChars`（20..400, default 140）
 - ローカル補完:
   - 括弧閉じ、`\\begin{}`→`\\end{}`、短いテンプレなど
 - リモート補完（Gemini 経由）:
-  - 条件: prefix>=12、suffix空、idle>=700ms、cooldown 4s、8回/分
+  - 条件: prefix>=10、suffix空、idle>=550ms、cooldown 3s、12回/分
+  - 抑制条件: コメント行（unescaped `%` 以降）と `\command` 入力中は送信しない
   - 結果は短い 1 行の継続テキストのみ（prefix を繰り返さない）
   - ポジティブ/ネガティブキャッシュあり
 

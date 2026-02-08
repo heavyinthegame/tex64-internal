@@ -413,6 +413,15 @@ class WorkspaceManager {
     if (!stat) {
       throw new Error(WorkspaceError.notFound);
     }
+    const manualRootPathBeforeDelete =
+      this.rootFileInfo?.source === "manual" ? this.rootFileInfo.path : null;
+    const normalizedTargetPath = normalizeRelativePath(trimmed);
+    const restoreRootPath =
+      manualRootPathBeforeDelete &&
+      (manualRootPathBeforeDelete === normalizedTargetPath ||
+        manualRootPathBeforeDelete.startsWith(`${normalizedTargetPath}/`))
+        ? manualRootPathBeforeDelete
+        : null;
     const affectsIndex = stat.isDirectory() || this.isIndexTarget(trimmed);
 
     const trashedPath = await this.moveToInternalTrash(resolved);
@@ -423,8 +432,9 @@ class WorkspaceManager {
       isDirectory: stat.isDirectory(),
       affectsIndex,
       trashedPath,
+      restoreRootPath,
     });
-    this.updateRootOverrideAfterDelete(trimmed);
+    await this.updateRootOverrideAfterDelete(trimmed);
   }
 
   async undoLastOperation() {
@@ -461,6 +471,14 @@ class WorkspaceManager {
       }
       await ensureDirectory(path.dirname(target));
       await fsp.rename(operation.trashedPath, target);
+      if (operation.restoreRootPath) {
+        this.rootInfoRootPath = this.rootPath;
+        this.rootFileInfo = { path: operation.restoreRootPath, source: "manual" };
+        await this.updateSettings((settings) => {
+          settings.rootFile = operation.restoreRootPath;
+          return settings;
+        }).catch(() => null);
+      }
       return operation;
     }
     return null;
@@ -468,62 +486,97 @@ class WorkspaceManager {
 
   async initializeProject(rootPath, template) {
     await ensureDirectory(rootPath);
-    const entries = await fsp.readdir(rootPath).catch(() => []);
-    const visibleEntries = entries.filter((entry) => !isHiddenName(entry));
-    if (visibleEntries.length > 0) {
-      throw new Error(WorkspaceError.notEmpty);
-    }
+    const ensureUniqueMainPath = async () => {
+      let index = 1;
+      let candidate = path.join(rootPath, "main.tex");
+      const exists = async (filePath) =>
+        fsp
+          .stat(filePath)
+          .then((stat) => stat.isFile() || stat.isDirectory())
+          .catch(() => false);
+      while (await exists(candidate)) {
+        index += 1;
+        candidate = path.join(rootPath, `main${index}.tex`);
+      }
+      return candidate;
+    };
+    const mainTexPath = await ensureUniqueMainPath();
     const content = this.templateContent(template);
-    const mainTexPath = path.join(rootPath, "main.tex");
     await writeUtf8File(mainTexPath, content);
   }
 
   templateContent(template) {
-    if (template === "lecture") {
-      return [
-        "\\documentclass{article}",
-        "\\title{講義ノート}",
-        "\\author{講師名}",
-        "\\date{\\today}",
-        "",
-        "\\begin{document}",
-        "\\maketitle",
-        "",
-        "\\section{目的}",
-        "この講義の目的を書きます。",
-        "",
-        "\\section{内容}",
-        "\\subsection{ポイント1}",
-        "本文をここに書きます。",
-        "",
-        "\\subsection{ポイント2}",
-        "本文をここに書きます。",
-        "",
-        "\\section{まとめ}",
-        "まとめを書きます。",
-        "",
-        "\\end{document}",
-        "",
-      ].join("\n");
-    }
+    const title = template === "lecture" ? "講義ノート" : "タイトル";
+    const author = template === "lecture" ? "講師名" : "著者名";
     return [
-      "\\documentclass{article}",
-      "\\title{論文タイトル}",
-      "\\author{著者名}",
+      "% !TEX program = lualatex",
+      "% !TeX program = lualatex",
+      "\\documentclass[a4paper,11pt]{ltjsarticle}",
+      "",
+      "\\usepackage{geometry}",
+      "\\usepackage{graphicx}",
+      "\\usepackage{amsmath,amssymb}",
+      "\\usepackage{hyperref}",
+      "",
+      "\\geometry{margin=25mm}",
+      "\\hypersetup{colorlinks=true,linkcolor=blue,urlcolor=blue,citecolor=blue}",
+      "",
+      `\\title{${title}}`,
+      `\\author{${author}}`,
       "\\date{\\today}",
       "",
       "\\begin{document}",
       "\\maketitle",
       "",
       "\\begin{abstract}",
-      "概要をここに書きます。",
+      "概要をここに書きます。目的・手法・結果を2〜3文でまとめます。",
       "\\end{abstract}",
       "",
       "\\section{はじめに}",
-      "ここから本文を開始します。",
+      "ここに本文を書きます。段落の最初は全角スペースで始めても良いです。",
       "",
-      "\\section{結論}",
-      "結論をここに書きます。",
+      "\\subsection{箇条書き}",
+      "\\begin{itemize}",
+      "  \\item ポイント1",
+      "  \\item ポイント2",
+      "\\end{itemize}",
+      "",
+      "\\subsection{数式}",
+      "式\\eqref{eq:sample}のように参照できます。",
+      "\\begin{align}",
+      "  E &= mc^2 \\label{eq:sample}",
+      "\\end{align}",
+      "",
+      "\\subsection{図と表}",
+      "図\\ref{fig:sample}、表\\ref{tab:sample}のように参照できます。",
+      "\\begin{figure}[t]",
+      "  \\centering",
+      "  \\fbox{\\rule{0pt}{120pt}\\rule{0.9\\linewidth}{0pt}}",
+      "  \\caption{図の例（画像を入れる場合は \\texttt{\\\\includegraphics} を使います）}",
+      "  \\label{fig:sample}",
+      "\\end{figure}",
+      "",
+      "\\begin{table}[t]",
+      "  \\centering",
+      "  \\caption{表の例}",
+      "  \\label{tab:sample}",
+      "  \\begin{tabular}{lrr}",
+      "    \\hline",
+      "    項目 & 値1 & 値2 \\\\",
+      "    \\hline",
+      "    A & 1 & 2 \\\\",
+      "    B & 3 & 4 \\\\",
+      "    \\hline",
+      "  \\end{tabular}",
+      "\\end{table}",
+      "",
+      "\\section{まとめ}",
+      "結論や今後の課題を書きます。",
+      "",
+      "\\begin{thebibliography}{9}",
+      "  \\bibitem{sample}",
+      "    著者名, \\emph{文献タイトル}, 出版社, 2026.",
+      "\\end{thebibliography}",
       "",
       "\\end{document}",
       "",
@@ -759,7 +812,7 @@ class WorkspaceManager {
     }).catch(() => null);
   }
 
-  updateRootOverrideAfterDelete(deletedPath) {
+  async updateRootOverrideAfterDelete(deletedPath) {
     if (!this.rootPath || this.rootInfoRootPath !== this.rootPath || !this.rootFileInfo) {
       return;
     }
@@ -770,7 +823,7 @@ class WorkspaceManager {
     const normalizedDeleted = normalizeRelativePath(deletedPath);
     if (currentRoot === normalizedDeleted || currentRoot.startsWith(normalizedDeleted + "/")) {
       this.rootFileInfo = null;
-      this.updateSettings((settings) => {
+      await this.updateSettings((settings) => {
         delete settings.rootFile;
         return settings;
       }).catch(() => null);

@@ -1,6 +1,6 @@
 import { dedupeByKey, pickCitationEntries } from "./index-utils.js";
 const REF_COMMAND_REGEX = /\\(?:eqref|ref|pageref|autoref|cref|Cref|namecref|Namecref|nameref|Nameref)\{([^}]*)$/;
-const CITE_COMMAND_REGEX = /\\(?:cite|citet|citep|citeauthor|citeyear|autocite|parencite|textcite|footcite|supercite)(?:\\[[^\\]]*\\])*\\{([^}]*)$/;
+const CITE_COMMAND_REGEX = /\\(?:cite|citet|citep|citeauthor|citeyear|autocite|parencite|textcite|footcite|supercite)(?:\[[^\]]*\])*\{([^}]*)$/;
 const getPosixDirname = (filePath) => {
     const normalized = filePath.split("\\").join("/");
     const index = normalized.lastIndexOf("/");

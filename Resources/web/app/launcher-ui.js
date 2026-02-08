@@ -1,10 +1,12 @@
+const INITIAL_VISIBLE_COUNT = 3;
 export const initLauncherUi = (context, deps) => {
-    const { launcher, launcherCreateButton, launcherOpenButton, launcherStatus, launcherStatusText, launcherStatusSpinner, launcherTemplateButtons, } = context.dom;
+    const { launcher, launcherCreateButton, launcherOpenButton, launcherTemplateButtons, launcherRecent, launcherRecentList, launcherRecentEmpty, launcherRecentToggle, } = context.dom;
     let selectedActionIndex = 0;
     let launcherTemplate = "paper";
     let launcherBusy = false;
-    let launcherMessage = null;
     const launcherActions = [launcherOpenButton, launcherCreateButton];
+    let recentProjects = [];
+    let recentExpanded = false;
     const updateActionSelection = () => {
         launcherActions.forEach((btn, index) => {
             if (btn instanceof HTMLElement) {
@@ -38,12 +40,8 @@ export const initLauncherUi = (context, deps) => {
         });
     };
     const setStatus = (payload) => {
-        var _a;
         if (typeof payload.isBusy === "boolean") {
             launcherBusy = payload.isBusy;
-        }
-        if (payload.message !== undefined) {
-            launcherMessage = (_a = payload.message) !== null && _a !== void 0 ? _a : null;
         }
         if (launcherCreateButton instanceof HTMLButtonElement) {
             launcherCreateButton.disabled = launcherBusy;
@@ -51,22 +49,66 @@ export const initLauncherUi = (context, deps) => {
         if (launcherOpenButton instanceof HTMLButtonElement) {
             launcherOpenButton.disabled = launcherBusy;
         }
-        if (!(launcherStatus instanceof HTMLElement) || !(launcherStatusText instanceof HTMLElement)) {
-            return;
-        }
-        if (!launcherBusy && !launcherMessage) {
-            launcherStatus.classList.remove("is-visible", "is-busy");
-            launcherStatusText.textContent = "";
-            return;
-        }
-        launcherStatus.classList.add("is-visible");
-        launcherStatus.classList.toggle("is-busy", launcherBusy);
-        launcherStatusText.textContent = launcherBusy ? "準備中..." : launcherMessage !== null && launcherMessage !== void 0 ? launcherMessage : "";
-        if (launcherStatusSpinner instanceof HTMLElement) {
-            launcherStatusSpinner.hidden = !launcherBusy;
-        }
-        updateActionSelection();
     };
+    const renderRecentProjects = () => {
+        if (!(launcherRecentList instanceof HTMLElement)) {
+            return;
+        }
+        launcherRecentList.innerHTML = "";
+        const visibleProjects = recentExpanded
+            ? recentProjects
+            : recentProjects.slice(0, INITIAL_VISIBLE_COUNT);
+        for (const project of visibleProjects) {
+            const item = document.createElement("button");
+            item.className = "launcher-recent-item";
+            item.type = "button";
+            item.dataset.path = project.path;
+            const nameSpan = document.createElement("span");
+            nameSpan.className = "launcher-recent-item-name";
+            nameSpan.textContent = project.name;
+            const pathSpan = document.createElement("span");
+            pathSpan.className = "launcher-recent-item-path";
+            pathSpan.textContent = project.path;
+            item.appendChild(nameSpan);
+            item.appendChild(pathSpan);
+            item.addEventListener("click", () => {
+                if (launcherBusy)
+                    return;
+                setStatus({ isBusy: true, message: null });
+                deps.onOpenRecent(project.path);
+            });
+            launcherRecentList.appendChild(item);
+        }
+        // Update empty state
+        if (launcherRecentEmpty instanceof HTMLElement) {
+            launcherRecentEmpty.style.display = recentProjects.length === 0 ? "" : "none";
+        }
+        // Update toggle button
+        if (launcherRecentToggle instanceof HTMLElement) {
+            const hasMore = recentProjects.length > INITIAL_VISIBLE_COUNT;
+            launcherRecentToggle.style.display = hasMore ? "" : "none";
+            launcherRecentToggle.setAttribute("aria-expanded", recentExpanded ? "true" : "false");
+            const toggleText = launcherRecentToggle.querySelector(".launcher-recent-toggle-text");
+            if (toggleText) {
+                toggleText.textContent = recentExpanded ? "折りたたむ" : "すべて表示";
+            }
+        }
+        // Update recent section visibility
+        if (launcherRecent instanceof HTMLElement) {
+            launcherRecent.style.display = "";
+        }
+    };
+    const updateRecentProjects = (projects) => {
+        recentProjects = projects;
+        renderRecentProjects();
+    };
+    // Toggle handler for recent projects
+    if (launcherRecentToggle instanceof HTMLElement) {
+        launcherRecentToggle.addEventListener("click", () => {
+            recentExpanded = !recentExpanded;
+            renderRecentProjects();
+        });
+    }
     const handleLauncherKeydown = (event) => {
         if (!(launcher === null || launcher === void 0 ? void 0 : launcher.classList.contains("is-visible"))) {
             return;
@@ -124,5 +166,6 @@ export const initLauncherUi = (context, deps) => {
         setTemplate,
         getTemplate: () => launcherTemplate,
         isBusy: () => launcherBusy,
+        updateRecentProjects,
     };
 };

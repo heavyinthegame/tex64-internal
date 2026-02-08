@@ -2,7 +2,7 @@ import { LATEX_FILE_EXTENSIONS, PINNED_TAB_EXTENSIONS, getFileExtension, isTextF
 import { createEditorSessionFileOps, } from "./editor-session-file-ops.js";
 export const initEditorSession = (context, deps) => {
     var _a, _b;
-    const { editorGroups: editorGroupsRoot, editorTabs, editorTabsList, editorTabsSecondary, editorTabsListSecondary, editorHost, editorHostSecondary, editorSplitButton, } = context.dom;
+    const { editorGroups: editorGroupsRoot, editorTabs, editorTabsList, editorTabsSecondary, editorTabsListSecondary, editorHost, editorHostSecondary, editorSplitButton, editorSplitter, } = context.dom;
     const editorGroupsRootEl = editorGroupsRoot instanceof HTMLElement ? editorGroupsRoot : null;
     const editorGroupPrimary = (_a = editorGroupsRootEl === null || editorGroupsRootEl === void 0 ? void 0 : editorGroupsRootEl.querySelector('[data-editor-group="primary"]')) !== null && _a !== void 0 ? _a : null;
     const editorGroupSecondary = (_b = editorGroupsRootEl === null || editorGroupsRootEl === void 0 ? void 0 : editorGroupsRootEl.querySelector('[data-editor-group="secondary"]')) !== null && _b !== void 0 ? _b : null;
@@ -48,6 +48,9 @@ export const initEditorSession = (context, deps) => {
     };
     let activeEditorGroup = "primary";
     let splitViewEnabled = false;
+    const splitRatioKey = "tex64.editorSplitRatio";
+    let splitRatio = 0.5;
+    let layoutFrame = null;
     const fileOpsState = {
         pendingOpenRequests: [],
         pendingReveal: null,
@@ -200,6 +203,73 @@ export const initEditorSession = (context, deps) => {
         Object.keys(editorGroups).forEach((key) => {
             handler(editorGroups[key]);
         });
+    };
+    const scheduleEditorLayout = () => {
+        if (layoutFrame !== null) {
+            return;
+        }
+        layoutFrame = requestAnimationFrame(() => {
+            layoutFrame = null;
+            forEachEditorGroup((group) => {
+                var _a;
+                const editor = group.editor;
+                (_a = editor === null || editor === void 0 ? void 0 : editor.layout) === null || _a === void 0 ? void 0 : _a.call(editor);
+            });
+        });
+    };
+    const getSplitSizing = () => {
+        var _a, _b, _c;
+        const style = editorGroupsRootEl ? getComputedStyle(editorGroupsRootEl) : null;
+        const min = Number.parseFloat((_a = style === null || style === void 0 ? void 0 : style.getPropertyValue("--split-min")) !== null && _a !== void 0 ? _a : "");
+        const handle = Number.parseFloat((_b = style === null || style === void 0 ? void 0 : style.getPropertyValue("--split-handle")) !== null && _b !== void 0 ? _b : "");
+        const width = (_c = editorGroupsRootEl === null || editorGroupsRootEl === void 0 ? void 0 : editorGroupsRootEl.getBoundingClientRect().width) !== null && _c !== void 0 ? _c : 0;
+        return {
+            min: Number.isFinite(min) && min > 0 ? min : 280,
+            handle: Number.isFinite(handle) && handle > 0 ? handle : 8,
+            width,
+        };
+    };
+    const clampSplitRatio = (ratio) => {
+        const { min, handle, width } = getSplitSizing();
+        const available = Math.max(width - handle, 1);
+        let minRatio = min / available;
+        if (!Number.isFinite(minRatio) || minRatio < 0) {
+            minRatio = 0;
+        }
+        if (minRatio > 0.5) {
+            return 0.5;
+        }
+        const maxRatio = 1 - minRatio;
+        if (!Number.isFinite(ratio)) {
+            return 0.5;
+        }
+        return Math.min(Math.max(ratio, minRatio), maxRatio);
+    };
+    const applySplitRatio = (ratio, options = {}) => {
+        if (!editorGroupsRootEl) {
+            return;
+        }
+        const normalized = clampSplitRatio(ratio);
+        splitRatio = normalized;
+        editorGroupsRootEl.style.setProperty("--split-primary", `${normalized}fr`);
+        editorGroupsRootEl.style.setProperty("--split-secondary", `${1 - normalized}fr`);
+        if (editorSplitter instanceof HTMLElement) {
+            editorSplitter.setAttribute("aria-valuenow", String(Math.round(normalized * 100)));
+        }
+        if (options.persist && typeof localStorage !== "undefined") {
+            localStorage.setItem(splitRatioKey, String(normalized));
+        }
+    };
+    const restoreSplitRatio = () => {
+        if (typeof localStorage === "undefined") {
+            return 0.5;
+        }
+        const raw = localStorage.getItem(splitRatioKey);
+        const parsed = raw ? Number.parseFloat(raw) : Number.NaN;
+        if (!Number.isFinite(parsed)) {
+            return 0.5;
+        }
+        return Math.min(Math.max(parsed, 0.1), 0.9);
     };
     const setEditorGroupEmptyState = (group, isEmpty) => {
         var _a;
@@ -448,18 +518,94 @@ export const initEditorSession = (context, deps) => {
         if (editorGroupSecondary instanceof HTMLElement) {
             editorGroupSecondary.setAttribute("aria-hidden", enabled ? "false" : "true");
         }
+        if (editorSplitter instanceof HTMLElement) {
+            editorSplitter.setAttribute("aria-hidden", enabled ? "false" : "true");
+        }
+        if (enabled) {
+            applySplitRatio(splitRatio);
+        }
         if (!enabled && activeEditorGroup === "secondary") {
             setActiveGroup("primary", { focusEditor: false });
         }
-        requestAnimationFrame(() => {
-            forEachEditorGroup((group) => {
-                var _a;
-                const editor = group.editor;
-                (_a = editor === null || editor === void 0 ? void 0 : editor.layout) === null || _a === void 0 ? void 0 : _a.call(editor);
-            });
+        scheduleEditorLayout();
+    };
+    const setupSplitResizer = () => {
+        if (!(editorSplitter instanceof HTMLElement) || !editorGroupsRootEl) {
+            return;
+        }
+        let isResizing = false;
+        const startResize = () => {
+            if (isResizing) {
+                return;
+            }
+            isResizing = true;
+            editorGroupsRootEl.classList.add("is-resizing");
+            document.body.style.cursor = "col-resize";
+            document.body.style.userSelect = "none";
+            if (editorHost instanceof HTMLElement) {
+                editorHost.style.pointerEvents = "none";
+            }
+            if (editorHostSecondary instanceof HTMLElement) {
+                editorHostSecondary.style.pointerEvents = "none";
+            }
+        };
+        const doResize = (event) => {
+            if (!isResizing || !splitViewEnabled) {
+                return;
+            }
+            const rect = editorGroupsRootEl.getBoundingClientRect();
+            const { handle } = getSplitSizing();
+            const available = Math.max(rect.width - handle, 1);
+            const offset = event.clientX - rect.left - handle / 2;
+            const ratio = offset / available;
+            applySplitRatio(ratio);
+            scheduleEditorLayout();
+        };
+        const stopResize = () => {
+            if (!isResizing) {
+                return;
+            }
+            isResizing = false;
+            editorGroupsRootEl.classList.remove("is-resizing");
+            document.body.style.cursor = "";
+            document.body.style.userSelect = "";
+            if (editorHost instanceof HTMLElement) {
+                editorHost.style.pointerEvents = "";
+            }
+            if (editorHostSecondary instanceof HTMLElement) {
+                editorHostSecondary.style.pointerEvents = "";
+            }
+            applySplitRatio(splitRatio, { persist: true });
+            scheduleEditorLayout();
+            window.removeEventListener("pointermove", doResize);
+            window.removeEventListener("pointerup", stopResize, true);
+            window.removeEventListener("pointercancel", stopResize, true);
+        };
+        editorSplitter.addEventListener("pointerdown", (event) => {
+            var _a;
+            if (!splitViewEnabled || event.button !== 0) {
+                return;
+            }
+            event.preventDefault();
+            (_a = editorSplitter.setPointerCapture) === null || _a === void 0 ? void 0 : _a.call(editorSplitter, event.pointerId);
+            startResize();
+            doResize(event);
+            window.addEventListener("pointermove", doResize);
+            window.addEventListener("pointerup", stopResize, true);
+            window.addEventListener("pointercancel", stopResize, true);
+        });
+        window.addEventListener("resize", () => {
+            if (!splitViewEnabled) {
+                return;
+            }
+            applySplitRatio(splitRatio);
+            scheduleEditorLayout();
         });
     };
     const getSplitViewEnabled = () => splitViewEnabled;
+    splitRatio = restoreSplitRatio();
+    applySplitRatio(splitRatio);
+    setupSplitResizer();
     const getLanguageIdForPath = (path) => {
         const ext = getFileExtension(path);
         if (ext === "bib") {
@@ -642,10 +788,10 @@ export const initEditorSession = (context, deps) => {
             if (entry === keepPath) {
                 return true;
             }
-            if (!isPersistentTabPath(entry)) {
-                return false;
-            }
             if (dirtyFiles.has(entry)) {
+                return true;
+            }
+            if (!isPersistentTabPath(entry)) {
                 return false;
             }
             return true;
@@ -656,7 +802,7 @@ export const initEditorSession = (context, deps) => {
         group.openTabs = nextTabs;
         deps.editorTabs.render(group);
     };
-    const { applyFormattedContent, requestOpenFile, saveCurrentFile, scheduleAutoSave, handleOpenFileResult, handleSaveResult, } = createEditorSessionFileOps({
+    const { applyFormattedContent, requestOpenFile, saveCurrentFile, saveDirtyFiles, scheduleAutoSave, handleOpenFileResult, handleSaveResult, } = createEditorSessionFileOps({
         deps,
         editorGroups,
         monacoModels,
@@ -886,6 +1032,7 @@ export const initEditorSession = (context, deps) => {
         applyFormattedContent,
         applyContentToOpenFile,
         saveCurrentFile,
+        saveDirtyFiles,
         requestInitialOpen,
         openPendingFileIfReady,
         clearIssueHighlight,

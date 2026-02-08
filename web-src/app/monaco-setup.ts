@@ -221,8 +221,11 @@ export const initMonacoSetup = (
         scrollBeyondLastLine: false,
         wordWrap: "off",
         wordBasedSuggestions: "off",
-        quickSuggestions: false,
+        quickSuggestions: { other: true, comments: false, strings: true },
+        quickSuggestionsDelay: 25,
         suggestOnTriggerCharacters: true,
+        tabCompletion: "off",
+        acceptSuggestionOnEnter: "on",
         occurrencesHighlight: false,
         selectionHighlight: false,
         inlineSuggest: { enabled: deps.getGhostCompletionEnabled() },
@@ -288,8 +291,26 @@ export const initMonacoSetup = (
             source: string,
             edits: Array<{ range: unknown; text: string; forceMoveMarkers?: boolean }>
           ) => void;
+          trigger?: (source: string, handlerId: string, payload?: unknown) => void;
         };
         group.editor = editor;
+
+        host.addEventListener(
+          "keydown",
+          (event) => {
+            if (event.key !== "Tab") {
+              return;
+            }
+            if (!document.querySelector(".suggest-widget.visible")) {
+              return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            const command = event.shiftKey ? "selectPrevSuggestion" : "selectNextSuggestion";
+            editorAny.trigger?.("tex64", command, {});
+          },
+          true
+        );
 
         const ghostCaretNode = document.createElement("div");
         ghostCaretNode.className = "monaco-ghost-caret";
@@ -357,13 +378,6 @@ export const initMonacoSetup = (
         };
 
         ghostCaretControllers.push({ key: group.key, hide: hideGhostCaret });
-        if (context.isE2E) {
-          if (group.key === "primary") {
-            (window as { __tex64Editor?: unknown }).__tex64Editor = editor;
-          } else {
-            (window as { __tex64SecondaryEditor?: unknown }).__tex64SecondaryEditor = editor;
-          }
-        }
         host.addEventListener("compositionstart", () => {
           group.isComposing = true;
           group.compositionText = "";

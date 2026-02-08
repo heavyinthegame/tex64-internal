@@ -31,9 +31,6 @@ const { createBuildHandlers } = require("./handlers/build.cjs");
 const { createMiscHandlers } = require("./handlers/misc.cjs");
 const { createAgentHandlers } = require("./handlers/agent.cjs");
 
-// Expose require so Playwright's electronApp.evaluate can load Electron APIs in e2e.
-global.require = require;
-
 const state = {
   mainWindow: null,
   currentWorkspacePath: null,
@@ -41,10 +38,6 @@ const state = {
   lastBuildPdfPath: null,
   formatWarningShown: false,
 };
-const isE2E = process.env.TEX180_E2E === "1";
-if (isE2E && process.env.TEX180_E2E_USERDATA) {
-  app.setPath("userData", process.env.TEX180_E2E_USERDATA);
-}
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -84,17 +77,13 @@ const createMainWindow = () => {
     backgroundColor: "#1c2129",
     title: "tex64",
     webPreferences: {
-      contextIsolation: !isE2E,
+      contextIsolation: true,
       nodeIntegration: false,
       preload: preloadPath,
     },
   });
 
-  if (isE2E) {
-    state.mainWindow.loadFile(indexPath, { query: { e2e: "1" } });
-  } else {
-    state.mainWindow.loadFile(indexPath);
-  }
+  state.mainWindow.loadFile(indexPath);
   state.mainWindow.on("closed", () => {
     if (state.captureShortcut) {
       globalShortcut.unregister(state.captureShortcut);
@@ -157,9 +146,12 @@ const workspaceHandlers = createWorkspaceHandlers({
   searchService,
   sendToRenderer,
   sendIssues,
-  isE2E,
   WorkspaceError,
   state,
+  userSettings: { 
+    addRecentProject: (p) => ensureUserSettings().addRecentProject(p),
+    removeRecentProject: (p) => ensureUserSettings().removeRecentProject(p),
+  },
 });
 
 const agentService = new AgentService({
@@ -215,14 +207,6 @@ const agentHandlers = createAgentHandlers({
 });
 
 app.whenReady().then(() => {
-  const e2eWorkspace = process.env.TEX180_E2E_WORKSPACE;
-  if (e2eWorkspace) {
-    const resolved = path.resolve(e2eWorkspace);
-    if (fs.existsSync(resolved) && fs.statSync(resolved).isDirectory()) {
-      workspace.setRootPath(resolved);
-      state.currentWorkspacePath = null;
-    }
-  }
   createMainWindow();
 
   app.on("activate", () => {
@@ -240,41 +224,6 @@ app.on("window-all-closed", () => {
 
 // Desktop capture IPC handler
 ipcMain.handle("tex64:capture:getSources", async (_event, options) => {
-  if (process.env.TEX180_E2E === "1") {
-    const windows = BrowserWindow.getAllWindows();
-    const mainWindow = windows.find((win) => !win.isDestroyed()) ?? null;
-    if (!mainWindow) {
-      throw new Error("E2E capture failed: no window available.");
-    }
-    const image = await mainWindow.capturePage();
-    const size = image.getSize();
-    const target = options?.thumbnailSize ?? null;
-    let thumbnail = image;
-    if (target) {
-      const scale = Math.min(
-        target.width / size.width,
-        target.height / size.height,
-        1
-      );
-      const width = Math.max(1, Math.round(size.width * scale));
-      const height = Math.max(1, Math.round(size.height * scale));
-      if (width !== size.width || height !== size.height) {
-        thumbnail = image.resize({ width, height });
-      }
-    }
-    const thumbSize = thumbnail.getSize();
-    return [
-      {
-        id: "e2e:main-window",
-        title: mainWindow.getTitle() || "E2E Window",
-        app: "tex64",
-        thumbnailUrl: thumbnail.toDataURL(),
-        width: thumbSize.width,
-        height: thumbSize.height,
-      },
-    ];
-  }
-
   const size = options?.thumbnailSize ?? { width: 1600, height: 900 };
 
   const fetchSources = async (types, fetchWindowIcons = false) => {
@@ -360,6 +309,30 @@ ipcMain.on("tex64", (_event, message) => {
   }
   if (type === "openWorkspace" || type === "requestWorkspace") {
     workspaceHandlers.handleOpenWorkspace();
+    return;
+  }
+  if (type === "openRecentProject") {
+    workspaceHandlers.handleOpenRecentProject(message.path);
+    return;
+  }
+  if (type === "getRecentProjects") {
+    ensureUserSettings()
+      .getRecentProjects()
+      .then((projects) => {
+        sendToRenderer("recentProjects", { projects });
+      })
+      .catch(() => {
+        sendToRenderer("recentProjects", { projects: [] });
+      });
+    return;
+  }
+  if (type === "removeRecentProject") {
+    ensureUserSettings()
+      .removeRecentProject(message.path)
+      .then((projects) => {
+        sendToRenderer("recentProjects", { projects });
+      })
+      .catch(() => {});
     return;
   }
   if (type === "createProject") {

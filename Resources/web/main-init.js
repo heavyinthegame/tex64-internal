@@ -99,14 +99,12 @@ export const initMain = () => {
                 }, true);
             },
         });
-        const isE2E = new URLSearchParams(window.location.search).get("e2e") === "1";
         const bridgeWindow = window;
         const appState = createAppState();
         const appActions = createAppActions(appState);
         const appContext = createAppContext({
             dom,
             bridgeWindow,
-            isE2E,
             viewers: { primary: primaryViewer, secondary: secondaryViewer },
         });
         let updateIssues = (_count, _summary, _status, _issues) => { };
@@ -137,7 +135,6 @@ export const initMain = () => {
         };
         postToNative = initBridgeSender({
             bridgeWindow,
-            isE2E,
             updateIssues: updateIssuesProxy,
         });
         const apiCompletionBroker = createApiCompletionBroker((payload, silent) => postToNative(payload, silent));
@@ -204,7 +201,15 @@ export const initMain = () => {
             onOpen: () => {
                 postToNative({ type: "openWorkspace" });
             },
+            onOpenRecent: (path) => {
+                postToNative({ type: "openRecentProject", path });
+            },
+            onRemoveRecent: (path) => {
+                postToNative({ type: "removeRecentProject", path });
+            },
         });
+        // Request recent projects on startup
+        postToNative({ type: "getRecentProjects" });
         const fileTreeUi = initFileTreeUi(appContext, {
             contextMenu,
             getWorkspaceRootKey,
@@ -234,12 +239,6 @@ export const initMain = () => {
             blockEditSession === null || blockEditSession === void 0 ? void 0 : blockEditSession.handleCursorPositionChange(position);
         };
         let lastBuildMainFile = null;
-        if (isE2E) {
-            window
-                .__tex64SetLastBuildMainFile = (path) => {
-                lastBuildMainFile = typeof path === "string" ? path : null;
-            };
-        }
         let blockPreviewActive = false;
         let activeBlockOriginalSnippet = null;
         let activeBlockEditMode = "none";
@@ -343,14 +342,6 @@ export const initMain = () => {
                 mathCapture === null || mathCapture === void 0 ? void 0 : mathCapture.openCapture();
             },
         });
-        if (isE2E) {
-            window.__tex64SetMathInputFallback = (value) => {
-                blockInputApi.setMathInputFallback(value);
-            };
-            window.__tex64GetMathInputFallback = () => blockInputApi.getMathInputFallback();
-            window.__tex64GetMathInputValue =
-                () => blockInputApi.getMathInputValue();
-        }
         const mathKeyboardApi = initMathKeyboard(appContext, {
             getActiveTab: tabController.getActiveTab,
             getActiveBlockType: () => blockInputApi.getActiveBlockType(),
@@ -412,8 +403,6 @@ export const initMain = () => {
             },
             requestFormatPreview: (payload) => buildOps.requestFormatPreview(payload),
             postToNative: (payload, silent) => postToNative(payload, silent),
-            getIsE2E: () => isE2E,
-            getMathInputValue: blockInputApi.getMathInputValue,
             getBlockMode: () => { var _a; return (_a = blockEditSession === null || blockEditSession === void 0 ? void 0 : blockEditSession.getMode()) !== null && _a !== void 0 ? _a : "insert"; },
             resetBlockSession: (options) => resetBlockSession(options),
             getPendingBlockApply: () => pendingBlockApply,
@@ -529,6 +518,7 @@ export const initMain = () => {
             getStoredCursorPosition: (path) => editorSession.getStoredCursorPosition(path),
             cacheCurrentBuffer: editorSession.cacheCurrentBuffer,
             saveCurrentFile: () => editorSession.saveCurrentFile(),
+            saveDirtyFiles: () => editorSession.saveDirtyFiles(),
             postToNative: (payload, silent) => postToNative(payload, silent),
             updateIssues: updateIssuesProxy,
             setPendingBuildIssuesFocus: (value) => setPendingBuildIssuesFocus(value),
@@ -680,20 +670,28 @@ export const initMain = () => {
             buildOps: {
                 setupActionButtons: () => buildOps.setupActionButtons(),
                 startBuild: () => buildOps.startBuild(),
+                startBuildWithSave: () => buildOps.startBuildWithSave(),
             },
             rootSelectorUi: {
                 setupActions: () => rootSelectorUi.setupActions(),
             },
         });
         uiEvents.setup();
+        window.addEventListener("beforeunload", (event) => {
+            if (editorSession.getDirtyPaths().size === 0) {
+                return;
+            }
+            event.preventDefault();
+            event.returnValue = "";
+        });
         document.addEventListener("click", (event) => {
-            var _a, _b, _c, _d;
+            var _a, _b, _c, _d, _e, _f;
             const target = event.target;
             if (!(target instanceof HTMLElement)) {
                 return;
             }
-            const anchor = target.closest("a");
-            const href = (_a = anchor === null || anchor === void 0 ? void 0 : anchor.getAttribute("href")) !== null && _a !== void 0 ? _a : "";
+            const actionable = target.closest("[data-tex64-href], a[href]");
+            const href = (_c = (_b = (_a = actionable === null || actionable === void 0 ? void 0 : actionable.getAttribute("data-tex64-href")) !== null && _a !== void 0 ? _a : actionable === null || actionable === void 0 ? void 0 : actionable.getAttribute("href")) !== null && _b !== void 0 ? _b : "") !== null && _c !== void 0 ? _c : "";
             if (!href.startsWith("tex64://")) {
                 return;
             }
@@ -711,9 +709,9 @@ export const initMain = () => {
             if (action !== "view-on-pdf") {
                 return;
             }
-            const path = (_b = url.searchParams.get("path")) !== null && _b !== void 0 ? _b : "";
-            const line = Number.parseInt((_c = url.searchParams.get("line")) !== null && _c !== void 0 ? _c : "", 10);
-            const column = Number.parseInt((_d = url.searchParams.get("column")) !== null && _d !== void 0 ? _d : "1", 10);
+            const path = (_d = url.searchParams.get("path")) !== null && _d !== void 0 ? _d : "";
+            const line = Number.parseInt((_e = url.searchParams.get("line")) !== null && _e !== void 0 ? _e : "", 10);
+            const column = Number.parseInt((_f = url.searchParams.get("column")) !== null && _f !== void 0 ? _f : "1", 10);
             if (!path || !Number.isFinite(line) || line < 1) {
                 return;
             }
@@ -748,6 +746,7 @@ export const initMain = () => {
             handleWorkspaceUpdate: workspaceController.handleWorkspaceUpdate,
             handleIndexUpdate: workspaceController.handleIndexUpdate,
             handleLauncherStatus,
+            handleRecentProjects: (projects) => launcherUi.updateRecentProjects(projects),
             search: {
                 handleSearchUpdate: (payload) => searchUi.handleSearchUpdate(payload),
             },

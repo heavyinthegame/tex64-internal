@@ -7,7 +7,6 @@ type ViewerApi = ReturnType<typeof createViewer>;
 export type AppContext = {
   dom: DomRefs;
   bridgeWindow: BridgeWindow;
-  isE2E: boolean;
   viewers: {
     primary: ViewerApi;
     secondary: ViewerApi;

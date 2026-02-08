@@ -11,48 +11,39 @@
   <body>
 
     <div class="launcher" id="launcher" aria-hidden="true">
-      <div class="launcher-grid" aria-hidden="true"></div>
-      <div class="launcher-card" role="dialog" aria-modal="true">
-        <div class="launcher-brand">
-          <div class="launcher-title">Tex64</div>
-          <div class="launcher-tagline">LaTeX編集の起点</div>
-        </div>
-        <div class="launcher-note">最初にプロジェクトを選択してください。</div>
-        <div class="launcher-divider"></div>
-        <div class="launcher-template">
-          <span class="launcher-label">テンプレート</span>
-          <div class="launcher-toggle" role="tablist" aria-label="テンプレート">
-            <button
-              class="launcher-template-button is-active"
-              type="button"
-              data-template="paper"
-              aria-selected="true"
-            >
-              論文
+      <div class="launcher-container">
+        <div class="launcher-left">
+          <div class="launcher-brand">
+            <div class="launcher-icon-wrap">
+              <img src="./assets/icon.jpg" class="launcher-icon" alt="" />
+            </div>
+            <div class="launcher-title">Tex64</div>
+          </div>
+          <div class="launcher-actions">
+            <button class="launcher-action primary" id="launcher-open" type="button">
+              <span class="launcher-action-title">フォルダを開く</span>
             </button>
-            <button
-              class="launcher-template-button"
-              type="button"
-              data-template="lecture"
-              aria-selected="false"
-            >
-              講義ノート
+            <button class="launcher-action" id="launcher-create" type="button">
+              <span class="launcher-action-title">新規作成</span>
             </button>
           </div>
         </div>
-        <div class="launcher-actions">
-          <button class="launcher-action primary" id="launcher-open" type="button">
-            <span class="launcher-action-title">既存のフォルダを開く</span>
-            <span class="launcher-action-desc">既存のLaTeXフォルダを開きます</span>
-          </button>
-          <button class="launcher-action" id="launcher-create" type="button">
-            <span class="launcher-action-title">新規プロジェクトを作成</span>
-            <span class="launcher-action-desc">テンプレートから main.tex を作成します</span>
-          </button>
-        </div>
-        <div class="launcher-status" id="launcher-status" aria-live="polite">
-          <span class="launcher-status-spinner" id="launcher-status-spinner" aria-hidden="true"></span>
-          <span class="launcher-status-text" id="launcher-status-text"></span>
+        <div class="launcher-right">
+          <div class="launcher-recent" id="launcher-recent">
+            <div class="launcher-recent-header">
+              <span class="launcher-recent-title">最近のプロジェクト</span>
+              <button class="launcher-recent-toggle" id="launcher-recent-toggle" type="button" aria-expanded="false">
+                <span class="launcher-recent-toggle-text">すべて表示</span>
+                <svg class="launcher-recent-toggle-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M6 9l6 6 6-6"/>
+                </svg>
+              </button>
+            </div>
+            <div class="launcher-recent-list" id="launcher-recent-list"></div>
+            <div class="launcher-recent-empty" id="launcher-recent-empty">
+              まだプロジェクトを開いていません
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -89,6 +80,14 @@
           </button>
           <button id="format-button" type="button" aria-label="整形" title="整形">
             整形
+          </button>
+          <button
+            id="save-file-button"
+            type="button"
+            aria-label="保存"
+            title="保存 (Cmd+S)"
+          >
+            保存
           </button>
           <button
             id="synctex-button"
@@ -569,13 +568,11 @@
               <div class="settings-pages is-hidden" id="settings-pages" aria-hidden="true">
                 <div class="settings-page is-hidden" data-settings-page="editor" aria-hidden="true">
                   <div class="settings-page-header">
-                    <button class="panel-button ghost settings-back" data-settings-back type="button">
-                      戻る
-                    </button>
+                    <button class="settings-back" data-settings-back type="button" aria-label="戻る"></button>
                     <div class="settings-page-title">エディタ</div>
                   </div>
                   <div class="settings-group">
-                    <div class="settings-group-title">エディタ</div>
+                    <div class="settings-group-title">SyncTeX</div>
                     <div class="settings-item">
                       <div class="settings-label">
                         <span class="settings-title">ビルド時SyncTeX</span>
@@ -600,10 +597,13 @@
                         </label>
                       </div>
                     </div>
+                  </div>
+                  <div class="settings-group">
+                    <div class="settings-group-title">ゴースト補完</div>
                     <div class="settings-item">
                       <div class="settings-label">
-                        <span class="settings-title">ゴースト補完</span>
-                        <span class="settings-desc">行末で予測を薄く表示します。</span>
+                        <span class="settings-title">ゴースト補完を有効化</span>
+                        <span class="settings-desc">行末で予測を薄く表示します。AIによる補完候補が表示されます。</span>
                       </div>
                       <div class="settings-control">
                         <label class="settings-switch" for="editor-ghost-completion">
@@ -614,7 +614,7 @@
                     </div>
                     <div class="settings-item" data-ghost-config>
                       <div class="settings-label">
-                        <span class="settings-title">ゴースト補完の遅延 (ms)</span>
+                        <span class="settings-title">表示遅延</span>
                         <span class="settings-desc">入力停止から表示までの待ち時間です。</span>
                       </div>
                       <div class="settings-control">
@@ -626,7 +626,7 @@
                     </div>
                     <div class="settings-item" data-ghost-config>
                       <div class="settings-label">
-                        <span class="settings-title">ゴースト補完の最大文字数</span>
+                        <span class="settings-title">最大文字数</span>
                         <span class="settings-desc">長すぎる提案は表示しません。</span>
                       </div>
                       <div class="settings-control">
@@ -643,9 +643,7 @@
                 </div>
                 <div class="settings-page is-hidden" data-settings-page="format" aria-hidden="true">
                   <div class="settings-page-header">
-                    <button class="panel-button ghost settings-back" data-settings-back type="button">
-                      戻る
-                    </button>
+                    <button class="settings-back" data-settings-back type="button" aria-label="戻る"></button>
                     <div class="settings-page-title">整形</div>
                   </div>
                   <div class="settings-group">
@@ -729,13 +727,10 @@
                         </label>
                       </div>
                     </div>
-                    <div class="settings-item">
-                      <div class="settings-label">
-                        <span class="settings-title">verbatim 系環境</span>
-                      </div>
-                      <div class="settings-help-text">
-                        以下の環境内は整形を行わず、原文のまま保持します。<br>
-                        `minted` や `lstlisting` などのコードブロック環境や、独自の整形ルールを持つ環境を追加してください。
+                    <div class="settings-subsection">
+                      <div class="settings-subsection-title">verbatim 系環境</div>
+                      <div class="settings-subsection-desc">
+                        以下の環境内は整形を行わず、原文のまま保持します。`minted` や `lstlisting` などのコードブロック環境や、独自の整形ルールを持つ環境を追加してください。
                       </div>
                     </div>
                     <div class="settings-inline">
@@ -757,21 +752,13 @@
                 </div>
                 <div class="settings-page is-hidden" data-settings-page="env" aria-hidden="true">
                   <div class="settings-page-header">
-                    <button class="panel-button ghost settings-back" data-settings-back type="button">
-                      戻る
-                    </button>
+                    <button class="settings-back" data-settings-back type="button" aria-label="戻る"></button>
                     <div class="settings-page-title">数式/表 環境</div>
                   </div>
                   <div class="settings-group">
-
-                    <div class="settings-item">
-                      <div class="settings-label">
-                        <span class="settings-title">検出対象の環境</span>
-                      </div>
-                      <div class="settings-help-text">
-                        ここで追加された環境は、サイドバーのブロック編集機能や、整形の対象として認識されます。<br>
-                        デフォルトの環境（align, tabularなど）に加え、独自に定義した環境などを追加してください。
-                      </div>
+                    <div class="settings-group-title">検出対象の環境</div>
+                    <div class="settings-help-text settings-help-intro">
+                      ここで追加された環境は、サイドバーのブロック編集機能や、整形の対象として認識されます。デフォルトの環境（align, tabularなど）に加え、独自に定義した環境などを追加してください。
                     </div>
                     <div class="env-registry">
                       <div class="env-registry-add">
@@ -807,9 +794,7 @@
                 </div>
                 <div class="settings-page is-hidden" data-settings-page="build" aria-hidden="true">
                   <div class="settings-page-header">
-                    <button class="panel-button ghost settings-back" data-settings-back type="button">
-                      戻る
-                    </button>
+                    <button class="settings-back" data-settings-back type="button" aria-label="戻る"></button>
                     <div class="settings-page-title">ビルド</div>
                   </div>
                   <div class="settings-group">
@@ -907,9 +892,7 @@
                 </div>
                 <div class="settings-page is-hidden" data-settings-page="runtime" aria-hidden="true">
                   <div class="settings-page-header">
-                    <button class="panel-button ghost settings-back" data-settings-back type="button">
-                      戻る
-                    </button>
+                    <button class="settings-back" data-settings-back type="button" aria-label="戻る"></button>
                     <div class="settings-page-title">実行環境</div>
                   </div>
                   <div class="settings-group">
@@ -1031,6 +1014,17 @@
                 </div>
               </div>
             </div>
+
+            <div
+              class="editor-splitter"
+              id="editor-splitter"
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="分割ビューの境界"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuenow="50"
+            ></div>
 
             <div class="editor-group is-secondary" data-editor-group="secondary" aria-hidden="true">
               <div class="editor-tabs" id="editor-tabs-secondary">

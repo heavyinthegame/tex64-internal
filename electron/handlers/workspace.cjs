@@ -12,9 +12,9 @@ const createWorkspaceHandlers = (deps) => {
     searchService,
     sendToRenderer,
     sendIssues,
-    isE2E,
     WorkspaceError,
     state,
+    userSettings,
   } = deps;
 
   const TEXT_FILE_EXTENSIONS = new Set([
@@ -31,6 +31,7 @@ const createWorkspaceHandlers = (deps) => {
     "ins",
     "dtx",
     "ltx",
+    "txt",
     "aux",
     "bbl",
     "blg",
@@ -141,9 +142,6 @@ const createWorkspaceHandlers = (deps) => {
   };
 
   const requestIndex = (rootPath) => {
-    if (isE2E) {
-      return;
-    }
     indexerService.requestIndex(rootPath, (snapshot) => {
       if (state.currentWorkspacePath !== rootPath) {
         return;
@@ -211,8 +209,7 @@ const createWorkspaceHandlers = (deps) => {
       buttonLabel: "選択",
     });
     if (result.canceled || result.filePaths.length === 0) {
-      sendLauncherStatus({ isBusy: false, message: "キャンセルしました。" });
-      sendIssues(0, "フォルダ選択をキャンセルしました。", "info", []);
+      sendLauncherStatus({ isBusy: false, message: null });
       return;
     }
     const rootPath = result.filePaths[0];
@@ -221,6 +218,45 @@ const createWorkspaceHandlers = (deps) => {
     state.currentWorkspacePath = null;
     await updateWorkspaceIfNeeded(rootPath, true);
     requestIndex(rootPath);
+    // Track recent project
+    if (userSettings) {
+      userSettings.addRecentProject(rootPath).catch(() => {});
+    }
+    sendLauncherStatus({ isBusy: false, message: null });
+  };
+
+  const handleOpenRecentProject = async (projectPath) => {
+    if (!state.mainWindow || !projectPath) {
+      return;
+    }
+    sendLauncherStatus({ isBusy: true, message: null });
+    // Verify the path exists
+    try {
+      const stats = await fsp.stat(projectPath);
+      if (!stats.isDirectory()) {
+        sendLauncherStatus({ isBusy: false, message: "フォルダが見つかりません。" });
+        // Remove from recent projects if it doesn't exist
+        if (userSettings) {
+          userSettings.removeRecentProject(projectPath).catch(() => {});
+        }
+        return;
+      }
+    } catch {
+      sendLauncherStatus({ isBusy: false, message: "フォルダが見つかりません。" });
+      if (userSettings) {
+        userSettings.removeRecentProject(projectPath).catch(() => {});
+      }
+      return;
+    }
+    workspace.setRootPath(projectPath);
+    state.lastBuildPdfPath = null;
+    state.currentWorkspacePath = null;
+    await updateWorkspaceIfNeeded(projectPath, true);
+    requestIndex(projectPath);
+    // Track recent project (moves it to top)
+    if (userSettings) {
+      userSettings.addRecentProject(projectPath).catch(() => {});
+    }
     sendLauncherStatus({ isBusy: false, message: null });
   };
 
@@ -251,6 +287,10 @@ const createWorkspaceHandlers = (deps) => {
     state.currentWorkspacePath = null;
     await updateWorkspaceIfNeeded(rootPath, true);
     requestIndex(rootPath);
+    // Track recent project
+    if (userSettings) {
+      userSettings.addRecentProject(rootPath).catch(() => {});
+    }
     sendLauncherStatus({ isBusy: false, message: null });
   };
 
@@ -880,16 +920,10 @@ const createWorkspaceHandlers = (deps) => {
     if (!rootPath) {
       return;
     }
-    if (isE2E) {
-      return;
-    }
     requestIndex(rootPath);
   };
 
   const handleSearch = async (query) => {
-    if (isE2E) {
-      return;
-    }
     const rootPath = ensureWorkspace();
     if (!rootPath) {
       sendToRenderer("updateSearch", {
@@ -913,6 +947,7 @@ const createWorkspaceHandlers = (deps) => {
     openInTerminal,
     revealInFinder,
     handleOpenWorkspace,
+    handleOpenRecentProject,
     handleCreateProject,
     handleOpenFile,
     handleFilePreview,

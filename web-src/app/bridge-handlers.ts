@@ -50,6 +50,7 @@ type BridgeHandlersDeps = {
     todos?: IndexEntry[];
   }) => void;
   handleLauncherStatus: (payload: { isBusy?: boolean; message?: string }) => void;
+  handleRecentProjects: (projects: { path: string; name: string; openedAt: number }[]) => void;
   search: {
     handleSearchUpdate: (payload: {
       query: string;
@@ -355,6 +356,11 @@ export const initBridgeHandlers = (deps: BridgeHandlersDeps) => {
         break;
       case "launcherStatus":
         deps.handleLauncherStatus(message.payload as { isBusy?: boolean; message?: string });
+        break;
+      case "recentProjects":
+        deps.handleRecentProjects(
+          (message.payload as { projects?: { path: string; name: string; openedAt: number }[] }).projects ?? []
+        );
         break;
       case "agent:settings":
         deps.agent?.handleSettings(

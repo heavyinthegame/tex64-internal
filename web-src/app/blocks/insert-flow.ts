@@ -57,8 +57,6 @@ type BlockInsertDeps = {
     payload: { type: string; [key: string]: unknown },
     silent?: boolean
   ) => boolean;
-  getIsE2E: () => boolean;
-  getMathInputValue: () => string;
   getBlockMode?: () => BlockMode;
   resetBlockSession: (options?: { applyMode?: BlockApplyMode }) => void;
   getPendingBlockApply: () => PendingBlockApply | null;
@@ -484,20 +482,6 @@ export const initBlockInsertFlow = (
         return;
       }
 
-      if (deps.getIsE2E()) {
-        (window as {
-          __tex64LastDraft?: {
-            formula: string;
-            snippet: string | null;
-            detectedSnippet: string | null;
-          };
-        }).__tex64LastDraft = {
-          formula: deps.getMathInputValue(),
-          snippet: resolvedDraft.snippet,
-          detectedSnippet: detectedSnapshot?.snippet ?? null,
-        };
-      }
-
       const applyPayload: PendingBlockApply = {
         mode,
         draft: resolvedDraft,
@@ -518,20 +502,6 @@ export const initBlockInsertFlow = (
       );
       deps.showDiffModal(diffContext.original, diffContext.modified, diffContext.lineOffset);
       return;
-    }
-
-    if (deps.getIsE2E()) {
-      (window as {
-        __tex64LastDraft?: {
-          formula: string;
-          snippet: string | null;
-          detectedSnippet: string | null;
-        };
-      }).__tex64LastDraft = {
-        formula: deps.getMathInputValue(),
-        snippet: resolvedDraft.snippet,
-        detectedSnippet: detectedSnapshot?.snippet ?? null,
-      };
     }
 
     const applyPayload: PendingBlockApply = {

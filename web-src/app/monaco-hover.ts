@@ -20,6 +20,9 @@ const getCursorIndex = (position: { lineNumber: number; column: number }) =>
 const escapeRegExp = (value: string) =>
   value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+const escapeHtmlAttr = (value: string) =>
+  value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
 const findCommandMatchAt = (
   line: string,
   cursorIndex: number,
@@ -162,7 +165,9 @@ const buildViewOnPdfLink = (payload: { path: string; line: number; column?: numb
   const href = `tex64://view-on-pdf?path=${encodeURIComponent(pathValue)}&line=${encodeURIComponent(
     String(line)
   )}&column=${encodeURIComponent(String(column))}`;
-  return `[View on PDF](${href})`;
+  return `<span class="tex64-hover-view-on-pdf" data-tex64-href="${escapeHtmlAttr(
+    href
+  )}">View on PDF</span>`;
 };
 
 const findFirstUnescapedPercent = (line: string) => {
@@ -736,7 +741,7 @@ export const registerHoverProvider = (
               { value: `定義:\n${locations}` },
             ];
             if (viewOnPdfLink) {
-              contents.push({ value: viewOnPdfLink, isTrusted: true } as any);
+              contents.push({ value: viewOnPdfLink, isTrusted: true, supportHtml: true } as any);
             }
             if (snippet) {
               contents.push({ value: snippet });
@@ -758,7 +763,9 @@ export const registerHoverProvider = (
         contents: [
           { value: `**\\\\${refMatch.command || "ref"}{${refMatch.key}}**` },
           { value: `定義:\n${locations}` },
-          ...(viewOnPdfLink ? ([{ value: viewOnPdfLink, isTrusted: true } as any] as any[]) : []),
+          ...(viewOnPdfLink
+            ? ([{ value: viewOnPdfLink, isTrusted: true, supportHtml: true } as any] as any[])
+            : []),
         ],
         range,
       };
@@ -767,7 +774,7 @@ export const registerHoverProvider = (
     const citeMatch = findCommandMatchAt(
       line,
       cursorIndex,
-      /\\(cite|citet|citep|citeauthor|citeyear|autocite|parencite|textcite|footcite|supercite)(?:\\[[^\\]]*\\])*\{([^}]+)\}/g,
+      /\\(cite|citet|citep|citeauthor|citeyear|autocite|parencite|textcite|footcite|supercite)(?:\[[^\]]*\])*\{([^}]+)\}/g,
       extractCiteKey
     );
     if (citeMatch) {

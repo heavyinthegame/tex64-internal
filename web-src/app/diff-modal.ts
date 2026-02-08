@@ -183,60 +183,6 @@ export const initDiffModal = (context: AppContext, deps: DiffModalDeps): DiffMod
     }
   };
 
-  const computeE2eLineChanges = () => {
-    if (!diffOriginalModel || !diffModifiedModel) {
-      return null;
-    }
-    const originalText =
-      (diffOriginalModel as { getValue?: () => string }).getValue?.() ?? "";
-    const modifiedText =
-      (diffModifiedModel as { getValue?: () => string }).getValue?.() ?? "";
-    const before = originalText.trimEnd();
-    const after = modifiedText.trimEnd();
-    const beforeLines = before.length ? before.split(/\r?\n/) : [""];
-    const afterLines = after.length ? after.split(/\r?\n/) : [""];
-    const diffLines = buildLineDiff(beforeLines, afterLines);
-    let hunks = 0;
-    let inChange = false;
-    diffLines.forEach((entry) => {
-      if (entry.type === "same") {
-        inChange = false;
-        return;
-      }
-      if (!inChange) {
-        hunks += 1;
-        inChange = true;
-      }
-    });
-    return Array.from({ length: hunks }, () => ({}));
-  };
-
-  const ensureE2eLineChanges = () => {
-    if (!context.isE2E || !diffEditor) {
-      return;
-    }
-    const diffEditorAny = diffEditor as {
-      getLineChanges?: () => unknown;
-      __e2eLineChangesPatched?: boolean;
-    };
-    if (diffEditorAny.__e2eLineChangesPatched) {
-      return;
-    }
-    const originalGetLineChanges = diffEditorAny.getLineChanges?.bind(diffEditorAny);
-    diffEditorAny.getLineChanges = () => {
-      const changes = originalGetLineChanges ? originalGetLineChanges() : null;
-      if (Array.isArray(changes) && changes.length > 0) {
-        return changes;
-      }
-      const fallback = computeE2eLineChanges();
-      if (Array.isArray(fallback)) {
-        return fallback;
-      }
-      return changes ?? null;
-    };
-    diffEditorAny.__e2eLineChangesPatched = true;
-  };
-
   const showDiffModal = (
     original: string,
     modified: string,
@@ -325,15 +271,7 @@ export const initDiffModal = (context: AppContext, deps: DiffModalDeps): DiffMod
       original: diffOriginalModel,
       modified: diffModifiedModel,
     });
-    ensureE2eLineChanges();
     applyDiffLineNumberOffset(lineOffset, original, modified);
-    if (context.isE2E) {
-      (window as {
-        __tex64LastDiff?: { original: string; modified: string; lineOffset: number };
-        __tex64DiffEditor?: unknown;
-      }).__tex64LastDiff = { original, modified, lineOffset };
-      (window as { __tex64DiffEditor?: unknown }).__tex64DiffEditor = diffEditor;
-    }
     if (typeof (diffEditor as any).layout === "function") {
       (diffEditor as any).layout();
     }

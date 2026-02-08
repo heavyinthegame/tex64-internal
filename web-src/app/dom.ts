@@ -2,6 +2,7 @@ export const getDomRefs = () => ({
   tabs: Array.from(document.querySelectorAll<HTMLButtonElement>(".tab[data-tab]")),
   issuesTab: document.getElementById("issues-tab"),
   editorGroups: document.getElementById("editor-groups"),
+  editorSplitter: document.getElementById("editor-splitter"),
   editorHost: document.getElementById("editor"),
   editorViewer: document.getElementById("editor-viewer"),
   editorViewerImage: document.getElementById("editor-viewer-image") as HTMLImageElement | null,
@@ -33,12 +34,13 @@ export const getDomRefs = () => ({
   launcher: document.getElementById("launcher"),
   launcherCreateButton: document.getElementById("launcher-create"),
   launcherOpenButton: document.getElementById("launcher-open"),
-  launcherStatus: document.getElementById("launcher-status"),
-  launcherStatusText: document.getElementById("launcher-status-text"),
-  launcherStatusSpinner: document.getElementById("launcher-status-spinner"),
   launcherTemplateButtons: Array.from(
     document.querySelectorAll<HTMLButtonElement>(".launcher-template-button")
   ),
+  launcherRecent: document.getElementById("launcher-recent"),
+  launcherRecentList: document.getElementById("launcher-recent-list"),
+  launcherRecentEmpty: document.getElementById("launcher-recent-empty"),
+  launcherRecentToggle: document.getElementById("launcher-recent-toggle"),
   sidebarPanels: Array.from(
     document.querySelectorAll<HTMLElement>(".panel[data-panel]")
   ),

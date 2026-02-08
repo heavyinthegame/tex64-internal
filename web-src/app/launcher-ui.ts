@@ -1,9 +1,17 @@
 import type { AppContext } from "./context.js";
 import type { LauncherTemplate } from "./types.js";
 
+type RecentProject = {
+  path: string;
+  name: string;
+  openedAt: number;
+};
+
 type LauncherUiDeps = {
   onCreate: (template: LauncherTemplate) => void;
   onOpen: () => void;
+  onOpenRecent: (path: string) => void;
+  onRemoveRecent: (path: string) => void;
 };
 
 export type LauncherUiApi = {
@@ -12,7 +20,10 @@ export type LauncherUiApi = {
   setTemplate: (template: LauncherTemplate) => void;
   getTemplate: () => LauncherTemplate;
   isBusy: () => boolean;
+  updateRecentProjects: (projects: RecentProject[]) => void;
 };
+
+const INITIAL_VISIBLE_COUNT = 3;
 
 export const initLauncherUi = (
   context: AppContext,
@@ -22,17 +33,20 @@ export const initLauncherUi = (
     launcher,
     launcherCreateButton,
     launcherOpenButton,
-    launcherStatus,
-    launcherStatusText,
-    launcherStatusSpinner,
     launcherTemplateButtons,
+    launcherRecent,
+    launcherRecentList,
+    launcherRecentEmpty,
+    launcherRecentToggle,
   } = context.dom;
 
   let selectedActionIndex = 0;
   let launcherTemplate: LauncherTemplate = "paper";
   let launcherBusy = false;
-  let launcherMessage: string | null = null;
   const launcherActions = [launcherOpenButton, launcherCreateButton];
+  
+  let recentProjects: RecentProject[] = [];
+  let recentExpanded = false;
 
   const updateActionSelection = () => {
     launcherActions.forEach((btn, index) => {
@@ -72,31 +86,84 @@ export const initLauncherUi = (
     if (typeof payload.isBusy === "boolean") {
       launcherBusy = payload.isBusy;
     }
-    if (payload.message !== undefined) {
-      launcherMessage = payload.message ?? null;
-    }
     if (launcherCreateButton instanceof HTMLButtonElement) {
       launcherCreateButton.disabled = launcherBusy;
     }
     if (launcherOpenButton instanceof HTMLButtonElement) {
       launcherOpenButton.disabled = launcherBusy;
     }
-    if (!(launcherStatus instanceof HTMLElement) || !(launcherStatusText instanceof HTMLElement)) {
-      return;
-    }
-    if (!launcherBusy && !launcherMessage) {
-      launcherStatus.classList.remove("is-visible", "is-busy");
-      launcherStatusText.textContent = "";
-      return;
-    }
-    launcherStatus.classList.add("is-visible");
-    launcherStatus.classList.toggle("is-busy", launcherBusy);
-    launcherStatusText.textContent = launcherBusy ? "準備中..." : launcherMessage ?? "";
-    if (launcherStatusSpinner instanceof HTMLElement) {
-      launcherStatusSpinner.hidden = !launcherBusy;
-    }
-    updateActionSelection();
   };
+
+  const renderRecentProjects = () => {
+    if (!(launcherRecentList instanceof HTMLElement)) {
+      return;
+    }
+    launcherRecentList.innerHTML = "";
+    
+    const visibleProjects = recentExpanded 
+      ? recentProjects 
+      : recentProjects.slice(0, INITIAL_VISIBLE_COUNT);
+    
+    for (const project of visibleProjects) {
+      const item = document.createElement("button");
+      item.className = "launcher-recent-item";
+      item.type = "button";
+      item.dataset.path = project.path;
+      
+      const nameSpan = document.createElement("span");
+      nameSpan.className = "launcher-recent-item-name";
+      nameSpan.textContent = project.name;
+      
+      const pathSpan = document.createElement("span");
+      pathSpan.className = "launcher-recent-item-path";
+      pathSpan.textContent = project.path;
+      
+      item.appendChild(nameSpan);
+      item.appendChild(pathSpan);
+      
+      item.addEventListener("click", () => {
+        if (launcherBusy) return;
+        setStatus({ isBusy: true, message: null });
+        deps.onOpenRecent(project.path);
+      });
+      
+      launcherRecentList.appendChild(item);
+    }
+    
+    // Update empty state
+    if (launcherRecentEmpty instanceof HTMLElement) {
+      launcherRecentEmpty.style.display = recentProjects.length === 0 ? "" : "none";
+    }
+    
+    // Update toggle button
+    if (launcherRecentToggle instanceof HTMLElement) {
+      const hasMore = recentProjects.length > INITIAL_VISIBLE_COUNT;
+      launcherRecentToggle.style.display = hasMore ? "" : "none";
+      launcherRecentToggle.setAttribute("aria-expanded", recentExpanded ? "true" : "false");
+      const toggleText = launcherRecentToggle.querySelector(".launcher-recent-toggle-text");
+      if (toggleText) {
+        toggleText.textContent = recentExpanded ? "折りたたむ" : "すべて表示";
+      }
+    }
+    
+    // Update recent section visibility
+    if (launcherRecent instanceof HTMLElement) {
+      launcherRecent.style.display = "";
+    }
+  };
+
+  const updateRecentProjects = (projects: RecentProject[]) => {
+    recentProjects = projects;
+    renderRecentProjects();
+  };
+
+  // Toggle handler for recent projects
+  if (launcherRecentToggle instanceof HTMLElement) {
+    launcherRecentToggle.addEventListener("click", () => {
+      recentExpanded = !recentExpanded;
+      renderRecentProjects();
+    });
+  }
 
   const handleLauncherKeydown = (event: KeyboardEvent) => {
     if (!launcher?.classList.contains("is-visible")) {
@@ -161,5 +228,6 @@ export const initLauncherUi = (
     setTemplate,
     getTemplate: () => launcherTemplate,
     isBusy: () => launcherBusy,
+    updateRecentProjects,
   };
 };

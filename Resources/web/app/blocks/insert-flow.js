@@ -204,7 +204,7 @@ export const initBlockInsertFlow = (context, deps) => {
         deps.resetBlockSession({ applyMode: mode });
     };
     const triggerInsert = async () => {
-        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
         const triggerSeq = ++triggerInsertSeq;
         const activeGroup = deps.getActiveGroup();
         if (!activeGroup.editor) {
@@ -319,13 +319,6 @@ export const initBlockInsertFlow = (context, deps) => {
             if (triggerSeq !== triggerInsertSeq) {
                 return;
             }
-            if (deps.getIsE2E()) {
-                window.__tex64LastDraft = {
-                    formula: deps.getMathInputValue(),
-                    snippet: resolvedDraft.snippet,
-                    detectedSnippet: (_l = detectedSnapshot === null || detectedSnapshot === void 0 ? void 0 : detectedSnapshot.snippet) !== null && _l !== void 0 ? _l : null,
-                };
-            }
             const applyPayload = {
                 mode,
                 draft: resolvedDraft,
@@ -341,13 +334,6 @@ export const initBlockInsertFlow = (context, deps) => {
             deps.showDiffModal(diffContext.original, diffContext.modified, diffContext.lineOffset);
             return;
         }
-        if (deps.getIsE2E()) {
-            window.__tex64LastDraft = {
-                formula: deps.getMathInputValue(),
-                snippet: resolvedDraft.snippet,
-                detectedSnippet: (_m = detectedSnapshot === null || detectedSnapshot === void 0 ? void 0 : detectedSnapshot.snippet) !== null && _m !== void 0 ? _m : null,
-            };
-        }
         const applyPayload = {
             mode,
             draft: resolvedDraft,
@@ -357,7 +343,7 @@ export const initBlockInsertFlow = (context, deps) => {
         };
         deps.setPendingBlockApply(applyPayload);
         deps.setCurrentBlockDraft(resolvedDraft);
-        const originalSnippet = mode === "detected" ? (_o = detectedSnapshot === null || detectedSnapshot === void 0 ? void 0 : detectedSnapshot.snippet) !== null && _o !== void 0 ? _o : "" : "";
+        const originalSnippet = mode === "detected" ? (_l = detectedSnapshot === null || detectedSnapshot === void 0 ? void 0 : detectedSnapshot.snippet) !== null && _l !== void 0 ? _l : "" : "";
         const fallbackOffset = insertRange
             ? Math.max(0, insertRange.startLineNumber - 1)
             : insertPosition

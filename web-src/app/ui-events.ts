@@ -32,6 +32,7 @@ type UiEventsDeps = {
   buildOps: {
     setupActionButtons: () => void;
     startBuild: () => void;
+    startBuildWithSave: () => void;
   };
   rootSelectorUi: {
     setupActions: () => void;
@@ -113,7 +114,7 @@ export const initUiEvents = (context: AppContext, deps: UiEventsDeps): UiEventsA
       }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "b") {
         event.preventDefault();
-        deps.buildOps.startBuild();
+        deps.buildOps.startBuildWithSave();
       }
     });
 

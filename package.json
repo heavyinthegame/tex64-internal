@@ -6,10 +6,13 @@
   "main": "electron/main.cjs",
   "scripts": {
     "electron:dev": "electron .",
-    "web:build": "tsc -p web-src/tsconfig.json"
+    "web:build": "tsc -p web-src/tsconfig.json",
+    "e2e:completion": "node tests/e2e/completion.e2e.mjs",
+    "e2e:input-assist": "node tests/e2e/input-assist.e2e.mjs"
   },
   "devDependencies": {
     "electron": "^31.0.0",
+    "playwright": "^1.58.2",
     "typescript": "^5.5.4"
   },
   "dependencies": {

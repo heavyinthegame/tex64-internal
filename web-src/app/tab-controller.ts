@@ -40,11 +40,8 @@ export const initTabController = (
 
     activeTab = tabKey;
     document.body.dataset.activeTab = tabKey;
-    const keepFilesVisible = context.isE2E && tabKey === "blocks";
     sidebarPanels.forEach((panel) => {
-      const isActive =
-        panel.dataset.panel === tabKey ||
-        (keepFilesVisible && panel.dataset.panel === "files");
+      const isActive = panel.dataset.panel === tabKey;
       panel.classList.toggle("is-active", isActive);
     });
     if (tabKey === "files") {

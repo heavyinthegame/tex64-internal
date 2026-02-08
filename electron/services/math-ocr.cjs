@@ -511,7 +511,6 @@ class MathOcrService {
       const maxSeqLen = config.maxSeqLen;
       const minTokens = Math.max(5, Math.round(width / 90));
       const rng = createRng((width * 1000 + height) >>> 0);
-      const isE2E = process.env.TEX180_E2E === "1";
       const tokens = [decoderStartToken];
 
       for (let step = 0; step < maxSeqLen; step += 1) {

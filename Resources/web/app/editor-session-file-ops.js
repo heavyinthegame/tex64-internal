@@ -226,22 +226,34 @@ export const createEditorSessionFileOps = (ctx) => {
         }
         const editor = activeGroup.editor;
         const content = editor.getValue();
-        return new Promise((resolve, reject) => {
-            state.pendingSave = { path: activePath, content, resolve, reject };
-            const shouldFormat = false;
-            const ok = deps.postToNative({
-                type: "saveFile",
-                path: activePath,
-                content,
-                format: shouldFormat,
-                formatSource: "save",
-                formatSettings: deps.settings.buildFormatSettingsPayload(),
-            });
-            if (!ok) {
-                state.pendingSave = null;
-                reject("ネイティブ連携が利用できません。");
-            }
+        const savePathContent = (path, value, timeoutMs = 8000) => new Promise((resolve, reject) => {
+            const startedAt = Date.now();
+            const enqueue = () => {
+                if (state.pendingSave) {
+                    if (Date.now() - startedAt >= timeoutMs) {
+                        reject("保存の待機がタイムアウトしました。");
+                        return;
+                    }
+                    window.setTimeout(enqueue, 25);
+                    return;
+                }
+                state.pendingSave = { path, content: value, resolve, reject };
+                const ok = deps.postToNative({
+                    type: "saveFile",
+                    path,
+                    content: value,
+                    format: false,
+                    formatSource: "save",
+                    formatSettings: deps.settings.buildFormatSettingsPayload(),
+                });
+                if (!ok) {
+                    state.pendingSave = null;
+                    reject("ネイティブ連携が利用できません。");
+                }
+            };
+            enqueue();
         });
+        return savePathContent(activePath, content);
     };
     const saveCurrentFile = () => {
         const activeGroup = getActiveGroup();
@@ -253,6 +265,91 @@ export const createEditorSessionFileOps = (ctx) => {
                 saveCurrentFileInternal().then(resolve).catch(reject);
             });
         });
+    };
+    const saveDirtyFiles = async () => {
+        const dirtyPaths = Array.from(dirtyFiles).filter((path) => isTextFilePath(path));
+        if (dirtyPaths.length === 0) {
+            return true;
+        }
+        const activePath = getActiveGroup().currentFilePath;
+        const ordered = dirtyPaths.slice().sort((a, b) => {
+            if (a === activePath) {
+                return -1;
+            }
+            if (b === activePath) {
+                return 1;
+            }
+            return a.localeCompare(b, "ja");
+        });
+        const readBuffer = (path) => {
+            var _a, _b, _c;
+            const entry = monacoModels.get(path);
+            if ((_a = entry === null || entry === void 0 ? void 0 : entry.model) === null || _a === void 0 ? void 0 : _a.getValue) {
+                return entry.model.getValue();
+            }
+            const owner = Object.values(editorGroups).find((group) => group.currentFilePath === path);
+            if (!(owner === null || owner === void 0 ? void 0 : owner.editor)) {
+                return null;
+            }
+            const editor = owner.editor;
+            return (_c = (_b = editor.getValue) === null || _b === void 0 ? void 0 : _b.call(editor)) !== null && _c !== void 0 ? _c : null;
+        };
+        const waitForCompositionIfNeeded = (path) => new Promise((resolve) => {
+            const owner = Object.values(editorGroups).find((group) => group.currentFilePath === path);
+            if (!(owner === null || owner === void 0 ? void 0 : owner.isComposing)) {
+                resolve();
+                return;
+            }
+            scheduleAfterComposition(owner, () => resolve());
+        });
+        for (const path of ordered) {
+            if (!dirtyFiles.has(path)) {
+                continue;
+            }
+            await waitForCompositionIfNeeded(path);
+            const content = readBuffer(path);
+            if (content === null) {
+                deps.updateIssues(1, `保存対象の内容を取得できません: ${path}`, "error", [
+                    { severity: "error", message: `保存対象の内容を取得できません: ${path}` },
+                ]);
+                return false;
+            }
+            try {
+                await new Promise((resolve, reject) => {
+                    const startedAt = Date.now();
+                    const enqueue = () => {
+                        if (state.pendingSave) {
+                            if (Date.now() - startedAt >= 8000) {
+                                reject("保存の待機がタイムアウトしました。");
+                                return;
+                            }
+                            window.setTimeout(enqueue, 25);
+                            return;
+                        }
+                        state.pendingSave = { path, content, resolve, reject };
+                        const ok = deps.postToNative({
+                            type: "saveFile",
+                            path,
+                            content,
+                            format: false,
+                            formatSource: "save",
+                            formatSettings: deps.settings.buildFormatSettingsPayload(),
+                        });
+                        if (!ok) {
+                            state.pendingSave = null;
+                            reject("ネイティブ連携が利用できません。");
+                        }
+                    };
+                    enqueue();
+                });
+            }
+            catch (error) {
+                const message = error instanceof Error ? error.message : "保存に失敗しました。";
+                deps.updateIssues(1, message, "error", [{ severity: "error", message }]);
+                return false;
+            }
+        }
+        return true;
     };
     const clearAutoSaveTimer = () => {
         if (state.autoSaveTimer) {
@@ -422,7 +519,7 @@ export const createEditorSessionFileOps = (ctx) => {
         }
         if (state.autoSavePending) {
             state.autoSavePending = false;
-            if (activeGroup.currentFilePath === payload.path && activeGroup.isDirty) {
+            if (activeGroup.currentFilePath && activeGroup.isDirty) {
                 scheduleAutoSave();
             }
         }
@@ -441,6 +538,7 @@ export const createEditorSessionFileOps = (ctx) => {
         applyFormattedContent,
         requestOpenFile,
         saveCurrentFile,
+        saveDirtyFiles,
         scheduleAutoSave,
         handleOpenFileResult,
         handleSaveResult,

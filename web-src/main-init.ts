@@ -132,15 +132,12 @@ export const initMain = () => {
       );
     },
   });
-  const isE2E = new URLSearchParams(window.location.search).get("e2e") === "1";
-
   const bridgeWindow = window as BridgeWindow;
   const appState = createAppState();
   const appActions = createAppActions(appState);
   const appContext = createAppContext({
     dom,
     bridgeWindow,
-    isE2E,
     viewers: { primary: primaryViewer, secondary: secondaryViewer },
   });
   let updateIssues = (
@@ -194,7 +191,6 @@ export const initMain = () => {
   };
   postToNative = initBridgeSender({
     bridgeWindow,
-    isE2E,
     updateIssues: updateIssuesProxy,
   });
   const apiCompletionBroker = createApiCompletionBroker((payload, silent) =>
@@ -269,7 +265,16 @@ export const initMain = () => {
     onOpen: () => {
       postToNative({ type: "openWorkspace" });
     },
+    onOpenRecent: (path) => {
+      postToNative({ type: "openRecentProject", path });
+    },
+    onRemoveRecent: (path) => {
+      postToNative({ type: "removeRecentProject", path });
+    },
   });
+  
+  // Request recent projects on startup
+  postToNative({ type: "getRecentProjects" });
   const fileTreeUi = initFileTreeUi(appContext, {
     contextMenu,
     getWorkspaceRootKey,
@@ -304,13 +309,6 @@ export const initMain = () => {
   };
 
   let lastBuildMainFile: string | null = null;
-
-  if (isE2E) {
-    (window as { __tex64SetLastBuildMainFile?: (path: string | null) => void })
-      .__tex64SetLastBuildMainFile = (path) => {
-        lastBuildMainFile = typeof path === "string" ? path : null;
-      };
-  }
   let blockPreviewActive = false;
   let activeBlockOriginalSnippet: string | null = null;
   let activeBlockEditMode: BlockEditMode = "none";
@@ -422,22 +420,6 @@ export const initMain = () => {
     },
   });
 
-  if (isE2E) {
-    (
-      window as {
-        __tex64SetMathInputFallback?: (value: string | null) => void;
-        __tex64GetMathInputFallback?: () => string | null;
-      }
-    ).__tex64SetMathInputFallback = (value) => {
-      blockInputApi.setMathInputFallback(value);
-    };
-    (
-      window as { __tex64GetMathInputFallback?: () => string | null }
-    ).__tex64GetMathInputFallback = () => blockInputApi.getMathInputFallback();
-    (window as { __tex64GetMathInputValue?: () => string }).__tex64GetMathInputValue =
-      () => blockInputApi.getMathInputValue();
-  }
-
   const mathKeyboardApi = initMathKeyboard(appContext, {
     getActiveTab: tabController.getActiveTab,
     getActiveBlockType: () => blockInputApi.getActiveBlockType(),
@@ -501,8 +483,6 @@ export const initMain = () => {
     },
     requestFormatPreview: (payload) => buildOps.requestFormatPreview(payload),
     postToNative: (payload, silent) => postToNative(payload, silent),
-    getIsE2E: () => isE2E,
-    getMathInputValue: blockInputApi.getMathInputValue,
     getBlockMode: () => blockEditSession?.getMode() ?? "insert",
     resetBlockSession: (options) => resetBlockSession(options),
     getPendingBlockApply: () => pendingBlockApply,
@@ -632,6 +612,7 @@ export const initMain = () => {
     getStoredCursorPosition: (path) => editorSession.getStoredCursorPosition(path),
     cacheCurrentBuffer: editorSession.cacheCurrentBuffer,
     saveCurrentFile: () => editorSession.saveCurrentFile(),
+    saveDirtyFiles: () => editorSession.saveDirtyFiles(),
     postToNative: (payload, silent) => postToNative(payload, silent),
     updateIssues: updateIssuesProxy,
     setPendingBuildIssuesFocus: (value) => setPendingBuildIssuesFocus(value),
@@ -774,6 +755,7 @@ export const initMain = () => {
     buildOps: {
       setupActionButtons: () => buildOps.setupActionButtons(),
       startBuild: () => buildOps.startBuild(),
+      startBuildWithSave: () => buildOps.startBuildWithSave(),
     },
     rootSelectorUi: {
       setupActions: () => rootSelectorUi.setupActions(),
@@ -781,13 +763,24 @@ export const initMain = () => {
   });
   uiEvents.setup();
 
+  window.addEventListener("beforeunload", (event) => {
+    if (editorSession.getDirtyPaths().size === 0) {
+      return;
+    }
+    event.preventDefault();
+    event.returnValue = "";
+  });
+
   document.addEventListener("click", (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) {
       return;
     }
-    const anchor = target.closest("a");
-    const href = anchor?.getAttribute("href") ?? "";
+    const actionable = target.closest<HTMLElement>("[data-tex64-href], a[href]");
+    const href =
+      actionable?.getAttribute("data-tex64-href") ??
+      actionable?.getAttribute("href") ??
+      "";
     if (!href.startsWith("tex64://")) {
       return;
     }
@@ -847,6 +840,7 @@ export const initMain = () => {
     handleWorkspaceUpdate: workspaceController.handleWorkspaceUpdate,
     handleIndexUpdate: workspaceController.handleIndexUpdate,
     handleLauncherStatus,
+    handleRecentProjects: (projects) => launcherUi.updateRecentProjects(projects),
     search: {
       handleSearchUpdate: (payload) => searchUi.handleSearchUpdate(payload),
     },

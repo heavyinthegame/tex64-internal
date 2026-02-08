@@ -561,10 +561,6 @@ class SynctexService {
   }
 
   findSynctex() {
-    const override = process.env.TEX180_E2E_SYNCTEX_PATH;
-    if (override && fs.existsSync(override)) {
-      return override;
-    }
     const candidates = [];
     if (process.platform === "darwin") {
       candidates.push(

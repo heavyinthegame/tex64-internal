@@ -56,7 +56,7 @@ export const initUiEvents = (context, deps) => {
             }
             if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "b") {
                 event.preventDefault();
-                deps.buildOps.startBuild();
+                deps.buildOps.startBuildWithSave();
             }
         });
     };
