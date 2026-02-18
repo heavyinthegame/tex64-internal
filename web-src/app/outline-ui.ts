@@ -1,6 +1,11 @@
 import type { AppContext } from "./context.js";
 import type { IndexEntry, SectionEntry } from "./types.js";
-import { dedupeByKey, dedupeSections, pickCitationEntries } from "./index-utils.js";
+import {
+  dedupeByKey,
+  dedupeByKeyAndLocation,
+  dedupeSections,
+  pickCitationEntries,
+} from "./index-utils.js";
 
 type OutlineDeps = {
   getActiveFilePath: () => string | null;
@@ -111,20 +116,81 @@ export const initOutlineUi = (context: AppContext, deps: OutlineDeps): OutlineUi
       return;
     }
     const showNumbering = options.showNumbering !== false;
-    const baseLevel = showNumbering ? Math.min(...entries.map((entry) => entry.level)) : 0;
-    const counters = showNumbering ? new Array(8).fill(0) : [];
     const sectionLabels = ["章", "節", "小節", "項", "小項", "段落", "小段落"];
-    entries.forEach((entry) => {
-      const depth = Math.max(entry.level - baseLevel, 0);
-      let prefix = "";
-      if (showNumbering) {
-        counters[depth] += 1;
-        for (let i = depth + 1; i < counters.length; i += 1) {
-          counters[i] = 0;
+
+    const baseLevelsByPath = new Map<
+      string,
+      { hasChapter: boolean; minSectionOrLowerLevel: number; hasNonPart: boolean }
+    >();
+    if (showNumbering) {
+      entries.forEach((entry) => {
+        const state = baseLevelsByPath.get(entry.path) ?? {
+          hasChapter: false,
+          minSectionOrLowerLevel: Number.POSITIVE_INFINITY,
+          hasNonPart: false,
+        };
+        if (entry.level === 2) {
+          state.hasChapter = true;
         }
-        const numberParts = counters.slice(0, depth + 1).filter((value) => value > 0);
-        const label = sectionLabels[depth] ?? "節";
-        prefix = `${numberParts.join(".")}${label} `;
+        if (entry.level >= 3 && entry.level < state.minSectionOrLowerLevel) {
+          state.minSectionOrLowerLevel = entry.level;
+        }
+        if (entry.level !== 1) {
+          state.hasNonPart = true;
+        }
+        baseLevelsByPath.set(entry.path, state);
+      });
+    }
+    const stateByPath = new Map<
+      string,
+      { baseLevel: number; labelOffset: number; countPart: boolean; counters: number[] }
+    >();
+    const getStateForPath = (path: string) => {
+      const existing = stateByPath.get(path);
+      if (existing) {
+        return existing;
+      }
+      const baseInfo = baseLevelsByPath.get(path);
+      const hasChapter = baseInfo?.hasChapter ?? false;
+      const minSectionOrLowerLevel = baseInfo?.minSectionOrLowerLevel ?? Number.POSITIVE_INFINITY;
+      const hasNonPart = baseInfo?.hasNonPart ?? false;
+      const baseLevel = hasChapter
+        ? 2
+        : Number.isFinite(minSectionOrLowerLevel)
+          ? minSectionOrLowerLevel
+          : 2;
+      const countPart = !hasNonPart;
+      const state = {
+        baseLevel,
+        labelOffset: Math.max(baseLevel - 2, 0),
+        countPart,
+        counters: new Array(8).fill(0),
+      };
+      stateByPath.set(path, state);
+      return state;
+    };
+
+    entries.forEach((entry) => {
+      let prefix = "";
+      const state = showNumbering ? getStateForPath(entry.path) : null;
+      const depth = showNumbering
+        ? Math.max(entry.level - (state?.baseLevel ?? 0), 0)
+        : entry.level;
+      if (showNumbering) {
+        const shouldCount = state.countPart || entry.level >= state.baseLevel;
+        if (shouldCount) {
+          state.counters[depth] = (state.counters[depth] ?? 0) + 1;
+          for (let i = depth + 1; i < state.counters.length; i += 1) {
+            state.counters[i] = 0;
+          }
+        }
+        const numberParts = state.counters
+          .slice(0, depth + 1)
+          .filter((value) => value > 0);
+        if (numberParts.length > 0) {
+          const label = sectionLabels[Math.max(depth + state.labelOffset, 0)] ?? "節";
+          prefix = `${numberParts.join(".")}${label} `;
+        }
       }
 
       const item = document.createElement("button");
@@ -162,7 +228,7 @@ export const initOutlineUi = (context: AppContext, deps: OutlineDeps): OutlineUi
     const sectionEntries = dedupeSections(
       filterEntries(deps.getIndexSections())
     );
-    const todoEntries = dedupeByKey(filterEntries(deps.getIndexTodos()));
+    const todoEntries = dedupeByKeyAndLocation(filterEntries(deps.getIndexTodos()));
     const labelEntries = dedupeByKey(filterEntries(deps.getIndexLabels()));
     const citationEntries = pickCitationEntries(
       filterEntries(deps.getIndexCitations())

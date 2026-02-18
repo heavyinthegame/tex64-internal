@@ -56,6 +56,7 @@ type BridgeHandlersDeps = {
       query: string;
       results?: SearchResult[];
       message?: string;
+      requestId?: number;
     }) => void;
     handleRenameResult?: (payload: {
       ok: boolean;
@@ -85,6 +86,8 @@ type BridgeHandlersDeps = {
       x?: number;
       y?: number;
       pdfPath?: string | null;
+      requestId?: string;
+      cancelled?: boolean;
     }) => void;
     handleSynctexReverseResult: (payload: {
       ok?: boolean;
@@ -122,6 +125,13 @@ type BridgeHandlersDeps = {
       proposalId: string;
       ok: boolean;
       error?: string;
+      conflict?: boolean;
+    }) => void;
+    handleUndoResult: (payload: {
+      ok: boolean;
+      message?: string;
+      path?: string;
+      conversationId?: string;
     }) => void;
     handleError: (message: string, conversationId?: string) => void;
   };
@@ -291,6 +301,7 @@ export const initBridgeHandlers = (deps: BridgeHandlersDeps) => {
           query: string;
           results: SearchResult[];
           message?: string;
+          requestId?: number;
         });
         break;
       case "search:renameResult":
@@ -454,7 +465,22 @@ export const initBridgeHandlers = (deps: BridgeHandlersDeps) => {
         break;
       case "agent:applyResult":
         deps.agent?.handleApplyResult(
-          message.payload as { proposalId: string; ok: boolean; error?: string }
+          message.payload as {
+            proposalId: string;
+            ok: boolean;
+            error?: string;
+            conflict?: boolean;
+          }
+        );
+        break;
+      case "agent:undoResult":
+        deps.agent?.handleUndoResult(
+          message.payload as {
+            ok: boolean;
+            message?: string;
+            path?: string;
+            conversationId?: string;
+          }
         );
         break;
       case "agent:error":

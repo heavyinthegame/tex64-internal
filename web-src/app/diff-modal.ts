@@ -74,7 +74,8 @@ export const initDiffModal = (context: AppContext, deps: DiffModalDeps): DiffMod
 
   const renderDiffHeader = () => {
     if (diffTitle instanceof HTMLElement) {
-      diffTitle.textContent = "変更内容の確認";
+      diffTitle.textContent =
+        diffContext?.type === "block" ? "変更内容の確認（確定後に整形）" : "変更内容の確認";
     }
     if (diffFileName instanceof HTMLElement) {
       const activePath = deps.getActiveFilePath();
@@ -86,16 +87,12 @@ export const initDiffModal = (context: AppContext, deps: DiffModalDeps): DiffMod
   const setDiffHeader = (options: {
     title?: string;
     fileName?: string;
-    submitLabel?: string;
   }) => {
-    if (diffTitle instanceof HTMLElement && options.title) {
+    if (diffTitle instanceof HTMLElement && typeof options.title === "string") {
       diffTitle.textContent = options.title;
     }
-    if (diffFileName instanceof HTMLElement) {
-      diffFileName.textContent = options.fileName ?? "";
-    }
-    if (diffModalSubmit instanceof HTMLButtonElement && options.submitLabel) {
-      diffModalSubmit.textContent = options.submitLabel;
+    if (diffFileName instanceof HTMLElement && typeof options.fileName === "string") {
+      diffFileName.textContent = options.fileName;
     }
   };
 
@@ -250,11 +247,15 @@ export const initDiffModal = (context: AppContext, deps: DiffModalDeps): DiffMod
     }
 
     renderDiffHeader();
+    if (diffModalSubmit instanceof HTMLButtonElement) {
+      const submitLabel = options?.submitLabel;
+      diffModalSubmit.textContent =
+        typeof submitLabel === "string" && submitLabel.trim().length > 0
+          ? submitLabel
+          : defaultDiffSubmitLabel;
+    }
     if (options) {
       setDiffHeader(options);
-    }
-    if (diffModalSubmit instanceof HTMLButtonElement) {
-      diffModalSubmit.textContent = defaultDiffSubmitLabel;
     }
     renderDiffSummary(original, modified);
 

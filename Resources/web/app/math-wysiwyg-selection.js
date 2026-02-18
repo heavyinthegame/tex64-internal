@@ -105,14 +105,25 @@ export const offsetToIndexInRange = (mathfieldApi, rangeStart, offset) => {
     if (typeof (mathfieldApi === null || mathfieldApi === void 0 ? void 0 : mathfieldApi.getValue) !== "function") {
         return offset - rangeStart;
     }
-    const prefix = mathfieldApi.getValue(rangeStart, offset, "latex");
-    return typeof prefix === "string" ? prefix.length : 0;
+    try {
+        const prefix = mathfieldApi.getValue(rangeStart, offset, "latex");
+        return typeof prefix === "string" ? prefix.length : 0;
+    }
+    catch {
+        return Math.max(0, offset - rangeStart);
+    }
 };
 export const indexToOffsetInRange = (mathfieldApi, rangeStart, rangeEnd, targetIndex) => {
     if (typeof (mathfieldApi === null || mathfieldApi === void 0 ? void 0 : mathfieldApi.getValue) !== "function") {
         return rangeStart + targetIndex;
     }
-    const rangeText = mathfieldApi.getValue(rangeStart, rangeEnd, "latex");
+    let rangeText = "";
+    try {
+        rangeText = mathfieldApi.getValue(rangeStart, rangeEnd, "latex");
+    }
+    catch {
+        return rangeStart + targetIndex;
+    }
     const rangeLength = typeof rangeText === "string" ? rangeText.length : 0;
     if (targetIndex <= 0) {
         return rangeStart;

@@ -88,7 +88,11 @@ class IndexerService {
           const envStack = [];
           lines.forEach((line, index) => {
             const lineNumber = index + 1;
-            if (line.trim().startsWith("%")) {
+            const todoTextMatch = line.match(todoTextRegex);
+            if (todoTextMatch) {
+              todos.push({ key: todoTextMatch[1], path: relPath, line: lineNumber });
+            }
+            if (line.trimStart().startsWith("%")) {
               return;
             }
             this.matchAll(labelRegex, line, (match) => {
@@ -138,10 +142,6 @@ class IndexerService {
             this.matchAll(todoRegex, line, (match) => {
               todos.push({ key: match[1], path: relPath, line: lineNumber });
             });
-            const todoTextMatch = line.match(todoTextRegex);
-            if (todoTextMatch) {
-              todos.push({ key: todoTextMatch[1], path: relPath, line: lineNumber });
-            }
           });
         } else if (ext === ".bib") {
           lines.forEach((line, index) => {

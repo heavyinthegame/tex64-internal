@@ -11,11 +11,19 @@ const createAgentHandlers = (deps) => {
     sendToRenderer("agent:settings", { settings });
   };
 
-  const handleAgentRun = async (message, context, conversationId) => {
-    if (!message || typeof message !== "string") {
+  const handleAgentRun = async (message, context, conversationId, parts) => {
+    const normalizedMessage = typeof message === "string" ? message : "";
+    const hasText = normalizedMessage.trim().length > 0;
+    const hasParts = Array.isArray(parts) && parts.length > 0;
+    if (!hasText && !hasParts) {
       return;
     }
-    await agentService.run({ message, context, conversationId });
+    await agentService.run({
+      message: normalizedMessage,
+      parts: hasParts ? parts : undefined,
+      context,
+      conversationId,
+    });
   };
 
   const handleSearchRename = async (payload) => {
@@ -59,8 +67,8 @@ const createAgentHandlers = (deps) => {
     });
   };
 
-  const handleAgentAbort = () => {
-    agentService.abort();
+  const handleAgentAbort = (conversationId) => {
+    agentService.abort(conversationId);
   };
 
   const handleAgentApply = async (proposalId) => {
@@ -68,6 +76,10 @@ const createAgentHandlers = (deps) => {
       return;
     }
     await agentService.applyProposal(proposalId);
+  };
+
+  const handleAgentUndoLastApply = async (conversationId) => {
+    await agentService.undoLastApply(conversationId);
   };
 
   const handleAgentClear = (conversationId) => {
@@ -87,6 +99,7 @@ const createAgentHandlers = (deps) => {
     handleAgentRun,
     handleAgentAbort,
     handleAgentApply,
+    handleAgentUndoLastApply,
     handleAgentClear,
     handleSearchRename,
     handleSettingsResponse,

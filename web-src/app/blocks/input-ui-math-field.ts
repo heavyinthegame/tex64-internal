@@ -427,9 +427,13 @@ export const readMathFieldValue = (
     return "";
   }
   if (typeof mathField.getValue === "function") {
-    const nextValue = mathField.getValue("latex");
-    if (typeof nextValue === "string") {
-      return nextValue;
+    try {
+      const nextValue = mathField.getValue("latex");
+      if (typeof nextValue === "string") {
+        return nextValue;
+      }
+    } catch {
+      // ignore and fallback to .value
     }
   }
   if (typeof mathField.value === "string") {
@@ -446,8 +450,12 @@ export const writeMathFieldValue = (
     return;
   }
   if (typeof mathField.setValue === "function") {
-    mathField.setValue(value);
-    return;
+    try {
+      mathField.setValue(value);
+      return;
+    } catch {
+      // ignore and fallback to .value assignment
+    }
   }
   if ("value" in mathField) {
     (mathField as { value?: string }).value = value;

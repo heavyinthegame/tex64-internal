@@ -1,5 +1,7 @@
 import { mathKeyboardFixedKeys, mathKeyboardSets } from "./math-keyboard.js";
 export const initMathKeyboard = (context, deps) => {
+    // Temporarily disabled: keep the math keyboard dock hidden.
+    const MATH_KEYBOARD_VISIBLE = false;
     const { mathKeyboardDock, mathKeyboardGrid, mathKeyboardFixedGrid, mathKeyboardShiftButton, mathKeyboardTabs, } = context.dom;
     let activeTab = "analysis";
     let shiftHeld = false;
@@ -190,7 +192,9 @@ export const initMathKeyboard = (context, deps) => {
         if (!(mathKeyboardDock instanceof HTMLElement)) {
             return;
         }
-        const shouldShow = deps.getActiveTab() === "blocks" && deps.getActiveBlockType() === "math";
+        const shouldShow = MATH_KEYBOARD_VISIBLE &&
+            deps.getActiveTab() === "blocks" &&
+            deps.getActiveBlockType() === "math";
         mathKeyboardDock.classList.toggle("is-open", shouldShow);
         mathKeyboardDock.setAttribute("aria-hidden", shouldShow ? "false" : "true");
         if (!shouldShow) {

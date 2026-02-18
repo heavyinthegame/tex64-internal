@@ -10,7 +10,6 @@ const IGNORED_DIRECTORIES = new Set([
   "node_modules",
   "DerivedData",
   "build",
-  "Resources",
   "tex64.xcodeproj",
 ]);
 const HIDDEN_EDITOR_EXTENSIONS = new Set([
@@ -18,8 +17,12 @@ const HIDDEN_EDITOR_EXTENSIONS = new Set([
   "toc",
   "synctex",
   "fls",
-  "log",
   "fdb_latexmk",
+]);
+const IGNORED_FILES = new Set([
+  ".DS_Store",
+  "Thumbs.db",
+  "desktop.ini",
 ]);
 
 const WorkspaceError = {
@@ -60,6 +63,7 @@ const isHiddenEditorFile = (name) => {
   }
   return HIDDEN_EDITOR_EXTENSIONS.has(ext.slice(1));
 };
+const isIgnoredFile = (name) => IGNORED_FILES.has(name);
 
 const ensureDirectory = async (dirPath) => {
   await fsp.mkdir(dirPath, { recursive: true });
@@ -874,7 +878,14 @@ class WorkspaceManager {
         if (count >= max) {
           return;
         }
-        if (entry.name.startsWith(".")) {
+        // Keep the file tree focused on TeX writing:
+        // - Hide dot-directories (VCS internals, tool metadata, etc.)
+        // - Show dotfiles because they can contain TeX-related config (.latexmkrc, .latexindent.yaml, etc.)
+        // - Hide OS noise files.
+        if (entry.isDirectory() && entry.name.startsWith(".")) {
+          continue;
+        }
+        if (entry.isFile() && isIgnoredFile(entry.name)) {
           continue;
         }
         if (entry.isDirectory() && IGNORED_DIRECTORIES.has(entry.name)) {

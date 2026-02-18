@@ -137,7 +137,10 @@ export const createEditorSessionFileOps = (ctx) => {
         if (state.pendingReveal &&
             state.pendingReveal.path === path &&
             state.pendingReveal.group === group.key) {
-            revealLine(group, state.pendingReveal.line, { focus: state.pendingReveal.focus });
+            revealLine(group, state.pendingReveal.line, {
+                focus: state.pendingReveal.focus,
+                className: state.pendingReveal.className,
+            });
             state.pendingReveal = null;
         }
         if (isActiveGroup(group) && editor.focus) {
@@ -242,7 +245,7 @@ export const createEditorSessionFileOps = (ctx) => {
                     type: "saveFile",
                     path,
                     content: value,
-                    format: false,
+                    format: true,
                     formatSource: "save",
                     formatSettings: deps.settings.buildFormatSettingsPayload(),
                 });
@@ -331,7 +334,7 @@ export const createEditorSessionFileOps = (ctx) => {
                             type: "saveFile",
                             path,
                             content,
-                            format: false,
+                            format: true,
                             formatSource: "save",
                             formatSettings: deps.settings.buildFormatSettingsPayload(),
                         });

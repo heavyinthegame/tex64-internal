@@ -7,6 +7,7 @@ import type {
 } from "./types.js";
 
 type EditorGroupKey = "primary" | "secondary";
+type SynctexForwardSource = "manual" | "auto-build" | "other";
 
 type EditorGroupState = {
   key: EditorGroupKey;
@@ -41,7 +42,6 @@ type BuildOpsDeps = {
   getStoredCursorPosition: (path: string) => { line: number; column: number } | null;
   cacheCurrentBuffer: (group: EditorGroupState) => void;
   saveCurrentFile: () => Promise<boolean>;
-  saveDirtyFiles: () => Promise<boolean>;
   postToNative: (
     payload: { type: string; [key: string]: unknown },
     silent?: boolean
@@ -79,19 +79,7 @@ export type BuildOpsApi = {
   updateSynctexButtonState: () => void;
   setBuildState: (state: BuildState, message?: string) => void;
   startBuild: () => void;
-  startBuildWithSave: () => void;
   requestFormatCurrentFile: (source: string) => void;
-  requestFormatPreview: (payload: {
-    path: string;
-    content: string;
-    source?: string;
-  }) => Promise<{
-    path: string;
-    ok: boolean;
-    content?: string;
-    error?: string;
-    source?: string;
-  }>;
   handleFormatResult: (payload: {
     path: string;
     ok: boolean;
@@ -103,7 +91,7 @@ export type BuildOpsApi = {
   handleBuildLog: (log: string | null) => void;
   requestSynctexForward: (
     overridePath?: string | null,
-    options?: { fallbackToTop?: boolean }
+    options?: { fallbackToTop?: boolean; source?: SynctexForwardSource }
   ) => void;
   handleSynctexForwardResult: (payload: {
     ok?: boolean;
@@ -112,6 +100,8 @@ export type BuildOpsApi = {
     x?: number;
     y?: number;
     pdfPath?: string | null;
+    requestId?: string;
+    cancelled?: boolean;
   }) => void;
   setupActionButtons: () => void;
 };
@@ -124,7 +114,6 @@ export const initBuildOpsUi = (
     buildButton,
     formatButton,
     synctexButton,
-    lintButton,
     issuesLog,
     issuesLogContent,
   } = context.dom;
@@ -132,12 +121,30 @@ export const initBuildOpsUi = (
   let formatInFlight = false;
   let formatPending = false;
   let formatWarningShown = false;
+  let formatInFlightSnapshot: { path: string; content: string } | null = null;
   let currentBuildLog: string | null = null;
-  const formatPreviewRequests = new Map<
+  let synctexForwardRequestOrder = 0;
+  let synctexForwardLastAppliedOrder = 0;
+  let synctexManualPriorityUntil = 0;
+  let synctexForwardInFlight: {
+    requestId: string;
+    key: string;
+    source: SynctexForwardSource;
+    startedAt: number;
+  } | null = null;
+  let queuedSynctexForward: {
+    overridePath: string | null;
+    options: { fallbackToTop?: boolean; source?: SynctexForwardSource };
+  } | null = null;
+  const synctexForwardOrderByRequestId = new Map<
     string,
-    { resolve: (payload: { path: string; ok: boolean; content?: string; error?: string; source?: string }) => void; timeoutId: number }
+    { order: number; source: SynctexForwardSource; createdAt: number }
   >();
-  const formatPreviewIgnore = new Set<string>();
+  const synctexForwardInFlightTimeoutMs = 12000;
+  const buildSynctexForwardRequestId = (() => {
+    let counter = 0;
+    return () => `synctex-forward-${Date.now().toString(36)}-${counter++}`;
+  })();
 
   const isEnvMissingMessage = (message: string) => {
     const lower = message.toLowerCase();
@@ -181,9 +188,20 @@ export const initBuildOpsUi = (
     }
   };
 
+  const flushQueuedSynctexForward = () => {
+    if (!queuedSynctexForward) {
+      return;
+    }
+    const queued = queuedSynctexForward;
+    queuedSynctexForward = null;
+    window.setTimeout(() => {
+      requestSynctexForward(queued.overridePath, queued.options);
+    }, 0);
+  };
+
   const requestSynctexForward = (
     overridePath?: string | null,
-    options: { fallbackToTop?: boolean } = {}
+    options: { fallbackToTop?: boolean; source?: SynctexForwardSource } = {}
   ) => {
     const activeGroup = deps.getActiveGroup();
     const targetPath = overridePath ?? activeGroup.currentFilePath;
@@ -201,8 +219,57 @@ export const initBuildOpsUi = (
     const storedPosition = deps.getStoredCursorPosition(targetPath);
     const line = position?.lineNumber ?? storedPosition?.line ?? 1;
     const column = position?.column ?? storedPosition?.column ?? 1;
+    const source = options.source ?? "manual";
+    if (source === "manual") {
+      synctexManualPriorityUntil = Date.now() + 5000;
+    }
+    const requestKey = [
+      targetPath,
+      String(line),
+      String(column),
+      deps.settings.getPdfViewerMode(),
+    ].join("|");
+    if (synctexForwardInFlight) {
+      const inFlightAgeMs = Date.now() - synctexForwardInFlight.startedAt;
+      if (inFlightAgeMs <= synctexForwardInFlightTimeoutMs) {
+        if (synctexForwardInFlight.key === requestKey) {
+          return;
+        }
+        queuedSynctexForward = {
+          overridePath: targetPath,
+          options: {
+            fallbackToTop: options.fallbackToTop === true,
+            source,
+          },
+        };
+        return;
+      }
+      synctexForwardInFlight = null;
+    }
+    const requestId = buildSynctexForwardRequestId();
+    const order = ++synctexForwardRequestOrder;
+    synctexForwardOrderByRequestId.set(requestId, {
+      order,
+      source,
+      createdAt: Date.now(),
+    });
+    synctexForwardInFlight = {
+      requestId,
+      key: requestKey,
+      source,
+      startedAt: Date.now(),
+    };
+    while (synctexForwardOrderByRequestId.size > 256) {
+      const oldestRequestId = synctexForwardOrderByRequestId.keys().next().value;
+      if (!oldestRequestId) {
+        break;
+      }
+      synctexForwardOrderByRequestId.delete(oldestRequestId);
+    }
     deps.postToNative({
       type: "synctex:forward",
+      requestId,
+      source,
       path: targetPath,
       line,
       column,
@@ -227,7 +294,10 @@ export const initBuildOpsUi = (
         targetPath &&
         targetPath.endsWith(".tex")
       ) {
-        requestSynctexForward(targetPath, { fallbackToTop: true });
+        requestSynctexForward(targetPath, {
+          fallbackToTop: true,
+          source: "auto-build",
+        });
       }
     }
     if (state === "failed") {
@@ -277,19 +347,6 @@ export const initBuildOpsUi = (
     }
   };
 
-  const startBuildWithSave = () => {
-    deps
-      .saveDirtyFiles()
-      .then((ok) => {
-        if (ok) {
-          startBuild();
-        }
-      })
-      .catch((message: string) => {
-        deps.updateIssues(1, message, "error", [{ severity: "error", message }]);
-      });
-  };
-
   const requestFormatCurrentFile = (source: string) => {
     const activeGroup = deps.getActiveGroup();
     const activePath = activeGroup.currentFilePath;
@@ -306,6 +363,7 @@ export const initBuildOpsUi = (
     const editor = activeGroup.editor as { getValue: () => string };
     const content = editor.getValue();
     formatInFlight = true;
+    formatInFlightSnapshot = { path: activePath, content };
     const ok = deps.postToNative({
       type: "formatFile",
       path: activePath,
@@ -316,6 +374,7 @@ export const initBuildOpsUi = (
     if (!ok) {
       formatInFlight = false;
       formatPending = false;
+      formatInFlightSnapshot = null;
       if (!formatWarningShown) {
         formatWarningShown = true;
         deps.updateIssues(1, "整形のリクエストに失敗しました。", "info", [
@@ -324,54 +383,6 @@ export const initBuildOpsUi = (
       }
     }
   };
-
-  const requestFormatPreview = (payload: {
-    path: string;
-    content: string;
-    source?: string;
-  }) =>
-    new Promise<{
-      path: string;
-      ok: boolean;
-      content?: string;
-      error?: string;
-      source?: string;
-    }>((resolve) => {
-      const source =
-        payload.source ??
-        `blockInsertPreview:${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
-      const ok = deps.postToNative(
-        {
-          type: "formatFile",
-          path: payload.path,
-          content: payload.content,
-          source,
-          formatSettings: deps.settings.buildFormatSettingsPayload(),
-        },
-        true
-      );
-      if (!ok) {
-        resolve({
-          path: payload.path,
-          ok: false,
-          error: "整形のリクエストに失敗しました。",
-          source,
-        });
-        return;
-      }
-      const timeoutId = window.setTimeout(() => {
-        formatPreviewRequests.delete(source);
-        formatPreviewIgnore.add(source);
-        window.setTimeout(() => formatPreviewIgnore.delete(source), 30000);
-        resolve({
-          path: payload.path,
-          ok: false,
-          error: "整形がタイムアウトしました。",
-          source,
-        });
-      }, 15000);
-      formatPreviewRequests.set(source, { resolve, timeoutId });
-    });
 
   const handleSaveFormatError = (formatError?: string) => {
     if (formatError && !formatWarningShown) {
@@ -389,20 +400,9 @@ export const initBuildOpsUi = (
     error?: string;
     source?: string;
   }) => {
-    if (payload.source && formatPreviewRequests.has(payload.source)) {
-      const pending = formatPreviewRequests.get(payload.source);
-      if (pending) {
-        window.clearTimeout(pending.timeoutId);
-        formatPreviewRequests.delete(payload.source);
-        pending.resolve(payload);
-      }
-      return;
-    }
-    if (payload.source && formatPreviewIgnore.has(payload.source)) {
-      formatPreviewIgnore.delete(payload.source);
-      return;
-    }
+    const inFlightSnapshot = formatInFlightSnapshot;
     formatInFlight = false;
+    formatInFlightSnapshot = null;
     if (!payload.ok) {
       if (!formatWarningShown) {
         formatWarningShown = true;
@@ -414,19 +414,29 @@ export const initBuildOpsUi = (
       const groupsWithFile = deps
         .getEditorGroups()
         .filter((group) => group.currentFilePath === payload.path);
-      if (groupsWithFile.length > 0) {
-        groupsWithFile.forEach((group) => {
-          deps.applyFormattedContent(group, payload.path, payload.content as string, {
-            updateSaved: false,
+      const currentValue =
+        groupsWithFile.length > 0
+          ? (groupsWithFile[0].editor as { getValue?: () => string })?.getValue?.()
+          : null;
+      const isStale =
+        inFlightSnapshot?.path === payload.path &&
+        typeof currentValue === "string" &&
+        currentValue !== inFlightSnapshot.content;
+      if (!isStale) {
+        if (groupsWithFile.length > 0) {
+          groupsWithFile.forEach((group) => {
+            deps.applyFormattedContent(group, payload.path, payload.content as string, {
+              updateSaved: false,
+            });
+            deps.renderEditorTabs(group);
           });
-          deps.renderEditorTabs(group);
-        });
-      }
-      const activeGroup = deps.getActiveGroup();
-      if (activeGroup.currentFilePath === payload.path && activeGroup.isDirty) {
-        deps.saveCurrentFile().catch((message: string) => {
-          deps.updateIssues(1, message, "error", [{ severity: "error", message }]);
-        });
+        }
+        const activeGroup = deps.getActiveGroup();
+        if (activeGroup.currentFilePath === payload.path && activeGroup.isDirty) {
+          deps.saveCurrentFile().catch((message: string) => {
+            deps.updateIssues(1, message, "error", [{ severity: "error", message }]);
+          });
+        }
       }
     }
     if (formatPending) {
@@ -442,9 +452,52 @@ export const initBuildOpsUi = (
     x?: number;
     y?: number;
     pdfPath?: string | null;
+    requestId?: string;
+    cancelled?: boolean;
   }) => {
     if (!payload) {
       return;
+    }
+    const payloadRequestId =
+      typeof payload.requestId === "string" && payload.requestId.trim()
+        ? payload.requestId
+        : null;
+    const matchedInFlight = Boolean(
+      payloadRequestId &&
+        synctexForwardInFlight &&
+        synctexForwardInFlight.requestId === payloadRequestId
+    );
+    if (matchedInFlight) {
+      synctexForwardInFlight = null;
+    }
+    const payloadMeta = payloadRequestId
+      ? synctexForwardOrderByRequestId.get(payloadRequestId) ?? null
+      : null;
+    const payloadOrder = payloadMeta?.order ?? null;
+    if (payload.cancelled === true) {
+      if (matchedInFlight) {
+        flushQueuedSynctexForward();
+      }
+      return;
+    }
+    if (payloadMeta?.source === "auto-build" && Date.now() < synctexManualPriorityUntil) {
+      if (matchedInFlight) {
+        flushQueuedSynctexForward();
+      }
+      return;
+    }
+    if (
+      Number.isFinite(payloadOrder) &&
+      payloadOrder !== null &&
+      payloadOrder < synctexForwardLastAppliedOrder
+    ) {
+      if (matchedInFlight) {
+        flushQueuedSynctexForward();
+      }
+      return;
+    }
+    if (Number.isFinite(payloadOrder) && payloadOrder !== null) {
+      synctexForwardLastAppliedOrder = Math.max(synctexForwardLastAppliedOrder, payloadOrder);
     }
     if (payload.ok) {
       if (deps.settings.getPdfViewerMode() === "tab" && typeof payload.page === "number") {
@@ -469,6 +522,9 @@ export const initBuildOpsUi = (
           y: payload.y ?? 0,
         });
       }
+      if (matchedInFlight) {
+        flushQueuedSynctexForward();
+      }
       return;
     }
     const errorMessage = payload.error ?? "SyncTeX に失敗しました。";
@@ -477,27 +533,18 @@ export const initBuildOpsUi = (
       issue.action = "open-runtime";
     }
     deps.updateIssues(1, errorMessage, "error", [issue]);
+    if (matchedInFlight) {
+      flushQueuedSynctexForward();
+    }
   };
 
   const setupActionButtons = () => {
-    const runAfterSavingDirty = (action: () => void) => {
-      deps
-        .saveDirtyFiles()
-        .then((ok) => {
-          if (ok) {
-            action();
-          }
-        })
-        .catch((message: string) => {
-          deps.updateIssues(1, message, "error", [{ severity: "error", message }]);
-        });
-    };
     if (buildButton instanceof HTMLButtonElement) {
       buildButton.addEventListener("click", () => {
         if (buildButton.disabled) {
           return;
         }
-        startBuildWithSave();
+        startBuild();
       });
     }
 
@@ -512,37 +559,17 @@ export const initBuildOpsUi = (
         if (synctexButton.disabled) {
           return;
         }
-        runAfterSavingDirty(() => requestSynctexForward(null, { fallbackToTop: true }));
+        requestSynctexForward(null, { fallbackToTop: true, source: "manual" });
       });
     }
 
-    if (lintButton instanceof HTMLButtonElement) {
-      const runLint = () => {
-        const mainFile = deps.getRootFilePath() ?? deps.getActiveFilePath();
-        deps.postToNative(
-          {
-            type: "lint:run",
-            mainFile,
-          },
-          false
-        );
-      };
-      lintButton.addEventListener("click", () => {
-        if (lintButton.disabled) {
-          return;
-        }
-        runAfterSavingDirty(() => runLint());
-      });
-    }
   };
 
   return {
     updateSynctexButtonState,
     setBuildState,
     startBuild,
-    startBuildWithSave,
     requestFormatCurrentFile,
-    requestFormatPreview,
     handleFormatResult,
     handleSaveFormatError,
     handleBuildLog,

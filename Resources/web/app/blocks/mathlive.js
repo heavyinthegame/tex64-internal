@@ -1,288 +1,392 @@
 export const initMathLive = (context, deps) => {
     const { blockMathInputContainer } = context.dom;
+    let setupInFlight = false;
+    let setupRetryScheduled = false;
+    let containerPointerDownHandler = null;
     const setupMathField = async () => {
-        var _a, _b;
-        if (!blockMathInputContainer) {
-            console.error("MathLive container not found");
+        var _a, _b, _c;
+        if (setupInFlight) {
             return;
         }
-        if (blockMathInputContainer.querySelector("math-field")) {
-            return;
-        }
-        const MathLiveGlobal = window.MathLive;
-        const hasMathLive = !!MathLiveGlobal;
-        const hasMathfieldElement = hasMathLive && !!MathLiveGlobal.MathfieldElement;
-        const loadError = window.MATHLIVE_LOAD_ERROR;
-        if (!customElements.get("math-field")) {
-            if (hasMathfieldElement) {
-                try {
-                    customElements.define("math-field", MathLiveGlobal.MathfieldElement);
-                }
-                catch {
-                    // element may already be defined
-                }
-            }
-        }
-        if (!customElements.get("math-field")) {
-            const debugInfo = `MathLive: ${hasMathLive ? "OK" : "NG"}, MathfieldElement: ${hasMathfieldElement ? "OK" : "NG"}, LoadError: ${loadError || "none"}`;
-            blockMathInputContainer.textContent = `Loading... (${debugInfo})`;
-            try {
-                await Promise.race([
-                    customElements.whenDefined("math-field"),
-                    new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 10000)),
-                ]);
-                blockMathInputContainer.textContent = "";
-            }
-            catch {
-                blockMathInputContainer.innerHTML = `
-          <div style="font-size:12px;">MathLiveの読み込みに失敗しました。</div>
-          <div style="font-size:10px;color:#888;margin-top:4px;">${debugInfo}</div>
-        `;
-                blockMathInputContainer.style.color = "#ff6b6b";
+        setupInFlight = true;
+        const scheduleSetupRetry = () => {
+            if (setupRetryScheduled) {
                 return;
             }
-        }
-        if (MathLiveGlobal === null || MathLiveGlobal === void 0 ? void 0 : MathLiveGlobal.convertLatexToMarkup) {
-            deps.onMathLiveReady();
-        }
-        else {
-            deps.onEnsureMathLiveReady();
-        }
-        const mathfield = document.createElement("math-field");
-        mathfield.id = "block-math-input";
-        mathfield.className = "block-math-field";
-        const scrollHost = document.createElement("div");
-        scrollHost.className = "block-math-scroll";
-        scrollHost.appendChild(mathfield);
-        const menuToggle = document.createElement("button");
-        menuToggle.type = "button";
-        menuToggle.className = "block-math-menu-toggle";
-        menuToggle.setAttribute("aria-label", "数式メニュー");
-        menuToggle.setAttribute("aria-haspopup", "menu");
-        menuToggle.tabIndex = -1;
-        menuToggle.innerHTML = `
+            setupRetryScheduled = true;
+            window.addEventListener("mathlive-ready", () => {
+                setupRetryScheduled = false;
+                void setupMathField();
+            }, { once: true });
+        };
+        const readCurrentInputValue = () => {
+            if (!blockMathInputContainer) {
+                return "";
+            }
+            const existingInput = blockMathInputContainer.querySelector("#block-math-input");
+            if (!existingInput) {
+                return "";
+            }
+            const mathfieldInput = existingInput;
+            if (typeof mathfieldInput.getValue === "function") {
+                try {
+                    const value = mathfieldInput.getValue("latex");
+                    if (typeof value === "string") {
+                        return value;
+                    }
+                }
+                catch {
+                    // ignore read failure
+                }
+            }
+            if (typeof mathfieldInput.value === "string") {
+                return mathfieldInput.value;
+            }
+            return "";
+        };
+        const createMathInputFallback = (message, preserveValue = "") => {
+            if (!blockMathInputContainer) {
+                return;
+            }
+            if (containerPointerDownHandler) {
+                blockMathInputContainer.removeEventListener("pointerdown", containerPointerDownHandler);
+                containerPointerDownHandler = null;
+            }
+            blockMathInputContainer.innerHTML = "";
+            blockMathInputContainer.style.removeProperty("color");
+            const scrollHost = document.createElement("div");
+            scrollHost.className = "block-math-scroll";
+            const fallbackInput = document.createElement("textarea");
+            fallbackInput.id = "block-math-input";
+            fallbackInput.className = "block-input block-math-input";
+            fallbackInput.setAttribute("rows", "4");
+            fallbackInput.setAttribute("spellcheck", "false");
+            fallbackInput.setAttribute("aria-label", "数式入力（テキスト）");
+            fallbackInput.placeholder = "LaTeX を入力";
+            fallbackInput.style.width = "100%";
+            fallbackInput.style.minHeight = "96px";
+            fallbackInput.style.resize = "vertical";
+            if (preserveValue) {
+                fallbackInput.value = preserveValue;
+            }
+            scrollHost.appendChild(fallbackInput);
+            blockMathInputContainer.appendChild(scrollHost);
+            if (message) {
+                const note = document.createElement("div");
+                note.style.fontSize = "10px";
+                note.style.color = "var(--muted)";
+                note.style.padding = "0 12px 10px";
+                note.textContent = message;
+                blockMathInputContainer.appendChild(note);
+            }
+            deps.onMathFieldCreated(fallbackInput);
+        };
+        try {
+            if (!blockMathInputContainer) {
+                console.error("MathLive container not found");
+                return;
+            }
+            if (blockMathInputContainer.querySelector("math-field")) {
+                return;
+            }
+            const preservedValue = readCurrentInputValue();
+            const existingFallback = blockMathInputContainer.querySelector("textarea#block-math-input");
+            const MathLiveGlobal = window.MathLive;
+            const hasMathLive = !!MathLiveGlobal;
+            const hasMathfieldElement = hasMathLive && !!MathLiveGlobal.MathfieldElement;
+            const loadError = window.MATHLIVE_LOAD_ERROR;
+            if (!customElements.get("math-field")) {
+                if (hasMathfieldElement) {
+                    try {
+                        customElements.define("math-field", MathLiveGlobal.MathfieldElement);
+                    }
+                    catch {
+                        // element may already be defined
+                    }
+                }
+            }
+            if (!customElements.get("math-field")) {
+                const debugInfo = `MathLive: ${hasMathLive ? "OK" : "NG"}, MathfieldElement: ${hasMathfieldElement ? "OK" : "NG"}, LoadError: ${loadError || "none"}`;
+                scheduleSetupRetry();
+                if (!existingFallback) {
+                    createMathInputFallback("MathLive loading...", preservedValue);
+                }
+                try {
+                    await Promise.race([
+                        customElements.whenDefined("math-field"),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 10000)),
+                    ]);
+                }
+                catch {
+                    if (customElements.get("math-field")) {
+                        // A late define can race with timeout; continue with math-field setup.
+                    }
+                    else {
+                        const retryValue = readCurrentInputValue() || preservedValue;
+                        createMathInputFallback(`MathLive unavailable (${debugInfo})`, retryValue);
+                        scheduleSetupRetry();
+                        return;
+                    }
+                }
+            }
+            if ((_a = window.MathLive) === null || _a === void 0 ? void 0 : _a.convertLatexToMarkup) {
+                deps.onMathLiveReady();
+            }
+            else {
+                deps.onEnsureMathLiveReady();
+            }
+            const mathfield = document.createElement("math-field");
+            mathfield.id = "block-math-input";
+            mathfield.className = "block-math-field";
+            const scrollHost = document.createElement("div");
+            scrollHost.className = "block-math-scroll";
+            scrollHost.appendChild(mathfield);
+            const menuToggle = document.createElement("button");
+            menuToggle.type = "button";
+            menuToggle.className = "block-math-menu-toggle";
+            menuToggle.setAttribute("aria-label", "数式メニュー");
+            menuToggle.setAttribute("aria-haspopup", "menu");
+            menuToggle.tabIndex = -1;
+            menuToggle.innerHTML = `
       <span class="block-math-menu-line"></span>
       <span class="block-math-menu-line"></span>
       <span class="block-math-menu-line"></span>
     `;
-        blockMathInputContainer.innerHTML = "";
-        blockMathInputContainer.appendChild(scrollHost);
-        blockMathInputContainer.appendChild(menuToggle);
-        const closeMathFieldMenu = () => {
-            var _a;
-            const internalMenu = (_a = mathfield._mathfield) === null || _a === void 0 ? void 0 : _a.menu;
-            if (internalMenu && typeof internalMenu.hide === "function") {
-                if (internalMenu.state && internalMenu.state !== "closed") {
-                    internalMenu.hide();
-                    return;
+            blockMathInputContainer.innerHTML = "";
+            blockMathInputContainer.appendChild(scrollHost);
+            blockMathInputContainer.appendChild(menuToggle);
+            const closeMathFieldMenu = () => {
+                var _a;
+                const internalMenu = (_a = mathfield._mathfield) === null || _a === void 0 ? void 0 : _a.menu;
+                if (internalMenu && typeof internalMenu.hide === "function") {
+                    if (internalMenu.state && internalMenu.state !== "closed") {
+                        internalMenu.hide();
+                        return;
+                    }
+                    const element = internalMenu.element;
+                    if (element === null || element === void 0 ? void 0 : element.isConnected) {
+                        internalMenu.hide();
+                        return;
+                    }
                 }
-                const element = internalMenu.element;
-                if (element === null || element === void 0 ? void 0 : element.isConnected) {
-                    internalMenu.hide();
-                    return;
+                const executeCommand = mathfield
+                    .executeCommand;
+                if (typeof executeCommand === "function") {
+                    const menuElement = document.querySelector("menu.ui-menu-container");
+                    if (menuElement) {
+                        executeCommand.call(mathfield, "toggleContextMenu");
+                    }
                 }
-            }
-            const executeCommand = mathfield
-                .executeCommand;
-            if (typeof executeCommand === "function") {
-                const menuElement = document.querySelector("menu.ui-menu-container");
-                if (menuElement) {
+            };
+            const toggleMathFieldMenu = () => {
+                const executeCommand = mathfield
+                    .executeCommand;
+                if (typeof executeCommand === "function") {
                     executeCommand.call(mathfield, "toggleContextMenu");
                 }
-            }
-        };
-        const toggleMathFieldMenu = () => {
-            const executeCommand = mathfield
-                .executeCommand;
-            if (typeof executeCommand === "function") {
-                executeCommand.call(mathfield, "toggleContextMenu");
-            }
-        };
-        menuToggle.addEventListener("pointerdown", (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-        });
-        menuToggle.addEventListener("focus", () => {
-            menuToggle.blur();
-        });
-        menuToggle.addEventListener("click", (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            toggleMathFieldMenu();
-        });
-        blockMathInputContainer.addEventListener("pointerdown", (event) => {
-            const path = typeof event.composedPath === "function" ? event.composedPath() : [];
-            const clickedMenuToggle = path.some((node) => {
-                var _a, _b, _c, _d;
-                if (!(node instanceof HTMLElement))
-                    return false;
-                if ((_a = node.classList) === null || _a === void 0 ? void 0 : _a.contains("block-math-menu-toggle"))
-                    return true;
-                if (((_b = node.getAttribute) === null || _b === void 0 ? void 0 : _b.call(node, "part")) === "menu-toggle")
-                    return true;
-                return (_d = (_c = node.classList) === null || _c === void 0 ? void 0 : _c.contains("ML__menu-toggle")) !== null && _d !== void 0 ? _d : false;
+            };
+            menuToggle.addEventListener("pointerdown", (event) => {
+                event.preventDefault();
+                event.stopPropagation();
             });
-            const clickedMathMenu = path.some((node) => {
-                var _a, _b;
-                if (!(node instanceof HTMLElement))
-                    return false;
-                if ((_a = node.matches) === null || _a === void 0 ? void 0 : _a.call(node, "menu.ui-menu-container"))
-                    return true;
-                return !!((_b = node.closest) === null || _b === void 0 ? void 0 : _b.call(node, "menu.ui-menu-container"));
+            menuToggle.addEventListener("focus", () => {
+                menuToggle.blur();
             });
-            if (!clickedMenuToggle && !clickedMathMenu) {
-                closeMathFieldMenu();
-            }
-            if (!clickedMathMenu && !clickedMenuToggle && typeof mathfield.focus === "function") {
-                mathfield.focus();
-            }
-        });
-        deps.onMathFieldCreated(mathfield);
-        if (typeof mathfield.setOptions === "function") {
-            mathfield.setOptions({
-                smartMode: false,
-                smartFence: false,
-                defaultMode: "math",
-                inlineShortcuts: {},
-                onInlineShortcut: () => "",
-                virtualKeyboardMode: "off",
-                fontsDirectory: "mathlive/fonts",
-                soundsDirectory: null,
-                keypressSound: null,
-                plonkSound: null,
-                locale: "ja",
+            menuToggle.addEventListener("click", (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                toggleMathFieldMenu();
             });
-        }
-        // MathLive doesn't support some LaTeX font commands natively (e.g. \mathds),
-        // but macros let us render them while preserving the original command in `getValue("latex")`.
-        try {
-            if ("macros" in mathfield) {
-                mathfield.macros = {
-                    ...((_a = mathfield.macros) !== null && _a !== void 0 ? _a : {}),
-                    mathds: { def: "\\mathbb{#1}", args: 1 },
-                };
+            if (containerPointerDownHandler) {
+                blockMathInputContainer.removeEventListener("pointerdown", containerPointerDownHandler);
             }
-        }
-        catch {
-            // ignore macro configuration failures
-        }
-        try {
-            if ("menuItems" in mathfield) {
-                const blockedLabels = [
-                    "モード",
-                    "フォントスタイル",
-                    "色",
-                    "背景",
-                    "切り取り",
-                    "コピー",
-                    "貼り付け",
-                    "すべて選択",
-                ];
-                const blockedPattern = /(mode|font\s*style|color|background|cut|copy|paste|select\s*all)/i;
-                const readText = (value) => {
-                    if (typeof value === "string")
-                        return value;
-                    if (typeof value === "number" || typeof value === "boolean")
-                        return String(value);
-                    return "";
-                };
-                const readLabel = (value) => {
-                    if (typeof value === "function") {
-                        try {
-                            return readText(value({ alt: false, control: false, shift: false, meta: false }));
-                        }
-                        catch {
-                            return "";
-                        }
-                    }
-                    return readText(value);
-                };
-                const isDivider = (item) => item.type === "divider";
-                const cleanDividers = (items) => {
-                    const cleaned = [];
-                    let lastWasDivider = true;
-                    for (const item of items) {
-                        if (isDivider(item)) {
-                            if (lastWasDivider)
-                                continue;
-                            cleaned.push(item);
-                            lastWasDivider = true;
-                            continue;
-                        }
-                        cleaned.push(item);
-                        lastWasDivider = false;
-                    }
-                    while (cleaned.length > 0 && isDivider(cleaned[cleaned.length - 1])) {
-                        cleaned.pop();
-                    }
-                    return cleaned;
-                };
-                const getCandidates = (item) => {
-                    const candidates = [];
-                    candidates.push(readText(item.id));
-                    candidates.push(readLabel(item.label));
-                    candidates.push(readLabel(item.ariaLabel));
-                    candidates.push(readLabel(item.tooltip));
-                    candidates.push(readText(item.command));
-                    if (item.data && typeof item.data === "object") {
-                        const dataObj = item.data;
-                        candidates.push(readText(dataObj.command));
-                        candidates.push(readText(dataObj.id));
-                        candidates.push(readLabel(dataObj.label));
-                    }
-                    else {
-                        candidates.push(readText(item.data));
-                    }
-                    return candidates.filter(Boolean);
-                };
-                const shouldHideItem = (candidates) => candidates.some((text) => {
-                    const trimmed = text.trim();
-                    if (!trimmed)
+            containerPointerDownHandler = (event) => {
+                const path = typeof event.composedPath === "function" ? event.composedPath() : [];
+                const clickedMenuToggle = path.some((node) => {
+                    var _a, _b, _c, _d;
+                    if (!(node instanceof HTMLElement))
                         return false;
-                    if (blockedPattern.test(trimmed))
+                    if ((_a = node.classList) === null || _a === void 0 ? void 0 : _a.contains("block-math-menu-toggle"))
                         return true;
-                    return blockedLabels.some((label) => trimmed.includes(label));
+                    if (((_b = node.getAttribute) === null || _b === void 0 ? void 0 : _b.call(node, "part")) === "menu-toggle")
+                        return true;
+                    return (_d = (_c = node.classList) === null || _c === void 0 ? void 0 : _c.contains("ML__menu-toggle")) !== null && _d !== void 0 ? _d : false;
                 });
-                const filterMenuItems = (items) => {
-                    const filtered = items
-                        .map((item) => {
-                        if (!item || typeof item !== "object")
-                            return null;
-                        if (item.type === "heading")
-                            return null;
-                        const candidates = getCandidates(item);
-                        if (shouldHideItem(candidates))
-                            return null;
-                        if (Array.isArray(item.submenu)) {
-                            const submenu = filterMenuItems(item.submenu);
-                            if (submenu.length === 0)
-                                return null;
-                            if (submenu === item.submenu)
-                                return item;
-                            return { ...item, submenu };
-                        }
-                        if (isDivider(item))
-                            return item;
-                        return item;
-                    })
-                        .filter(Boolean);
-                    return cleanDividers(filtered);
-                };
-                const currentMenuItems = (_b = mathfield.menuItems) !== null && _b !== void 0 ? _b : [];
-                mathfield.menuItems = filterMenuItems(currentMenuItems);
+                const clickedMathMenu = path.some((node) => {
+                    var _a, _b;
+                    if (!(node instanceof HTMLElement))
+                        return false;
+                    if ((_a = node.matches) === null || _a === void 0 ? void 0 : _a.call(node, "menu.ui-menu-container"))
+                        return true;
+                    return !!((_b = node.closest) === null || _b === void 0 ? void 0 : _b.call(node, "menu.ui-menu-container"));
+                });
+                if (!clickedMenuToggle && !clickedMathMenu) {
+                    closeMathFieldMenu();
+                }
+                if (!clickedMathMenu && !clickedMenuToggle && typeof mathfield.focus === "function") {
+                    mathfield.focus();
+                }
+            };
+            blockMathInputContainer.addEventListener("pointerdown", containerPointerDownHandler);
+            deps.onMathFieldCreated(mathfield);
+            if (preservedValue) {
+                try {
+                    if (typeof mathfield.setValue === "function") {
+                        mathfield.setValue(preservedValue);
+                    }
+                    else if (typeof mathfield.value === "string") {
+                        mathfield.value = preservedValue;
+                    }
+                }
+                catch {
+                    // ignore restore failure
+                }
             }
-        }
-        catch {
-            // ignore menu configuration failures
-        }
-        const injectStyles = () => {
-            if (!mathfield.shadowRoot)
-                return;
-            if (mathfield.shadowRoot.querySelector('style[data-tex64-style]'))
-                return;
-            const style = document.createElement("style");
-            style.setAttribute("data-tex64-style", "true");
-            style.textContent = `
+            if (typeof mathfield.setOptions === "function") {
+                mathfield.setOptions({
+                    smartMode: false,
+                    smartFence: false,
+                    defaultMode: "math",
+                    inlineShortcuts: {},
+                    onInlineShortcut: () => "",
+                    virtualKeyboardMode: "off",
+                    fontsDirectory: "mathlive/fonts",
+                    soundsDirectory: null,
+                    keypressSound: null,
+                    plonkSound: null,
+                    locale: "ja",
+                });
+            }
+            // MathLive doesn't support some LaTeX font commands natively (e.g. \mathds),
+            // but macros let us render them while preserving the original command in `getValue("latex")`.
+            try {
+                if ("macros" in mathfield) {
+                    mathfield.macros = {
+                        ...((_b = mathfield.macros) !== null && _b !== void 0 ? _b : {}),
+                        mathds: { def: "\\mathbb{#1}", args: 1 },
+                    };
+                }
+            }
+            catch {
+                // ignore macro configuration failures
+            }
+            try {
+                if ("menuItems" in mathfield) {
+                    const blockedLabels = [
+                        "モード",
+                        "フォントスタイル",
+                        "色",
+                        "背景",
+                        "切り取り",
+                        "コピー",
+                        "貼り付け",
+                        "すべて選択",
+                    ];
+                    const blockedPattern = /(mode|font\s*style|color|background|cut|copy|paste|select\s*all)/i;
+                    const readText = (value) => {
+                        if (typeof value === "string")
+                            return value;
+                        if (typeof value === "number" || typeof value === "boolean")
+                            return String(value);
+                        return "";
+                    };
+                    const readLabel = (value) => {
+                        if (typeof value === "function") {
+                            try {
+                                return readText(value({ alt: false, control: false, shift: false, meta: false }));
+                            }
+                            catch {
+                                return "";
+                            }
+                        }
+                        return readText(value);
+                    };
+                    const isDivider = (item) => item.type === "divider";
+                    const cleanDividers = (items) => {
+                        const cleaned = [];
+                        let lastWasDivider = true;
+                        for (const item of items) {
+                            if (isDivider(item)) {
+                                if (lastWasDivider)
+                                    continue;
+                                cleaned.push(item);
+                                lastWasDivider = true;
+                                continue;
+                            }
+                            cleaned.push(item);
+                            lastWasDivider = false;
+                        }
+                        while (cleaned.length > 0 && isDivider(cleaned[cleaned.length - 1])) {
+                            cleaned.pop();
+                        }
+                        return cleaned;
+                    };
+                    const getCandidates = (item) => {
+                        const candidates = [];
+                        candidates.push(readText(item.id));
+                        candidates.push(readLabel(item.label));
+                        candidates.push(readLabel(item.ariaLabel));
+                        candidates.push(readLabel(item.tooltip));
+                        candidates.push(readText(item.command));
+                        if (item.data && typeof item.data === "object") {
+                            const dataObj = item.data;
+                            candidates.push(readText(dataObj.command));
+                            candidates.push(readText(dataObj.id));
+                            candidates.push(readLabel(dataObj.label));
+                        }
+                        else {
+                            candidates.push(readText(item.data));
+                        }
+                        return candidates.filter(Boolean);
+                    };
+                    const shouldHideItem = (candidates) => candidates.some((text) => {
+                        const trimmed = text.trim();
+                        if (!trimmed)
+                            return false;
+                        if (blockedPattern.test(trimmed))
+                            return true;
+                        return blockedLabels.some((label) => trimmed.includes(label));
+                    });
+                    const filterMenuItems = (items) => {
+                        const filtered = items
+                            .map((item) => {
+                            if (!item || typeof item !== "object")
+                                return null;
+                            if (item.type === "heading")
+                                return null;
+                            const candidates = getCandidates(item);
+                            if (shouldHideItem(candidates))
+                                return null;
+                            if (Array.isArray(item.submenu)) {
+                                const submenu = filterMenuItems(item.submenu);
+                                if (submenu.length === 0)
+                                    return null;
+                                if (submenu === item.submenu)
+                                    return item;
+                                return { ...item, submenu };
+                            }
+                            if (isDivider(item))
+                                return item;
+                            return item;
+                        })
+                            .filter(Boolean);
+                        return cleanDividers(filtered);
+                    };
+                    const currentMenuItems = (_c = mathfield.menuItems) !== null && _c !== void 0 ? _c : [];
+                    mathfield.menuItems = filterMenuItems(currentMenuItems);
+                }
+            }
+            catch {
+                // ignore menu configuration failures
+            }
+            const injectStyles = () => {
+                if (!mathfield.shadowRoot)
+                    return;
+                if (mathfield.shadowRoot.querySelector('style[data-tex64-style]'))
+                    return;
+                const style = document.createElement("style");
+                style.setAttribute("data-tex64-style", "true");
+                style.textContent = `
         :host {
           color: var(--text, #eef3fb) !important;
           background-color: transparent !important;
@@ -356,12 +460,25 @@ export const initMathLive = (context, deps) => {
           height: 28px !important;
         }
       `;
-            mathfield.shadowRoot.appendChild(style);
-        };
-        setTimeout(() => {
-            injectStyles();
-        }, 0);
-        deps.onAttachMathFieldEvents(mathfield);
+                mathfield.shadowRoot.appendChild(style);
+            };
+            setTimeout(() => {
+                injectStyles();
+            }, 0);
+            deps.onAttachMathFieldEvents(mathfield);
+        }
+        catch (error) {
+            const recoveredValue = readCurrentInputValue();
+            const message = error instanceof Error ? error.message : String(error);
+            console.error("MathLive setup failed; fallback to textarea:", error);
+            createMathInputFallback(`MathLive setup error (${message})`, recoveredValue);
+            if (!customElements.get("math-field")) {
+                scheduleSetupRetry();
+            }
+        }
+        finally {
+            setupInFlight = false;
+        }
     };
     return { setupMathField };
 };

@@ -33,6 +33,22 @@ export const initWorkspaceController = (context, deps) => {
             issuesTab.dataset.status = status;
         }
     };
+    const getIssueLocationRank = (issue) => {
+        const hasPath = typeof issue.path === "string" && issue.path.trim().length > 0;
+        const lineValue = typeof issue.line === "number" ? issue.line : Number.NaN;
+        const hasLine = Number.isFinite(lineValue) && lineValue > 0;
+        if (hasPath && hasLine) {
+            return 0;
+        }
+        if (hasPath) {
+            return 1;
+        }
+        if (hasLine) {
+            return 2;
+        }
+        return 3;
+    };
+    const isDuplicateLabelIssue = (issue) => issue.severity === "warning" && issue.message.startsWith("Duplicate label:");
     const computeDuplicateLabelIssues = (labels) => {
         var _a;
         if (!Array.isArray(labels) || labels.length === 0) {
@@ -73,17 +89,16 @@ export const initWorkspaceController = (context, deps) => {
             const shown = locations.slice(0, maxLocationsShown).join(", ");
             const rest = locations.length > maxLocationsShown ? ` +${locations.length - maxLocationsShown}` : "";
             const detailText = shown ? `${shown}${rest}` : "(location unavailable)";
-            for (const entry of entries) {
-                if (issues.length >= 80) {
-                    break;
-                }
-                issues.push({
-                    severity: "warning",
-                    message: `Duplicate label: ${key} (${detailText})`,
-                    path: entry.path,
-                    line: entry.line,
-                });
+            if (issues.length >= 80) {
+                break;
             }
+            const primary = entries[0];
+            issues.push({
+                severity: "warning",
+                message: `Duplicate label: ${key} (${entries.length} 箇所: ${detailText})`,
+                path: primary.path,
+                line: primary.line,
+            });
             if (issues.length >= 80) {
                 break;
             }
@@ -93,6 +108,7 @@ export const initWorkspaceController = (context, deps) => {
     const mergeIssues = () => {
         const merged = [];
         const seen = new Set();
+        const hasBaseError = baseIssues.some((issue) => issue.severity === "error");
         const push = (issue) => {
             var _a, _b, _c;
             const token = `${issue.severity}|${(_a = issue.path) !== null && _a !== void 0 ? _a : ""}|${(_b = issue.line) !== null && _b !== void 0 ? _b : ""}|${(_c = issue.column) !== null && _c !== void 0 ? _c : ""}|${issue.message}`;
@@ -103,21 +119,49 @@ export const initWorkspaceController = (context, deps) => {
             merged.push(issue);
         };
         baseIssues.forEach(push);
-        duplicateLabelIssues.forEach(push);
-        const hasError = merged.some((issue) => issue.severity === "error");
-        const status = hasError ? "error" : merged.length > 0 ? "info" : "success";
-        currentIssues = merged;
+        if (hasBaseError) {
+            duplicateLabelIssues.forEach(push);
+        }
+        const sorted = merged
+            .map((issue, index) => ({ issue, index }))
+            .sort((a, b) => {
+            const severityRankA = a.issue.severity === "error" ? 0 : 1;
+            const severityRankB = b.issue.severity === "error" ? 0 : 1;
+            if (severityRankA !== severityRankB) {
+                return severityRankA - severityRankB;
+            }
+            const duplicateRankA = isDuplicateLabelIssue(a.issue) ? 1 : 0;
+            const duplicateRankB = isDuplicateLabelIssue(b.issue) ? 1 : 0;
+            if (duplicateRankA !== duplicateRankB) {
+                return duplicateRankA - duplicateRankB;
+            }
+            const locationRankA = getIssueLocationRank(a.issue);
+            const locationRankB = getIssueLocationRank(b.issue);
+            if (locationRankA !== locationRankB) {
+                return locationRankA - locationRankB;
+            }
+            const runtimeRankA = a.issue.action === "open-runtime" ? 0 : 1;
+            const runtimeRankB = b.issue.action === "open-runtime" ? 0 : 1;
+            if (runtimeRankA !== runtimeRankB) {
+                return runtimeRankA - runtimeRankB;
+            }
+            return a.index - b.index;
+        })
+            .map((entry) => entry.issue);
+        const hasError = sorted.some((issue) => issue.severity === "error");
+        const status = hasError ? "error" : sorted.length > 0 ? "info" : "success";
+        currentIssues = sorted;
         setIssuesStatus(status);
-        deps.issuesUi.render(merged);
-        deps.editorSession.syncIssueMarkers(merged);
+        deps.issuesUi.render(sorted);
+        deps.editorSession.syncIssueMarkers(sorted);
         if (issuesTab instanceof HTMLElement) {
-            const hasAlert = merged.length > 0 && status === "error";
+            const hasAlert = sorted.length > 0 && status === "error";
             issuesTab.classList.toggle("is-alert", hasAlert);
         }
-        if (merged.length === 0) {
+        if (sorted.length === 0) {
             deps.editorSession.clearIssueHighlight();
         }
-        if (pendingBuildIssuesFocus && merged.length > 0 && status === "error") {
+        if (pendingBuildIssuesFocus && sorted.length > 0 && status === "error") {
             pendingBuildIssuesFocus = false;
             deps.setActiveTab("issues");
         }

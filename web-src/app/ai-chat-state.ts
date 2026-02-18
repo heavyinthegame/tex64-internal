@@ -11,23 +11,23 @@ export type ChatState = {
   messages: ChatMessage[];
   proposals: Map<string, AgentProposal>;
   statusMessage: string;
-  mode: "general" | "paper";
-  autoPilot: boolean;
+  autonomous: boolean;
+  autoLoopBudget: number;
 };
 
 export const createChatState = (
   id: string,
   title: string,
-  mode: "general" | "paper",
-  autoPilot: boolean
+  autonomous: boolean,
+  autoLoopBudget: number
 ): ChatState => ({
   id,
   title,
   messages: [],
   proposals: new Map(),
   statusMessage: "待機中",
-  mode,
-  autoPilot,
+  autonomous,
+  autoLoopBudget,
 });
 
 export const getChat = (
@@ -46,8 +46,8 @@ export const ensureChat = (options: {
   activeChatId: string | null;
   chats: ChatState[];
   chatIndex: Map<string, ChatState>;
-  defaultChatMode: "general" | "paper";
-  defaultAutoPilot: boolean;
+  defaultAutonomous: boolean;
+  defaultAutoLoopBudget: number;
   resolveChatTitle: (chatId: string) => string;
   onChatCreated?: () => void;
 }) => {
@@ -56,8 +56,8 @@ export const ensureChat = (options: {
     activeChatId,
     chats,
     chatIndex,
-    defaultChatMode,
-    defaultAutoPilot,
+    defaultAutonomous,
+    defaultAutoLoopBudget,
     resolveChatTitle,
     onChatCreated,
   } = options;
@@ -65,8 +65,8 @@ export const ensureChat = (options: {
     const chat = createChatState(
       chatId,
       resolveChatTitle(chatId),
-      defaultChatMode,
-      defaultAutoPilot
+      defaultAutonomous,
+      defaultAutoLoopBudget
     );
     chats.push(chat);
     chatIndex.set(chatId, chat);
@@ -80,23 +80,23 @@ export const createChat = (options: {
   chatIndex: Map<string, ChatState>;
   makeChatId: () => string;
   resolveChatTitle: (chatId: string) => string;
-  defaultChatMode: "general" | "paper";
-  defaultAutoPilot: boolean;
+  defaultAutonomous: boolean;
+  defaultAutoLoopBudget: number;
 }) => {
   const {
     chats,
     chatIndex,
     makeChatId,
     resolveChatTitle,
-    defaultChatMode,
-    defaultAutoPilot,
+    defaultAutonomous,
+    defaultAutoLoopBudget,
   } = options;
   const id = makeChatId();
   const chat = createChatState(
     id,
     resolveChatTitle(id),
-    defaultChatMode,
-    defaultAutoPilot
+    defaultAutonomous,
+    defaultAutoLoopBudget
   );
   chats.push(chat);
   chatIndex.set(id, chat);

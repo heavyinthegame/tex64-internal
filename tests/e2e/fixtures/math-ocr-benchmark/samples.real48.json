@@ -1,0 +1,244 @@
+{
+  "samples": [
+    {
+      "id": "s01-r1",
+      "expected": "x^2+1",
+      "variantIndex": 0
+    },
+    {
+      "id": "s01-r2",
+      "expected": "x^2+1",
+      "variantIndex": 4
+    },
+    {
+      "id": "s02-r1",
+      "expected": "y=x^3-2x",
+      "variantIndex": 1
+    },
+    {
+      "id": "s02-r2",
+      "expected": "y=x^3-2x",
+      "variantIndex": 5
+    },
+    {
+      "id": "s03-r1",
+      "expected": "\\frac{a}{b}",
+      "variantIndex": 2
+    },
+    {
+      "id": "s03-r2",
+      "expected": "\\frac{a}{b}",
+      "variantIndex": 6
+    },
+    {
+      "id": "s04-r1",
+      "expected": "\\frac{x+1}{x-1}",
+      "variantIndex": 3
+    },
+    {
+      "id": "s04-r2",
+      "expected": "\\frac{x+1}{x-1}",
+      "variantIndex": 7
+    },
+    {
+      "id": "s05-r1",
+      "expected": "\\sqrt{x}",
+      "variantIndex": 4
+    },
+    {
+      "id": "s05-r2",
+      "expected": "\\sqrt{x}",
+      "variantIndex": 0
+    },
+    {
+      "id": "s06-r1",
+      "expected": "\\sqrt{x^2+y^2}",
+      "variantIndex": 5
+    },
+    {
+      "id": "s06-r2",
+      "expected": "\\sqrt{x^2+y^2}",
+      "variantIndex": 1
+    },
+    {
+      "id": "s07-r1",
+      "expected": "\\alpha+\\beta=\\gamma",
+      "variantIndex": 6
+    },
+    {
+      "id": "s07-r2",
+      "expected": "\\alpha+\\beta=\\gamma",
+      "variantIndex": 2
+    },
+    {
+      "id": "s08-r1",
+      "expected": "\\theta=\\frac{\\pi}{4}",
+      "variantIndex": 7
+    },
+    {
+      "id": "s08-r2",
+      "expected": "\\theta=\\frac{\\pi}{4}",
+      "variantIndex": 3
+    },
+    {
+      "id": "s09-r1",
+      "expected": "\\sum_{i=1}^{n} i",
+      "variantIndex": 0
+    },
+    {
+      "id": "s09-r2",
+      "expected": "\\sum_{i=1}^{n} i",
+      "variantIndex": 4
+    },
+    {
+      "id": "s10-r1",
+      "expected": "\\prod_{k=1}^{m} k",
+      "variantIndex": 1
+    },
+    {
+      "id": "s10-r2",
+      "expected": "\\prod_{k=1}^{m} k",
+      "variantIndex": 5
+    },
+    {
+      "id": "s11-r1",
+      "expected": "\\int_0^1 x^2\\,dx",
+      "variantIndex": 2
+    },
+    {
+      "id": "s11-r2",
+      "expected": "\\int_0^1 x^2\\,dx",
+      "variantIndex": 6
+    },
+    {
+      "id": "s12-r1",
+      "expected": "e^{i\\pi}+1=0",
+      "variantIndex": 3
+    },
+    {
+      "id": "s12-r2",
+      "expected": "e^{i\\pi}+1=0",
+      "variantIndex": 7
+    },
+    {
+      "id": "s13-r1",
+      "expected": "\\lim_{x\\to0}\\frac{\\sin x}{x}",
+      "variantIndex": 4
+    },
+    {
+      "id": "s13-r2",
+      "expected": "\\lim_{x\\to0}\\frac{\\sin x}{x}",
+      "variantIndex": 0
+    },
+    {
+      "id": "s14-r1",
+      "expected": "\\binom{n}{k}",
+      "variantIndex": 5
+    },
+    {
+      "id": "s14-r2",
+      "expected": "\\binom{n}{k}",
+      "variantIndex": 1
+    },
+    {
+      "id": "s15-r1",
+      "expected": "\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}",
+      "variantIndex": 6
+    },
+    {
+      "id": "s15-r2",
+      "expected": "\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}",
+      "variantIndex": 2
+    },
+    {
+      "id": "s16-r1",
+      "expected": "\\vec{v}=(v_1,v_2,v_3)",
+      "variantIndex": 7
+    },
+    {
+      "id": "s16-r2",
+      "expected": "\\vec{v}=(v_1,v_2,v_3)",
+      "variantIndex": 3
+    },
+    {
+      "id": "s17-r1",
+      "expected": "\\log(xy)=\\log x+\\log y",
+      "variantIndex": 0
+    },
+    {
+      "id": "s17-r2",
+      "expected": "\\log(xy)=\\log x+\\log y",
+      "variantIndex": 4
+    },
+    {
+      "id": "s18-r1",
+      "expected": "\\nabla\\cdot\\vec{E}=\\frac{\\rho}{\\varepsilon_0}",
+      "variantIndex": 1
+    },
+    {
+      "id": "s18-r2",
+      "expected": "\\nabla\\cdot\\vec{E}=\\frac{\\rho}{\\varepsilon_0}",
+      "variantIndex": 5
+    },
+    {
+      "id": "s19-r1",
+      "expected": "\\forall x\\in\\mathbb{R},\\ x^2\\ge0",
+      "variantIndex": 2
+    },
+    {
+      "id": "s19-r2",
+      "expected": "\\forall x\\in\\mathbb{R},\\ x^2\\ge0",
+      "variantIndex": 6
+    },
+    {
+      "id": "s20-r1",
+      "expected": "a_n=\\frac{1}{n^2}",
+      "variantIndex": 3
+    },
+    {
+      "id": "s20-r2",
+      "expected": "a_n=\\frac{1}{n^2}",
+      "variantIndex": 7
+    },
+    {
+      "id": "s21-r1",
+      "expected": "\\left(\\frac{a+b}{c}\\right)^2",
+      "variantIndex": 4
+    },
+    {
+      "id": "s21-r2",
+      "expected": "\\left(\\frac{a+b}{c}\\right)^2",
+      "variantIndex": 0
+    },
+    {
+      "id": "s22-r1",
+      "expected": "f(x)=\\sum_{n=0}^{\\infty}\\frac{x^n}{n!}",
+      "variantIndex": 5
+    },
+    {
+      "id": "s22-r2",
+      "expected": "f(x)=\\sum_{n=0}^{\\infty}\\frac{x^n}{n!}",
+      "variantIndex": 1
+    },
+    {
+      "id": "s23-r1",
+      "expected": "P(A\\mid B)=\\frac{P(B\\mid A)P(A)}{P(B)}",
+      "variantIndex": 6
+    },
+    {
+      "id": "s23-r2",
+      "expected": "P(A\\mid B)=\\frac{P(B\\mid A)P(A)}{P(B)}",
+      "variantIndex": 2
+    },
+    {
+      "id": "s24-r1",
+      "expected": "\\det\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}=ad-bc",
+      "variantIndex": 7
+    },
+    {
+      "id": "s24-r2",
+      "expected": "\\det\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}=ad-bc",
+      "variantIndex": 3
+    }
+  ]
+}

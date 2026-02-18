@@ -20,6 +20,8 @@ export const initMathKeyboard = (
   context: AppContext,
   deps: MathKeyboardDeps
 ): MathKeyboardApi => {
+  // Temporarily disabled: keep the math keyboard dock hidden.
+  const MATH_KEYBOARD_VISIBLE = false;
   const {
     mathKeyboardDock,
     mathKeyboardGrid,
@@ -232,7 +234,9 @@ export const initMathKeyboard = (
       return;
     }
     const shouldShow =
-      deps.getActiveTab() === "blocks" && deps.getActiveBlockType() === "math";
+      MATH_KEYBOARD_VISIBLE &&
+      deps.getActiveTab() === "blocks" &&
+      deps.getActiveBlockType() === "math";
     mathKeyboardDock.classList.toggle("is-open", shouldShow);
     mathKeyboardDock.setAttribute("aria-hidden", shouldShow ? "false" : "true");
     if (!shouldShow) {

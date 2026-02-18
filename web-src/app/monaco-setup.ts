@@ -2,7 +2,10 @@ import type { AppContext } from "./context.js";
 import type { IndexEntry } from "./types.js";
 import type { EditorGroupKey, EditorSessionApi, EditorGroupState } from "./editor-session.js";
 import { registerCompletionProvider } from "./monaco-completion.js";
-import { registerHoverProvider, type HoverState } from "./monaco-hover.js";
+import {
+  registerHoverProvider,
+  type HoverState,
+} from "./monaco-hover.js";
 import { createInlineCompletionController } from "./monaco-inline.js";
 import { applyMonacoTheme } from "./monaco-theme.js";
 
@@ -226,6 +229,16 @@ export const initMonacoSetup = (
         suggestOnTriggerCharacters: true,
         tabCompletion: "off",
         acceptSuggestionOnEnter: "on",
+        // Render hover/suggest widgets in a fixed layer to avoid clipping
+        // at the Monaco viewport edge (especially near the first lines).
+        fixedOverflowWidgets: true,
+        hover: {
+          enabled: true,
+          delay: 180,
+          sticky: true,
+          // Prefer above by default (Monaco may fallback below if space is insufficient).
+          above: true,
+        },
         occurrencesHighlight: false,
         selectionHighlight: false,
         inlineSuggest: { enabled: deps.getGhostCompletionEnabled() },
@@ -319,6 +332,8 @@ export const initMonacoSetup = (
 
         let ghostCaretPosition: { lineNumber: number; column: number } | null = null;
         let ghostCaretVisible = false;
+        let inlineAutoTriggerTimers: number[] = [];
+        let hoverAnchorRafId: number | null = null;
         const ghostCaretPreference =
           (monacoWindow.monaco as any)?.editor?.ContentWidgetPositionPreference?.EXACT ?? 0;
         const ghostCaretWidget = {
@@ -357,6 +372,75 @@ export const initMonacoSetup = (
           }
           ghostCaretVisible = false;
           editorAny.layoutContentWidget?.(ghostCaretWidget);
+        };
+
+        const clearInlineAutoTrigger = () => {
+          inlineAutoTriggerTimers.forEach((timerId) => {
+            window.clearTimeout(timerId);
+          });
+          inlineAutoTriggerTimers = [];
+        };
+
+        const updateHoverFixedAnchor = () => {
+          const editorForHover = editor as any;
+          const editorDomNode = editorForHover.getDomNode?.() as HTMLElement | null;
+          if (!editorDomNode) {
+            return;
+          }
+          const hostRect = editorDomNode.getBoundingClientRect();
+          const top = Math.max(8, Math.round(hostRect.top + 10));
+          const right = Math.max(8, Math.round(window.innerWidth - hostRect.right + 14));
+          document.documentElement.style.setProperty("--tex64-hover-fixed-top", `${top}px`);
+          document.documentElement.style.setProperty("--tex64-hover-fixed-right", `${right}px`);
+        };
+        const scheduleHoverFixedAnchor = () => {
+          if (hoverAnchorRafId !== null) {
+            window.cancelAnimationFrame(hoverAnchorRafId);
+          }
+          hoverAnchorRafId = window.requestAnimationFrame(() => {
+            hoverAnchorRafId = null;
+            updateHoverFixedAnchor();
+          });
+        };
+        window.addEventListener("resize", scheduleHoverFixedAnchor);
+        updateHoverFixedAnchor();
+
+        const scheduleInlineAutoTrigger = () => {
+          clearInlineAutoTrigger();
+          const config = deps.getGhostCompletionConfig();
+          const baseDelay =
+            Number.isFinite(config.debounceMs) && config.debounceMs >= 0
+              ? Math.round(config.debounceMs)
+              : 120;
+          const delays = [baseDelay, Math.max(baseDelay + 120, 620)];
+          delays.forEach((delay) => {
+            const timerId = window.setTimeout(() => {
+              inlineAutoTriggerTimers = inlineAutoTriggerTimers.filter((id) => id !== timerId);
+              if (!deps.getGhostCompletionEnabled()) {
+                return;
+              }
+              if (!deps.editorSession.isActiveGroup(group)) {
+                return;
+              }
+              if (!group.currentFilePath || !group.currentFilePath.endsWith(".tex")) {
+                return;
+              }
+              if (group.isComposing || deps.editorSession.isAnyGroupComposing()) {
+                return;
+              }
+              if (document.querySelector(".suggest-widget.visible")) {
+                return;
+              }
+              const hasTextFocus = (
+                editorAny as { hasTextFocus?: () => boolean }
+              ).hasTextFocus?.();
+              if (!hasTextFocus) {
+                return;
+              }
+              editorAny.trigger?.("tex64", "editor.action.inlineSuggest.trigger", {});
+            }, delay);
+            inlineAutoTriggerTimers.push(timerId);
+          });
         };
 
         const showGhostCaret = () => {
@@ -414,21 +498,37 @@ export const initMonacoSetup = (
           deps.fileTree.setTreeFocus(false);
         });
         editorAny.onDidBlurEditorWidget?.(() => {
+          clearInlineAutoTrigger();
+          if (hoverAnchorRafId !== null) {
+            window.cancelAnimationFrame(hoverAnchorRafId);
+            hoverAnchorRafId = null;
+          }
           updateGhostCaretPosition(editorAny.getPosition?.() ?? null);
           showGhostCaret();
+        });
+        editor.onDidFocusEditorWidget?.(() => {
+          scheduleHoverFixedAnchor();
         });
         editorAny.onDidScrollChange?.(() => {
           if (ghostCaretVisible) {
             editorAny.layoutContentWidget?.(ghostCaretWidget);
           }
+          scheduleHoverFixedAnchor();
         });
         editor.onDidChangeModelContent(() => {
           inlineController.recordInlineEdit();
           if (group.isApplyingFile) {
+            clearInlineAutoTrigger();
             return;
           }
           if (!group.currentFilePath) {
+            clearInlineAutoTrigger();
             return;
+          }
+          if (deps.editorSession.isActiveGroup(group) && group.currentFilePath.endsWith(".tex")) {
+            scheduleInlineAutoTrigger();
+          } else {
+            clearInlineAutoTrigger();
           }
           const currentValue = editor.getValue();
           deps.editorSession.updateDirtyState(group.currentFilePath, currentValue);

@@ -526,14 +526,25 @@ const offsetToIndex = (mathField, offset) => {
     if (typeof (mathField === null || mathField === void 0 ? void 0 : mathField.getValue) !== "function") {
         return offset;
     }
-    const prefix = mathField.getValue(0, offset, "latex");
-    return typeof prefix === "string" ? prefix.length : 0;
+    try {
+        const prefix = mathField.getValue(0, offset, "latex");
+        return typeof prefix === "string" ? prefix.length : 0;
+    }
+    catch {
+        return Math.max(0, offset);
+    }
 };
 const indexToOffset = (mathField, targetIndex) => {
     if (typeof (mathField === null || mathField === void 0 ? void 0 : mathField.getValue) !== "function") {
         return targetIndex;
     }
-    const fullValue = mathField.getValue("latex");
+    let fullValue = "";
+    try {
+        fullValue = mathField.getValue("latex");
+    }
+    catch {
+        return targetIndex;
+    }
     const fullLength = typeof fullValue === "string" ? fullValue.length : 0;
     const lastOffset = typeof mathField.lastOffset === "number" ? mathField.lastOffset : fullLength;
     if (targetIndex <= 0) {

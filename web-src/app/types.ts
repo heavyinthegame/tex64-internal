@@ -49,7 +49,13 @@ export type MathKey = {
   shiftTemplateSeparator?: string;
   shiftTemplateScope?: "selection-or-atom" | "selection";
 };
-export type SearchResult = { path: string; line: number; preview: string };
+export type SearchResult = {
+  path: string;
+  line: number;
+  preview: string;
+  matchStart?: number;
+  matchLength?: number;
+};
 export type FileNode = { name: string; path: string; type: "file" | "dir"; children: FileNode[] };
 export type RootSource = "auto" | "manual";
 export type BuildProfile = {
@@ -69,6 +75,7 @@ export type AgentSettings = {
   stream?: boolean;
   autoApply?: boolean;
   autoBuild?: boolean;
+  allowRunCommand?: boolean;
   maxFileBytes?: number;
   maxReadFiles?: number;
   openFileMaxBytes?: number;
@@ -134,6 +141,10 @@ export type AgentProposal = {
   summary?: string;
   isNewFile?: boolean;
   conversationId?: string;
+  baseContentHash?: string;
+  baseExists?: boolean;
+  baseSource?: "disk" | "snapshot";
+  createdAt?: number;
 };
 
 export type EditorFormatIndentStyle = "spaces-2" | "spaces-4" | "tab";
@@ -180,6 +191,7 @@ export type MathOcrBridge = {
     width: number;
     height: number;
     imageDataUrl?: string;
+    fallbackImageDataUrls?: string[];
   }) => Promise<{
     latex?: string;
     error?: string;
@@ -191,6 +203,9 @@ export type BridgeWindow = Window &
     tex64Bridge?: ElectronBridge;
     tex64Capture?: CaptureBridge;
     tex64MathOcr?: MathOcrBridge;
+    __tex64TestCaptureApi?: CaptureBridge;
+    __tex64TestMathOcr?: MathOcrBridge;
+    __tex64TestRecognizeMath?: (imageDataUrl: string) => Promise<string>;
     tex64SetBuildState?: (payload: { state: BuildState; message?: string }) => void;
     tex64UpdateIssues?: (payload: {
       count: number;
@@ -215,7 +230,12 @@ export type BridgeWindow = Window &
       tables?: IndexEntry[];
       todos?: IndexEntry[];
     }) => void;
-    tex64UpdateSearch?: (payload: { query: string; results: SearchResult[]; message?: string }) => void;
+    tex64UpdateSearch?: (payload: {
+      query: string;
+      results: SearchResult[];
+      message?: string;
+      requestId?: number;
+    }) => void;
     tex64OpenFileResult?: (payload: { path: string; content?: string; error?: string }) => void;
     tex64SaveResult?: (payload: {
       path: string;

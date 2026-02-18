@@ -1,12 +1,12 @@
 export const initMathCapture = (context, deps) => {
     const { mathCaptureCropCanvas, mathCaptureCropSelection, mathCaptureCropGuide, mathCaptureCropImage, mathCaptureCropSize, } = context.dom;
     const getCaptureApi = () => {
-        var _a;
-        return (_a = context.bridgeWindow.tex64Capture) !== null && _a !== void 0 ? _a : null;
+        var _a, _b;
+        const bridgeWindow = context.bridgeWindow;
+        return (_b = (_a = bridgeWindow.__tex64TestCaptureApi) !== null && _a !== void 0 ? _a : bridgeWindow.tex64Capture) !== null && _b !== void 0 ? _b : null;
     };
     let sources = [];
     let selectedSource = null;
-    let isDragging = false;
     let dragStart = { x: 0, y: 0 };
     let selection = { x: 0, y: 0, width: 0, height: 0 };
     const captureIssueMessages = new Set([
@@ -15,6 +15,7 @@ export const initMathCapture = (context, deps) => {
         "ウィンドウ一覧の取得に失敗しました。",
         "ウィンドウ一覧の取得に失敗しました。画面収録の許可を確認してください。",
         "取り込み可能なウィンドウがありません。画面収録の許可を確認してください。",
+        "選択した画面のサムネイル取得に失敗しました。別の画面を選択してください。",
         "切り取りに失敗しました。",
     ]);
     const clearCaptureIssues = () => {
@@ -183,6 +184,10 @@ export const initMathCapture = (context, deps) => {
             selectedSource = (_a = sources.find((source) => source.id === id)) !== null && _a !== void 0 ? _a : null;
             if (!selectedSource)
                 return;
+            if (!selectedSource.thumbnailUrl) {
+                setStatus("選択した画面のサムネイル取得に失敗しました。別の画面を選択してください。");
+                return;
+            }
             deps.captureUi.closeWindowPicker();
             deps.captureUi.openCropper({
                 imageUrl: selectedSource.thumbnailUrl,
@@ -223,8 +228,29 @@ export const initMathCapture = (context, deps) => {
     let interactionMode = "idle";
     let resizeHandle = "";
     let startSelection = { x: 0, y: 0, width: 0, height: 0 };
+    const stopInteraction = (pointerId) => {
+        if (!(mathCaptureCropCanvas instanceof HTMLElement)) {
+            return;
+        }
+        interactionMode = "idle";
+        resizeHandle = "";
+        mathCaptureCropCanvas.style.cursor = "crosshair";
+        if (Number.isFinite(pointerId) &&
+            mathCaptureCropCanvas.hasPointerCapture(pointerId)) {
+            try {
+                mathCaptureCropCanvas.releasePointerCapture(pointerId);
+            }
+            catch {
+                // ignore release failures on canceled pointers
+            }
+        }
+        updateSelectionUi();
+    };
     if (mathCaptureCropCanvas instanceof HTMLElement) {
         mathCaptureCropCanvas.addEventListener("pointerdown", (event) => {
+            if (event.button !== 0) {
+                return;
+            }
             const geometry = resolveImageGeometry();
             if (!geometry)
                 return;
@@ -234,7 +260,12 @@ export const initMathCapture = (context, deps) => {
             const y = event.clientY - rect.top;
             dragStart = { x, y };
             startSelection = { ...selection };
-            mathCaptureCropCanvas.setPointerCapture(event.pointerId);
+            try {
+                mathCaptureCropCanvas.setPointerCapture(event.pointerId);
+            }
+            catch {
+                // ignore capture failures for unsupported pointer sequences
+            }
             // Check handle resize
             if (target.classList.contains("capture-crop-handle")) {
                 interactionMode = "resize";
@@ -336,9 +367,16 @@ export const initMathCapture = (context, deps) => {
         mathCaptureCropCanvas.addEventListener("pointerup", (event) => {
             if (interactionMode === "idle")
                 return;
-            interactionMode = "idle";
-            mathCaptureCropCanvas.releasePointerCapture(event.pointerId);
-            updateSelectionUi();
+            stopInteraction(event.pointerId);
+        });
+        mathCaptureCropCanvas.addEventListener("pointercancel", (event) => {
+            stopInteraction(event.pointerId);
+        });
+        mathCaptureCropCanvas.addEventListener("lostpointercapture", (event) => {
+            const pointerEvent = event instanceof PointerEvent
+                ? event
+                : null;
+            stopInteraction(pointerEvent === null || pointerEvent === void 0 ? void 0 : pointerEvent.pointerId);
         });
     }
     return { openCapture };

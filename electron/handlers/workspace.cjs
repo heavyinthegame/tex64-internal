@@ -197,17 +197,69 @@ const createWorkspaceHandlers = (deps) => {
     shell.showItemInFolder(resolved);
   };
 
+  const e2eDialogQueueState = {
+    initialized: false,
+    openWorkspace: [],
+    createProject: [],
+  };
+
+  const initializeE2eDialogQueue = () => {
+    if (e2eDialogQueueState.initialized) {
+      return;
+    }
+    e2eDialogQueueState.initialized = true;
+    const rawQueue = process.env.TEX64_E2E_DIALOG_QUEUE;
+    if (typeof rawQueue !== "string" || !rawQueue.trim()) {
+      return;
+    }
+    try {
+      const parsed = JSON.parse(rawQueue);
+      if (Array.isArray(parsed?.openWorkspace)) {
+        e2eDialogQueueState.openWorkspace = parsed.openWorkspace;
+      }
+      if (Array.isArray(parsed?.createProject)) {
+        e2eDialogQueueState.createProject = parsed.createProject;
+      }
+    } catch {
+      // Ignore malformed queue; tests can still use single-path env overrides.
+    }
+  };
+
+  const consumeE2eDialogResult = (kind) => {
+    if (process.env.TEX64_E2E !== "1") {
+      return null;
+    }
+    initializeE2eDialogQueue();
+    let rawValue = null;
+    const queue = e2eDialogQueueState[kind];
+    if (Array.isArray(queue) && queue.length > 0) {
+      rawValue = queue.shift();
+    } else if (kind === "openWorkspace") {
+      rawValue = process.env.TEX64_E2E_OPEN_WORKSPACE_PATH ?? "";
+    } else if (kind === "createProject") {
+      rawValue = process.env.TEX64_E2E_CREATE_PROJECT_PATH ?? "";
+    }
+    const selectedPath =
+      typeof rawValue === "string" ? rawValue.trim() : "";
+    if (!selectedPath) {
+      return { canceled: true, filePaths: [] };
+    }
+    return { canceled: false, filePaths: [selectedPath] };
+  };
+
   const handleOpenWorkspace = async () => {
     if (!state.mainWindow) {
       return;
     }
     sendLauncherStatus({ isBusy: true, message: null });
-    const result = await dialog.showOpenDialog(state.mainWindow, {
-      title: "プロジェクトを選択",
-      message: "LaTeXプロジェクトのフォルダを選択してください。",
-      properties: ["openDirectory"],
-      buttonLabel: "選択",
-    });
+    const result =
+      consumeE2eDialogResult("openWorkspace") ??
+      (await dialog.showOpenDialog(state.mainWindow, {
+        title: "プロジェクトを選択",
+        message: "LaTeXプロジェクトのフォルダを選択してください。",
+        properties: ["openDirectory"],
+        buttonLabel: "選択",
+      }));
     if (result.canceled || result.filePaths.length === 0) {
       sendLauncherStatus({ isBusy: false, message: null });
       return;
@@ -265,12 +317,14 @@ const createWorkspaceHandlers = (deps) => {
       return;
     }
     sendLauncherStatus({ isBusy: true, message: null });
-    const result = await dialog.showOpenDialog(state.mainWindow, {
-      title: "新規プロジェクト",
-      message: "プロジェクト用フォルダを作成または選択してください。",
-      properties: ["openDirectory", "createDirectory"],
-      buttonLabel: "作成",
-    });
+    const result =
+      consumeE2eDialogResult("createProject") ??
+      (await dialog.showOpenDialog(state.mainWindow, {
+        title: "新規プロジェクト",
+        message: "プロジェクト用フォルダを作成または選択してください。",
+        properties: ["openDirectory", "createDirectory"],
+        buttonLabel: "作成",
+      }));
     if (result.canceled || result.filePaths.length === 0) {
       sendLauncherStatus({ isBusy: false, message: null });
       return;
@@ -501,8 +555,18 @@ const createWorkspaceHandlers = (deps) => {
           .catch((error) => ({ ok: false, error: error?.message ?? String(error) }));
         if (formatResult.warning && !state.formatWarningShown) {
           state.formatWarningShown = true;
+          const lower = formatResult.warning.toLowerCase();
+          const isEnvMissing =
+            (formatResult.warning.includes("見つかりません") || lower.includes("not found")) &&
+            lower.includes("latexindent");
+          const issue = {
+            severity: "warning",
+            message: formatResult.warning,
+            line: null,
+            ...(isEnvMissing ? { action: "open-runtime" } : {}),
+          };
           sendIssues(1, formatResult.warning, "info", [
-            { severity: "warning", message: formatResult.warning, line: null },
+            issue,
           ]);
         }
         if (formatResult.ok && typeof formatResult.content === "string") {
@@ -649,6 +713,13 @@ const createWorkspaceHandlers = (deps) => {
       ]);
       return;
     }
+    if (process.env.TEX64_E2E === "1") {
+      sendToRenderer("e2e:externalAction", {
+        kind: "revealInFinder",
+        path: relativePath,
+      });
+      return;
+    }
     try {
       revealInFinder(relativePath);
     } catch (_error) {
@@ -664,6 +735,13 @@ const createWorkspaceHandlers = (deps) => {
       sendIssues(1, "ワークスペースが選択されていません。", "error", [
         { severity: "error", message: "ワークスペースが選択されていません。", line: null },
       ]);
+      return;
+    }
+    if (process.env.TEX64_E2E === "1") {
+      sendToRenderer("e2e:externalAction", {
+        kind: "openInTerminal",
+        path: relativePath,
+      });
       return;
     }
     try {
@@ -923,18 +1001,19 @@ const createWorkspaceHandlers = (deps) => {
     requestIndex(rootPath);
   };
 
-  const handleSearch = async (query) => {
+  const handleSearch = async (query, requestId) => {
     const rootPath = ensureWorkspace();
     if (!rootPath) {
       sendToRenderer("updateSearch", {
         query,
         results: [],
-        message: "ワークスペースが選択されていません。",
+        message: "ワークスペースが未選択です。",
+        requestId,
       });
       return;
     }
     const results = await searchService.search(rootPath, query ?? "");
-    sendToRenderer("updateSearch", { query, results });
+    sendToRenderer("updateSearch", { query, results, requestId });
   };
 
   return {

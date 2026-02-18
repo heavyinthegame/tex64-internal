@@ -204,10 +204,16 @@ export const initBlockInsertFlow = (context, deps) => {
         deps.resetBlockSession({ applyMode: mode });
     };
     const triggerInsert = async () => {
-        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
         const triggerSeq = ++triggerInsertSeq;
         const activeGroup = deps.getActiveGroup();
         if (!activeGroup.editor) {
+            return;
+        }
+        if (!activeGroup.currentFilePath || !activeGroup.currentFilePath.endsWith(".tex")) {
+            deps.updateIssues(1, "ブロックは .tex ファイルでのみ挿入できます。", "error", [
+                { severity: "error", message: "ブロックは .tex ファイルでのみ挿入できます。" },
+            ]);
             return;
         }
         const editorForDetect = activeGroup.editor;
@@ -288,34 +294,6 @@ export const initBlockInsertFlow = (context, deps) => {
             let replaceSnippet = null;
             let diffStartOffset = startOffset;
             let diffEndOffset = endOffset;
-            const filePath = activeGroup.currentFilePath;
-            const canPreviewFormat = !!deps.requestFormatPreview &&
-                typeof filePath === "string" &&
-                filePath.toLowerCase().endsWith(".tex");
-            if (canPreviewFormat && typeof model.getOffsetAt === "function") {
-                const originalContent = model.getValue();
-                const rawModified = originalContent.slice(0, startOffset) +
-                    formattedSnippet +
-                    originalContent.slice(endOffset);
-                const previewResult = await ((_k = deps.requestFormatPreview) === null || _k === void 0 ? void 0 : _k.call(deps, {
-                    path: filePath,
-                    content: rawModified,
-                }));
-                if (triggerSeq !== triggerInsertSeq) {
-                    return;
-                }
-                if ((previewResult === null || previewResult === void 0 ? void 0 : previewResult.ok) && typeof previewResult.content === "string") {
-                    const change = findChangedRange(originalContent, previewResult.content);
-                    if (change) {
-                        formattedSnippet = previewResult.content.slice(change.start, change.endAfter);
-                        resolvedDraft = { ...draft, snippet: formattedSnippet };
-                        diffStartOffset = change.start;
-                        diffEndOffset = change.endBefore;
-                        replaceRange = toEditorRangeFromOffsets(model, diffStartOffset, diffEndOffset);
-                        replaceSnippet = formattedSnippet;
-                    }
-                }
-            }
             if (triggerSeq !== triggerInsertSeq) {
                 return;
             }
@@ -343,7 +321,7 @@ export const initBlockInsertFlow = (context, deps) => {
         };
         deps.setPendingBlockApply(applyPayload);
         deps.setCurrentBlockDraft(resolvedDraft);
-        const originalSnippet = mode === "detected" ? (_l = detectedSnapshot === null || detectedSnapshot === void 0 ? void 0 : detectedSnapshot.snippet) !== null && _l !== void 0 ? _l : "" : "";
+        const originalSnippet = mode === "detected" ? (_k = detectedSnapshot === null || detectedSnapshot === void 0 ? void 0 : detectedSnapshot.snippet) !== null && _k !== void 0 ? _k : "" : "";
         const fallbackOffset = insertRange
             ? Math.max(0, insertRange.startLineNumber - 1)
             : insertPosition

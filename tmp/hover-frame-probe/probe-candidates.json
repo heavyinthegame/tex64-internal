@@ -1,0 +1,1254 @@
+{
+  "image": {
+    "frameCandidates": [],
+    "styleNodes": [
+      {
+        "tag": "DIV",
+        "className": "monaco-scrollable-element  mac",
+        "rect": {
+          "left": 1410,
+          "top": 94,
+          "width": 216,
+          "height": 128
+        },
+        "background": "rgba(23, 30, 42, 0.98)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "0px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": ""
+      },
+      {
+        "tag": "DIV",
+        "className": "",
+        "rect": {
+          "left": 1410,
+          "top": 94,
+          "width": 213.7109375,
+          "height": 127.9921875
+        },
+        "background": "rgba(39, 54, 84, 0.98)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "6px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": ""
+      },
+      {
+        "tag": "IMG",
+        "className": "",
+        "rect": {
+          "left": 1414,
+          "top": 98,
+          "width": 205.7109375,
+          "height": 119.9921875
+        },
+        "background": "rgba(0, 0, 0, 0)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "4px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": ""
+      }
+    ],
+    "visibleMathLiveNodes": [],
+    "hoverText": "",
+    "hoverHtml": "<div class=\"monaco-scrollable-element  mac\" role=\"presentation\" style=\"position: relative; overflow: hidden; width: 216px; height: 128px; max-width: 750px; max-height: 250px;\"><div class=\"monaco-hover-content\" style=\"overflow: hidden; font-size: 12px; line-height: 1.66667; width: 216px; height: 128px; max-width: 750px; max-height: 250px;\"><div class=\"hover-row\" tabindex=\"0\"><div class=\"hover-row-contents\"><div class=\"markdown-hover\"><div class=\"hover-contents code-hover-contents\"><div class=\"rendered-markdown\"><div><img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPAAAACMCAYAAABCtSQoAAABtElEQVR4nO3TMQ0AIADAMPShDo0YAQ88ZEmP/ns25toHaBq/A4B3BoYwA0OYgSHMwBBmYAgzMIQZGMIMDGEGhjADQ5iBIczAEGZgCDMwhBkYwgwMYQaGMANDmIEhzMAQZmAIMzCEGRjCDAxhBoYwA0OYgSHMwBBmYAgzMIQZGMIMDGEGhjADQ5iBIczAEGZgCDMwhBkYwgwMYQaGMANDmIEhzMAQZmAIMzCEGRjCDAxhBoYwA0OYgSHMwBBmYAgzMIQZGMIMDGEGhjADQ5iBIczAEGZgCDMwhBkYwgwMYQaGMANDmIEhzMAQZmAIMzCEGRjCDAxhBoYwA0OYgSHMwBBmYAgzMIQZGMIMDGEGhjADQ5iBIczAEGZgCDMwhBkYwgwMYQaGMANDmIEhzMAQZmAIMzCEGRjCDAxhBoYwA0OYgSHMwBBmYAgzMIQZGMIMDGEGhjADQ5iBIczAEGZgCDMwhBkYwgwMYQaGMANDmIEhzMAQZmAIMzCEGRjCDAxhBoYwA0OYgSHMwBBmYAgzMIQZGMIMDGEGhjADQ5iBIczAEGZgCDMwhBkYwgwMYQaGMAND2AV2H3S7JYgPrgAAAABJRU5ErkJggg==#tex64-image\" alt=\"\"></div></div></div></div></div></div></div><div role=\"presentation\" aria-hidden=\"true\" class=\"invisible scrollbar horizontal\" style=\"position: absolute; width: 206px; height: 10px; left: 0px; bottom: 0px;\"><div class=\"slider\" style=\"position: absolute; top: 0px; left: 0px; height: 10px; transform: translate3d(0px, 0px, 0px); contain: strict; width: 206px;\"></div></div><div role=\"presentation\" aria-hidden=\"true\" class=\"invisible scrollbar vertical\" style=\"position: absolute; width: 10px; height: 128px; right: 0px; top: 0px;\"><div class=\"slider\" style=\"position: absolute; top: 0px; left: 0px; width: 10px; transform: translate3d(0px, 0px, 0px); contain: strict; height: 128px;\"></div></div><div class=\"shadow\"></div><div class=\"shadow\"></div><div class=\"shadow\"></div></div>",
+    "wrapperFrame": {
+      "className": "monaco-resizable-hover tex64-hover-docked",
+      "borderPx": 0,
+      "outlinePx": 0,
+      "radiusPx": 0,
+      "boxShadow": "none",
+      "background": "rgba(0, 0, 0, 0)"
+    },
+    "previewStyle": {
+      "background": "rgba(39, 54, 84, 0.98)",
+      "borderPx": 0,
+      "radiusPx": 6
+    },
+    "stabilitySamples": [
+      {
+        "column": 26,
+        "hoverId": "hover-1770787223035-b02c16b8df93a",
+        "imageSrc": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPAAAACMCAYAAABCtSQoAAABtElEQVR4nO3TMQ0AIADAMPShDo0YAQ88ZEmP/ns25toHaBq/A4B3BoYwA0OYgSHMwBBmYAgzMIQZGMIMDGEGhjADQ5iBIczAEGZgCDMwhBkYwgwMYQaGMANDmIEhzMAQZmAIMzCEGRjCDAxhBoYwA0OYgSHMwBBmYAgzMIQZGMIMDGEGhjADQ5iBIczAEGZgCDMwhBkYwgwMYQaGMANDmIEhzMAQZmAIMzCEGRjCDAxhBoYwA0OYgSHMwBBmYAgzMIQZGMIMDGEGhjADQ5iBIczAEGZgCDMwhBkYwgwMYQaGMANDmIEhzMAQZmAIMzCEGRjCDAxhBoYwA0OYgSHMwBBmYAgzMIQZGMIMDGEGhjADQ5iBIczAEGZgCDMwhBkYwgwMYQaGMANDmIEhzMAQZmAIMzCEGRjCDAxhBoYwA0OYgSHMwBBmYAgzMIQZGMIMDGEGhjADQ5iBIczAEGZgCDMwhBkYwgwMYQaGMANDmIEhzMAQZmAIMzCEGRjCDAxhBoYwA0OYgSHMwBBmYAgzMIQZGMIMDGEGhjADQ5iBIczAEGZgCDMwhBkYwgwMYQaGMAND2AV2H3S7JYgPrgAAAABJRU5ErkJggg==#tex64-image",
+        "mathSignature": "",
+        "htmlLength": 2012,
+        "rect": {
+          "left": 1410,
+          "top": 94,
+          "width": 216,
+          "height": 128
+        }
+      },
+      {
+        "column": 33,
+        "hoverId": "hover-1770787223035-b02c16b8df93a",
+        "imageSrc": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPAAAACMCAYAAABCtSQoAAABtElEQVR4nO3TMQ0AIADAMPShDo0YAQ88ZEmP/ns25toHaBq/A4B3BoYwA0OYgSHMwBBmYAgzMIQZGMIMDGEGhjADQ5iBIczAEGZgCDMwhBkYwgwMYQaGMANDmIEhzMAQZmAIMzCEGRjCDAxhBoYwA0OYgSHMwBBmYAgzMIQZGMIMDGEGhjADQ5iBIczAEGZgCDMwhBkYwgwMYQaGMANDmIEhzMAQZmAIMzCEGRjCDAxhBoYwA0OYgSHMwBBmYAgzMIQZGMIMDGEGhjADQ5iBIczAEGZgCDMwhBkYwgwMYQaGMANDmIEhzMAQZmAIMzCEGRjCDAxhBoYwA0OYgSHMwBBmYAgzMIQZGMIMDGEGhjADQ5iBIczAEGZgCDMwhBkYwgwMYQaGMANDmIEhzMAQZmAIMzCEGRjCDAxhBoYwA0OYgSHMwBBmYAgzMIQZGMIMDGEGhjADQ5iBIczAEGZgCDMwhBkYwgwMYQaGMANDmIEhzMAQZmAIMzCEGRjCDAxhBoYwA0OYgSHMwBBmYAgzMIQZGMIMDGEGhjADQ5iBIczAEGZgCDMwhBkYwgwMYQaGMAND2AV2H3S7JYgPrgAAAABJRU5ErkJggg==#tex64-image",
+        "mathSignature": "",
+        "htmlLength": 2012,
+        "rect": {
+          "left": 1410,
+          "top": 94,
+          "width": 216,
+          "height": 128
+        }
+      },
+      {
+        "column": 41,
+        "hoverId": "hover-1770787223035-b02c16b8df93a",
+        "imageSrc": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPAAAACMCAYAAABCtSQoAAABtElEQVR4nO3TMQ0AIADAMPShDo0YAQ88ZEmP/ns25toHaBq/A4B3BoYwA0OYgSHMwBBmYAgzMIQZGMIMDGEGhjADQ5iBIczAEGZgCDMwhBkYwgwMYQaGMANDmIEhzMAQZmAIMzCEGRjCDAxhBoYwA0OYgSHMwBBmYAgzMIQZGMIMDGEGhjADQ5iBIczAEGZgCDMwhBkYwgwMYQaGMANDmIEhzMAQZmAIMzCEGRjCDAxhBoYwA0OYgSHMwBBmYAgzMIQZGMIMDGEGhjADQ5iBIczAEGZgCDMwhBkYwgwMYQaGMANDmIEhzMAQZmAIMzCEGRjCDAxhBoYwA0OYgSHMwBBmYAgzMIQZGMIMDGEGhjADQ5iBIczAEGZgCDMwhBkYwgwMYQaGMANDmIEhzMAQZmAIMzCEGRjCDAxhBoYwA0OYgSHMwBBmYAgzMIQZGMIMDGEGhjADQ5iBIczAEGZgCDMwhBkYwgwMYQaGMANDmIEhzMAQZmAIMzCEGRjCDAxhBoYwA0OYgSHMwBBmYAgzMIQZGMIMDGEGhjADQ5iBIczAEGZgCDMwhBkYwgwMYQaGMAND2AV2H3S7JYgPrgAAAABJRU5ErkJggg==#tex64-image",
+        "mathSignature": "",
+        "htmlLength": 2012,
+        "rect": {
+          "left": 1410,
+          "top": 94,
+          "width": 216,
+          "height": 128
+        }
+      }
+    ]
+  },
+  "text-cite": {
+    "frameCandidates": [],
+    "styleNodes": [
+      {
+        "tag": "DIV",
+        "className": "monaco-scrollable-element  mac",
+        "rect": {
+          "left": 1264,
+          "top": 94,
+          "width": 362,
+          "height": 59
+        },
+        "background": "rgba(23, 30, 42, 0.98)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "0px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": "refs.bib:8LaTeX: A Document Preparation System\nLamport, Leslie\n1"
+      },
+      {
+        "tag": "DIV",
+        "className": "monaco-hover-content",
+        "rect": {
+          "left": 1264,
+          "top": 94,
+          "width": 362,
+          "height": 59
+        },
+        "background": "rgba(23, 30, 42, 0.98)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "0px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": "refs.bib:8LaTeX: A Document Preparation System\nLamport, Leslie\n1"
+      },
+      {
+        "tag": "DIV",
+        "className": "hover-row",
+        "rect": {
+          "left": 1264,
+          "top": 94,
+          "width": 362,
+          "height": 58.78125
+        },
+        "background": "rgba(23, 30, 42, 0.98)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "0px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": "refs.bib:8LaTeX: A Document Preparation System\nLamport, Leslie\n1"
+      },
+      {
+        "tag": "DIV",
+        "className": "monaco-hover fade-in",
+        "rect": {
+          "left": 1264,
+          "top": 94,
+          "width": 360,
+          "height": 59
+        },
+        "background": "rgba(23, 30, 42, 0.98)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "8px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": "refs.bib:8LaTeX: A Document Preparation System\nLamport, Leslie\n1"
+      },
+      {
+        "tag": "DIV",
+        "className": "hover-row-contents",
+        "rect": {
+          "left": 1272,
+          "top": 100,
+          "width": 346,
+          "height": 46.78125
+        },
+        "background": "rgba(23, 30, 42, 0.98)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "0px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": "refs.bib:8LaTeX: A Document Preparation System\nLamport, Leslie\n1"
+      },
+      {
+        "tag": "DIV",
+        "className": "markdown-hover",
+        "rect": {
+          "left": 1272,
+          "top": 115.59375,
+          "width": 346,
+          "height": 31.1875
+        },
+        "background": "rgba(23, 30, 42, 0.98)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "0px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": "LaTeX: A Document Preparation System\nLamport, Leslie\n1994"
+      },
+      {
+        "tag": "DIV",
+        "className": "hover-contents",
+        "rect": {
+          "left": 1272,
+          "top": 115.59375,
+          "width": 346,
+          "height": 31.1875
+        },
+        "background": "rgba(23, 30, 42, 0.98)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "0px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": "LaTeX: A Document Preparation System\nLamport, Leslie\n1994"
+      },
+      {
+        "tag": "DIV",
+        "className": "rendered-markdown",
+        "rect": {
+          "left": 1272,
+          "top": 115.59375,
+          "width": 346,
+          "height": 31.1875
+        },
+        "background": "rgba(23, 30, 42, 0.98)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "0px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": "LaTeX: A Document Preparation System\nLamport, Leslie\n1994"
+      },
+      {
+        "tag": "DIV",
+        "className": "markdown-hover",
+        "rect": {
+          "left": 1272,
+          "top": 100,
+          "width": 346,
+          "height": 15.59375
+        },
+        "background": "rgba(23, 30, 42, 0.98)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "0px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": "refs.bib:8"
+      },
+      {
+        "tag": "DIV",
+        "className": "hover-contents",
+        "rect": {
+          "left": 1272,
+          "top": 100,
+          "width": 346,
+          "height": 15.59375
+        },
+        "background": "rgba(23, 30, 42, 0.98)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "0px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": "refs.bib:8"
+      },
+      {
+        "tag": "DIV",
+        "className": "rendered-markdown",
+        "rect": {
+          "left": 1272,
+          "top": 100,
+          "width": 346,
+          "height": 15.59375
+        },
+        "background": "rgba(23, 30, 42, 0.98)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "0px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": "refs.bib:8"
+      },
+      {
+        "tag": "CODE",
+        "className": "",
+        "rect": {
+          "left": 1272,
+          "top": 100,
+          "width": 73.6171875,
+          "height": 15
+        },
+        "background": "rgba(10, 10, 10, 0.4)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "0px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": "refs.bib:8"
+      }
+    ],
+    "visibleMathLiveNodes": [],
+    "hoverText": "refs.bib:8LaTeX: A Document Preparation System Lamport, Leslie 1994",
+    "hoverHtml": "<div class=\"monaco-scrollable-element  mac\" role=\"presentation\" style=\"position: relative; overflow: hidden; width: 362px; height: 59px; max-width: 750px; max-height: 250px;\"><div class=\"monaco-hover-content\" style=\"overflow: hidden; font-size: 12px; line-height: 1.66667; width: 362px; height: 59px; max-width: 750px; max-height: 250px;\"><div class=\"hover-row\" tabindex=\"0\"><div class=\"hover-row-contents\"><div class=\"markdown-hover\"><div class=\"hover-contents\"><div class=\"rendered-markdown\"><p><code>refs.bib:8</code></p></div></div></div><div class=\"markdown-hover\"><div class=\"hover-contents\"><div class=\"rendered-markdown\"><p>LaTeX: A Document Preparation System\nLamport, Leslie\n1994</p></div></div></div></div></div></div><div role=\"presentation\" aria-hidden=\"true\" class=\"invisible scrollbar horizontal\" style=\"position: absolute; width: 352px; height: 10px; left: 0px; bottom: 0px;\"><div class=\"slider\" style=\"position: absolute; top: 0px; left: 0px; height: 10px; transform: translate3d(0px, 0px, 0px); contain: strict; width: 352px;\"></div></div><div role=\"presentation\" aria-hidden=\"true\" class=\"invisible scrollbar vertical\" style=\"position: absolute; width: 10px; height: 59px; right: 0px; top: 0px;\"><div class=\"slider\" style=\"position: absolute; top: 0px; left: 0px; width: 10px; transform: translate3d(0px, 0px, 0px); contain: strict; height: 59px;\"></div></div><div class=\"shadow\"></div><div class=\"shadow\"></div><div class=\"shadow\"></div></div>",
+    "wrapperFrame": {
+      "className": "monaco-resizable-hover tex64-hover-docked",
+      "borderPx": 0,
+      "outlinePx": 0,
+      "radiusPx": 0,
+      "boxShadow": "none",
+      "background": "rgba(0, 0, 0, 0)"
+    },
+    "previewStyle": {
+      "background": "rgba(23, 30, 42, 0.98)",
+      "borderPx": 0,
+      "radiusPx": 0
+    },
+    "stabilitySamples": [
+      {
+        "column": 7,
+        "hoverId": "hover-1770787223035-b02c16b8df93a",
+        "imageSrc": "",
+        "mathSignature": "",
+        "htmlLength": 1463,
+        "rect": {
+          "left": 1264,
+          "top": 94,
+          "width": 360,
+          "height": 59
+        }
+      },
+      {
+        "column": 12,
+        "hoverId": "hover-1770787223035-b02c16b8df93a",
+        "imageSrc": "",
+        "mathSignature": "",
+        "htmlLength": 1463,
+        "rect": {
+          "left": 1264,
+          "top": 94,
+          "width": 360,
+          "height": 59
+        }
+      },
+      {
+        "column": 17,
+        "hoverId": "hover-1770787223035-b02c16b8df93a",
+        "imageSrc": "",
+        "mathSignature": "",
+        "htmlLength": 1463,
+        "rect": {
+          "left": 1264,
+          "top": 94,
+          "width": 360,
+          "height": 59
+        }
+      }
+    ]
+  },
+  "text-ref": {
+    "frameCandidates": [],
+    "styleNodes": [
+      {
+        "tag": "DIV",
+        "className": "monaco-scrollable-element  mac",
+        "rect": {
+          "left": 1264,
+          "top": 94,
+          "width": 362,
+          "height": 88
+        },
+        "background": "rgba(23, 30, 42, 0.98)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "0px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": "sections/methods.tex:1▶1 | \\section{Methods}\\label{sec:methods} "
+      },
+      {
+        "tag": "DIV",
+        "className": "monaco-hover-content",
+        "rect": {
+          "left": 1264,
+          "top": 94,
+          "width": 362,
+          "height": 88
+        },
+        "background": "rgba(23, 30, 42, 0.98)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "0px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": "sections/methods.tex:1▶1 | \\section{Methods}\\label{sec:methods} "
+      },
+      {
+        "tag": "DIV",
+        "className": "hover-row",
+        "rect": {
+          "left": 1264,
+          "top": 94,
+          "width": 362,
+          "height": 87.59375
+        },
+        "background": "rgba(23, 30, 42, 0.98)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "0px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": "sections/methods.tex:1▶1 | \\section{Methods}\\label{sec:methods} "
+      },
+      {
+        "tag": "DIV",
+        "className": "monaco-hover fade-in",
+        "rect": {
+          "left": 1264,
+          "top": 94,
+          "width": 360,
+          "height": 88
+        },
+        "background": "rgba(23, 30, 42, 0.98)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "8px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": "sections/methods.tex:1▶1 | \\section{Methods}\\label{sec:methods} "
+      },
+      {
+        "tag": "DIV",
+        "className": "hover-row-contents",
+        "rect": {
+          "left": 1272,
+          "top": 100,
+          "width": 346,
+          "height": 75.59375
+        },
+        "background": "rgba(23, 30, 42, 0.98)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "0px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": "sections/methods.tex:1▶1 | \\section{Methods}\\label{sec:methods} "
+      },
+      {
+        "tag": "DIV",
+        "className": "markdown-hover",
+        "rect": {
+          "left": 1272,
+          "top": 115.59375,
+          "width": 346,
+          "height": 60
+        },
+        "background": "rgba(23, 30, 42, 0.98)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "0px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": "▶1 | \\section{Methods}\\label{sec:methods} 2 | We reference Table"
+      },
+      {
+        "tag": "DIV",
+        "className": "hover-contents code-hover-contents",
+        "rect": {
+          "left": 1272,
+          "top": 115.59375,
+          "width": 346,
+          "height": 60
+        },
+        "background": "rgba(23, 30, 42, 0.98)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "0px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": "▶1 | \\section{Methods}\\label{sec:methods} 2 | We reference Table"
+      },
+      {
+        "tag": "DIV",
+        "className": "rendered-markdown",
+        "rect": {
+          "left": 1272,
+          "top": 115.59375,
+          "width": 346,
+          "height": 60
+        },
+        "background": "rgba(23, 30, 42, 0.98)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "0px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": "▶1 | \\section{Methods}\\label{sec:methods} 2 | We reference Table"
+      },
+      {
+        "tag": "DIV",
+        "className": "markdown-hover",
+        "rect": {
+          "left": 1272,
+          "top": 100,
+          "width": 346,
+          "height": 15.59375
+        },
+        "background": "rgba(23, 30, 42, 0.98)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "0px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": "sections/methods.tex:1"
+      },
+      {
+        "tag": "DIV",
+        "className": "hover-contents",
+        "rect": {
+          "left": 1272,
+          "top": 100,
+          "width": 346,
+          "height": 15.59375
+        },
+        "background": "rgba(23, 30, 42, 0.98)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "0px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": "sections/methods.tex:1"
+      },
+      {
+        "tag": "DIV",
+        "className": "rendered-markdown",
+        "rect": {
+          "left": 1272,
+          "top": 100,
+          "width": 346,
+          "height": 15.59375
+        },
+        "background": "rgba(23, 30, 42, 0.98)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "0px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": "sections/methods.tex:1"
+      },
+      {
+        "tag": "CODE",
+        "className": "",
+        "rect": {
+          "left": 1272,
+          "top": 100,
+          "width": 161.953125,
+          "height": 15
+        },
+        "background": "rgba(10, 10, 10, 0.4)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "0px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": "sections/methods.tex:1"
+      }
+    ],
+    "visibleMathLiveNodes": [],
+    "hoverText": "sections/methods.tex:1▶1 | \\section{Methods}\\label{sec:methods} 2 | We reference Table~\\ref{tab:metrics} and Section~\\ref{sec:intro}.",
+    "hoverHtml": "<div class=\"monaco-scrollable-element  mac\" role=\"presentation\" style=\"position: relative; overflow: hidden; width: 362px; height: 88px; max-width: 750px; max-height: 250px;\"><div class=\"monaco-hover-content\" style=\"overflow: hidden; font-size: 12px; line-height: 1.66667; width: 362px; height: 88px; max-width: 750px; max-height: 250px;\"><div class=\"hover-row\" tabindex=\"0\"><div class=\"hover-row-contents\"><div class=\"markdown-hover\"><div class=\"hover-contents\"><div class=\"rendered-markdown\"><p><code>sections/methods.tex:1</code></p></div></div></div><div class=\"markdown-hover\"><div class=\"hover-contents code-hover-contents\"><div class=\"rendered-markdown\"><div data-code=\"id#4\"><span><div class=\"monaco-tokenized-source\" style=\"font-family: &quot;SF Mono&quot;, &quot;Hiragino Kaku Gothic ProN&quot;, &quot;Hiragino Sans&quot;, Menlo, Monaco, &quot;Courier New&quot;, monospace, Menlo, Monaco, &quot;Courier New&quot;, monospace; font-weight: normal; font-size: 12px; font-feature-settings: &quot;liga&quot; 0, &quot;calt&quot; 0; font-variation-settings: normal; line-height: 20px; letter-spacing: 0px;\"><span class=\"mtk1\">▶1 | \\section{Methods}\\label{sec:methods}</span><br><span class=\"mtk1\"> 2 | We reference Table~\\ref{tab:metrics} and Section~\\ref{sec:intro}.</span></div></span></div></div></div></div></div></div></div><div role=\"presentation\" aria-hidden=\"true\" class=\"invisible scrollbar horizontal\" style=\"position: absolute; width: 352px; height: 10px; left: 0px; bottom: 0px;\"><div class=\"slider\" style=\"position: absolute; top: 0px; left: 0px; height: 10px; transform: translate3d(0px, 0px, 0px); contain: strict; width: 352px;\"></div></div><div role=\"presentation\" aria-hidden=\"true\" class=\"invisible scrollbar vertical\" style=\"position: absolute; width: 10px; height: 88px; right: 0px; top: 0px;\"><div class=\"slider\" style=\"position: absolute; top: 0px; left: 0px; width: 10px; transform: translate3d(0px, 0px, 0px); contain: strict; height: 88px;\"></div></div><div class=\"shadow\"></div><div class=\"shadow\"></div><div class=\"shadow\"></div></div>",
+    "wrapperFrame": {
+      "className": "monaco-resizable-hover tex64-hover-docked",
+      "borderPx": 0,
+      "outlinePx": 0,
+      "radiusPx": 0,
+      "boxShadow": "none",
+      "background": "rgba(0, 0, 0, 0)"
+    },
+    "previewStyle": {
+      "background": "rgba(23, 30, 42, 0.98)",
+      "borderPx": 0,
+      "radiusPx": 0
+    },
+    "stabilitySamples": [
+      {
+        "column": 14,
+        "hoverId": "hover-1770787223035-b02c16b8df93a",
+        "imageSrc": "",
+        "mathSignature": "",
+        "htmlLength": 2066,
+        "rect": {
+          "left": 1264,
+          "top": 94,
+          "width": 360,
+          "height": 88
+        }
+      },
+      {
+        "column": 19,
+        "hoverId": "hover-1770787223035-b02c16b8df93a",
+        "imageSrc": "",
+        "mathSignature": "",
+        "htmlLength": 2066,
+        "rect": {
+          "left": 1264,
+          "top": 94,
+          "width": 360,
+          "height": 88
+        }
+      },
+      {
+        "column": 24,
+        "hoverId": "hover-1770787223035-b02c16b8df93a",
+        "imageSrc": "",
+        "mathSignature": "",
+        "htmlLength": 2066,
+        "rect": {
+          "left": 1264,
+          "top": 94,
+          "width": 360,
+          "height": 88
+        }
+      }
+    ]
+  },
+  "math": {
+    "frameCandidates": [],
+    "styleNodes": [
+      {
+        "tag": "DIV",
+        "className": "monaco-scrollable-element  mac",
+        "rect": {
+          "left": 1544,
+          "top": 94,
+          "width": 82,
+          "height": 38
+        },
+        "background": "rgba(23, 30, 42, 0.98)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "0px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": ""
+      },
+      {
+        "tag": "DIV",
+        "className": "",
+        "rect": {
+          "left": 1544,
+          "top": 94,
+          "width": 80,
+          "height": 38
+        },
+        "background": "rgba(39, 54, 84, 0.98)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "6px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": ""
+      },
+      {
+        "tag": "IMG",
+        "className": "",
+        "rect": {
+          "left": 1548,
+          "top": 98,
+          "width": 72,
+          "height": 30
+        },
+        "background": "rgba(0, 0, 0, 0)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "4px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": ""
+      }
+    ],
+    "visibleMathLiveNodes": [],
+    "hoverText": "",
+    "hoverHtml": "<div class=\"monaco-scrollable-element  mac\" role=\"presentation\" style=\"position: relative; overflow: hidden; width: 82px; height: 38px; max-width: 750px; max-height: 250px;\"><div class=\"monaco-hover-content\" style=\"overflow: hidden; font-size: 12px; line-height: 1.66667; width: 82px; height: 38px; max-width: 750px; max-height: 250px;\"><div class=\"hover-row\" tabindex=\"0\"><div class=\"hover-row-contents\"><div class=\"markdown-hover\"><div class=\"hover-contents code-hover-contents\"><div class=\"rendered-markdown\"><div><img src=\"data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2272%22%20height%3D%2230%22%20viewBox%3D%220%200%2072%2030%22%3E%3CforeignObject%20x%3D%220%22%20y%3D%220%22%20width%3D%2272%22%20height%3D%2230%22%3E%3Cdiv%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F1999%2Fxhtml%22%20style%3D%22display%3Aflex%3Balign-items%3Acenter%3Bjustify-content%3Acenter%3Bwidth%3A72px%3Bheight%3A30px%3Bbackground%3Argba(39%2C54%2C84%2C0.98)%3Bcolor%3Argba(247%2C250%2C255%2C0.99)%3Bpadding%3A4px%206px%3Bbox-sizing%3Aborder-box%3Boverflow%3Ahidden%3B%22%3E%3Cmath%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F1998%2FMath%2FMathML%22%3E%3Cmrow%20%20displaystyle%3D%22true%22%3E%3Cmrow%3E%3Cmi%3EE%3C%2Fmi%3E%3Cmo%3E%3D%3C%2Fmo%3E%3Cmi%3Em%3C%2Fmi%3E%3Cmsup%3E%3Cmi%3Ec%3C%2Fmi%3E%3Cmn%3E2%3C%2Fmn%3E%3C%2Fmsup%3E%3C%2Fmrow%3E%3C%2Fmrow%3E%3C%2Fmath%3E%3C%2Fdiv%3E%3C%2FforeignObject%3E%3C%2Fsvg%3E#tex64-math\" alt=\"\"></div></div></div></div></div></div></div><div role=\"presentation\" aria-hidden=\"true\" class=\"invisible scrollbar horizontal\" style=\"position: absolute; width: 72px; height: 10px; left: 0px; bottom: 0px;\"><div class=\"slider\" style=\"position: absolute; top: 0px; left: 0px; height: 10px; transform: translate3d(0px, 0px, 0px); contain: strict; width: 72px;\"></div></div><div role=\"presentation\" aria-hidden=\"true\" class=\"invisible scrollbar vertical\" style=\"position: absolute; width: 10px; height: 38px; right: 0px; top: 0px;\"><div class=\"slider\" style=\"position: absolute; top: 0px; left: 0px; width: 10px; transform: translate3d(0px, 0px, 0px); contain: strict; height: 38px;\"></div></div><div class=\"shadow\"></div><div class=\"shadow\"></div><div class=\"shadow\"></div></div>",
+    "wrapperFrame": {
+      "className": "monaco-resizable-hover tex64-hover-docked",
+      "borderPx": 0,
+      "outlinePx": 0,
+      "radiusPx": 0,
+      "boxShadow": "none",
+      "background": "rgba(0, 0, 0, 0)"
+    },
+    "previewStyle": {
+      "background": "rgba(39, 54, 84, 0.98)",
+      "borderPx": 0,
+      "radiusPx": 6
+    },
+    "stabilitySamples": [
+      {
+        "column": 2,
+        "hoverId": "hover-1770787223035-b02c16b8df93a",
+        "imageSrc": "data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2272%22%20height%3D%2230%22%20viewBox%3D%220%200%2072%2030%22%3E%3CforeignObject%20x%3D%220%22%20y%3D%220%22%20width%3D%2272%22%20height%3D%2230%22%3E%3Cdiv%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F1999%2Fxhtml%22%20style%3D%22display%3Aflex%3Balign-items%3Acenter%3Bjustify-content%3Acenter%3Bwidth%3A72px%3Bheight%3A30px%3Bbackground%3Argba(39%2C54%2C84%2C0.98)%3Bcolor%3Argba(247%2C250%2C255%2C0.99)%3Bpadding%3A4px%206px%3Bbox-sizing%3Aborder-box%3Boverflow%3Ahidden%3B%22%3E%3Cmath%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F1998%2FMath%2FMathML%22%3E%3Cmrow%20%20displaystyle%3D%22true%22%3E%3Cmrow%3E%3Cmi%3EE%3C%2Fmi%3E%3Cmo%3E%3D%3C%2Fmo%3E%3Cmi%3Em%3C%2Fmi%3E%3Cmsup%3E%3Cmi%3Ec%3C%2Fmi%3E%3Cmn%3E2%3C%2Fmn%3E%3C%2Fmsup%3E%3C%2Fmrow%3E%3C%2Fmrow%3E%3C%2Fmath%3E%3C%2Fdiv%3E%3C%2FforeignObject%3E%3C%2Fsvg%3E#tex64-math",
+        "mathSignature": "",
+        "htmlLength": 2236,
+        "rect": {
+          "left": 1544,
+          "top": 94,
+          "width": 82,
+          "height": 38
+        }
+      },
+      {
+        "column": 4,
+        "hoverId": "hover-1770787223035-b02c16b8df93a",
+        "imageSrc": "data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2272%22%20height%3D%2230%22%20viewBox%3D%220%200%2072%2030%22%3E%3CforeignObject%20x%3D%220%22%20y%3D%220%22%20width%3D%2272%22%20height%3D%2230%22%3E%3Cdiv%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F1999%2Fxhtml%22%20style%3D%22display%3Aflex%3Balign-items%3Acenter%3Bjustify-content%3Acenter%3Bwidth%3A72px%3Bheight%3A30px%3Bbackground%3Argba(39%2C54%2C84%2C0.98)%3Bcolor%3Argba(247%2C250%2C255%2C0.99)%3Bpadding%3A4px%206px%3Bbox-sizing%3Aborder-box%3Boverflow%3Ahidden%3B%22%3E%3Cmath%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F1998%2FMath%2FMathML%22%3E%3Cmrow%20%20displaystyle%3D%22true%22%3E%3Cmrow%3E%3Cmi%3EE%3C%2Fmi%3E%3Cmo%3E%3D%3C%2Fmo%3E%3Cmi%3Em%3C%2Fmi%3E%3Cmsup%3E%3Cmi%3Ec%3C%2Fmi%3E%3Cmn%3E2%3C%2Fmn%3E%3C%2Fmsup%3E%3C%2Fmrow%3E%3C%2Fmrow%3E%3C%2Fmath%3E%3C%2Fdiv%3E%3C%2FforeignObject%3E%3C%2Fsvg%3E#tex64-math",
+        "mathSignature": "",
+        "htmlLength": 2236,
+        "rect": {
+          "left": 1544,
+          "top": 94,
+          "width": 82,
+          "height": 38
+        }
+      },
+      {
+        "column": 7,
+        "hoverId": "hover-1770787223035-b02c16b8df93a",
+        "imageSrc": "data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2272%22%20height%3D%2230%22%20viewBox%3D%220%200%2072%2030%22%3E%3CforeignObject%20x%3D%220%22%20y%3D%220%22%20width%3D%2272%22%20height%3D%2230%22%3E%3Cdiv%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F1999%2Fxhtml%22%20style%3D%22display%3Aflex%3Balign-items%3Acenter%3Bjustify-content%3Acenter%3Bwidth%3A72px%3Bheight%3A30px%3Bbackground%3Argba(39%2C54%2C84%2C0.98)%3Bcolor%3Argba(247%2C250%2C255%2C0.99)%3Bpadding%3A4px%206px%3Bbox-sizing%3Aborder-box%3Boverflow%3Ahidden%3B%22%3E%3Cmath%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F1998%2FMath%2FMathML%22%3E%3Cmrow%20%20displaystyle%3D%22true%22%3E%3Cmrow%3E%3Cmi%3EE%3C%2Fmi%3E%3Cmo%3E%3D%3C%2Fmo%3E%3Cmi%3Em%3C%2Fmi%3E%3Cmsup%3E%3Cmi%3Ec%3C%2Fmi%3E%3Cmn%3E2%3C%2Fmn%3E%3C%2Fmsup%3E%3C%2Fmrow%3E%3C%2Fmrow%3E%3C%2Fmath%3E%3C%2Fdiv%3E%3C%2FforeignObject%3E%3C%2Fsvg%3E#tex64-math",
+        "mathSignature": "",
+        "htmlLength": 2236,
+        "rect": {
+          "left": 1544,
+          "top": 94,
+          "width": 82,
+          "height": 38
+        }
+      }
+    ]
+  },
+  "math-display-dollar": {
+    "frameCandidates": [],
+    "styleNodes": [
+      {
+        "tag": "DIV",
+        "className": "monaco-scrollable-element  mac",
+        "rect": {
+          "left": 1549,
+          "top": 94,
+          "width": 77,
+          "height": 38
+        },
+        "background": "rgba(23, 30, 42, 0.98)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "0px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": ""
+      },
+      {
+        "tag": "DIV",
+        "className": "",
+        "rect": {
+          "left": 1549,
+          "top": 94,
+          "width": 75,
+          "height": 38
+        },
+        "background": "rgba(39, 54, 84, 0.98)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "6px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": ""
+      },
+      {
+        "tag": "IMG",
+        "className": "",
+        "rect": {
+          "left": 1553,
+          "top": 98,
+          "width": 67,
+          "height": 30
+        },
+        "background": "rgba(0, 0, 0, 0)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "4px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": ""
+      }
+    ],
+    "visibleMathLiveNodes": [],
+    "hoverText": "",
+    "hoverHtml": "<div class=\"monaco-scrollable-element  mac\" role=\"presentation\" style=\"position: relative; overflow: hidden; width: 77px; height: 38px; max-width: 750px; max-height: 250px;\"><div class=\"monaco-hover-content\" style=\"overflow: hidden; font-size: 12px; line-height: 1.66667; width: 77px; height: 38px; max-width: 750px; max-height: 250px;\"><div class=\"hover-row\" tabindex=\"0\"><div class=\"hover-row-contents\"><div class=\"markdown-hover\"><div class=\"hover-contents code-hover-contents\"><div class=\"rendered-markdown\"><div><img src=\"data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2267%22%20height%3D%2230%22%20viewBox%3D%220%200%2067%2030%22%3E%3CforeignObject%20x%3D%220%22%20y%3D%220%22%20width%3D%2267%22%20height%3D%2230%22%3E%3Cdiv%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F1999%2Fxhtml%22%20style%3D%22display%3Aflex%3Balign-items%3Acenter%3Bjustify-content%3Acenter%3Bwidth%3A67px%3Bheight%3A30px%3Bbackground%3Argba(39%2C54%2C84%2C0.98)%3Bcolor%3Argba(247%2C250%2C255%2C0.99)%3Bpadding%3A4px%206px%3Bbox-sizing%3Aborder-box%3Boverflow%3Ahidden%3B%22%3E%3Cmath%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F1998%2FMath%2FMathML%22%3E%3Cmrow%20%20displaystyle%3D%22true%22%3E%3Cmrow%3E%3Cmsubsup%3E%3Cmo%3E%E2%88%91%3C%2Fmo%3E%3Cmrow%3E%3Cmi%3Ek%3C%2Fmi%3E%3Cmo%3E%3D%3C%2Fmo%3E%3Cmn%3E1%3C%2Fmn%3E%3C%2Fmrow%3E%3Cmi%3En%3C%2Fmi%3E%3C%2Fmsubsup%3E%3Cmi%3Ek%3C%2Fmi%3E%3C%2Fmrow%3E%3C%2Fmrow%3E%3C%2Fmath%3E%3C%2Fdiv%3E%3C%2FforeignObject%3E%3C%2Fsvg%3E#tex64-math\" alt=\"\"></div></div></div></div></div></div></div><div role=\"presentation\" aria-hidden=\"true\" class=\"invisible scrollbar horizontal\" style=\"position: absolute; width: 67px; height: 10px; left: 0px; bottom: 0px;\"><div class=\"slider\" style=\"position: absolute; top: 0px; left: 0px; height: 10px; transform: translate3d(0px, 0px, 0px); contain: strict; width: 67px;\"></div></div><div role=\"presentation\" aria-hidden=\"true\" class=\"invisible scrollbar vertical\" style=\"position: absolute; width: 10px; height: 38px; right: 0px; top: 0px;\"><div class=\"slider\" style=\"position: absolute; top: 0px; left: 0px; width: 10px; transform: translate3d(0px, 0px, 0px); contain: strict; height: 38px;\"></div></div><div class=\"shadow\"></div><div class=\"shadow\"></div><div class=\"shadow\"></div></div>",
+    "wrapperFrame": {
+      "className": "monaco-resizable-hover tex64-hover-docked",
+      "borderPx": 0,
+      "outlinePx": 0,
+      "radiusPx": 0,
+      "boxShadow": "none",
+      "background": "rgba(0, 0, 0, 0)"
+    },
+    "previewStyle": {
+      "background": "rgba(39, 54, 84, 0.98)",
+      "borderPx": 0,
+      "radiusPx": 6
+    },
+    "stabilitySamples": [
+      {
+        "column": 4,
+        "hoverId": "hover-1770787223035-b02c16b8df93a",
+        "imageSrc": "data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2267%22%20height%3D%2230%22%20viewBox%3D%220%200%2067%2030%22%3E%3CforeignObject%20x%3D%220%22%20y%3D%220%22%20width%3D%2267%22%20height%3D%2230%22%3E%3Cdiv%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F1999%2Fxhtml%22%20style%3D%22display%3Aflex%3Balign-items%3Acenter%3Bjustify-content%3Acenter%3Bwidth%3A67px%3Bheight%3A30px%3Bbackground%3Argba(39%2C54%2C84%2C0.98)%3Bcolor%3Argba(247%2C250%2C255%2C0.99)%3Bpadding%3A4px%206px%3Bbox-sizing%3Aborder-box%3Boverflow%3Ahidden%3B%22%3E%3Cmath%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F1998%2FMath%2FMathML%22%3E%3Cmrow%20%20displaystyle%3D%22true%22%3E%3Cmrow%3E%3Cmsubsup%3E%3Cmo%3E%E2%88%91%3C%2Fmo%3E%3Cmrow%3E%3Cmi%3Ek%3C%2Fmi%3E%3Cmo%3E%3D%3C%2Fmo%3E%3Cmn%3E1%3C%2Fmn%3E%3C%2Fmrow%3E%3Cmi%3En%3C%2Fmi%3E%3C%2Fmsubsup%3E%3Cmi%3Ek%3C%2Fmi%3E%3C%2Fmrow%3E%3C%2Fmrow%3E%3C%2Fmath%3E%3C%2Fdiv%3E%3C%2FforeignObject%3E%3C%2Fsvg%3E#tex64-math",
+        "mathSignature": "",
+        "htmlLength": 2293,
+        "rect": {
+          "left": 1549,
+          "top": 94,
+          "width": 77,
+          "height": 38
+        }
+      },
+      {
+        "column": 5,
+        "hoverId": "hover-1770787223035-b02c16b8df93a",
+        "imageSrc": "data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2267%22%20height%3D%2230%22%20viewBox%3D%220%200%2067%2030%22%3E%3CforeignObject%20x%3D%220%22%20y%3D%220%22%20width%3D%2267%22%20height%3D%2230%22%3E%3Cdiv%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F1999%2Fxhtml%22%20style%3D%22display%3Aflex%3Balign-items%3Acenter%3Bjustify-content%3Acenter%3Bwidth%3A67px%3Bheight%3A30px%3Bbackground%3Argba(39%2C54%2C84%2C0.98)%3Bcolor%3Argba(247%2C250%2C255%2C0.99)%3Bpadding%3A4px%206px%3Bbox-sizing%3Aborder-box%3Boverflow%3Ahidden%3B%22%3E%3Cmath%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F1998%2FMath%2FMathML%22%3E%3Cmrow%20%20displaystyle%3D%22true%22%3E%3Cmrow%3E%3Cmsubsup%3E%3Cmo%3E%E2%88%91%3C%2Fmo%3E%3Cmrow%3E%3Cmi%3Ek%3C%2Fmi%3E%3Cmo%3E%3D%3C%2Fmo%3E%3Cmn%3E1%3C%2Fmn%3E%3C%2Fmrow%3E%3Cmi%3En%3C%2Fmi%3E%3C%2Fmsubsup%3E%3Cmi%3Ek%3C%2Fmi%3E%3C%2Fmrow%3E%3C%2Fmrow%3E%3C%2Fmath%3E%3C%2Fdiv%3E%3C%2FforeignObject%3E%3C%2Fsvg%3E#tex64-math",
+        "mathSignature": "",
+        "htmlLength": 2293,
+        "rect": {
+          "left": 1549,
+          "top": 94,
+          "width": 77,
+          "height": 38
+        }
+      },
+      {
+        "column": 6,
+        "hoverId": "hover-1770787223035-b02c16b8df93a",
+        "imageSrc": "data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2267%22%20height%3D%2230%22%20viewBox%3D%220%200%2067%2030%22%3E%3CforeignObject%20x%3D%220%22%20y%3D%220%22%20width%3D%2267%22%20height%3D%2230%22%3E%3Cdiv%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F1999%2Fxhtml%22%20style%3D%22display%3Aflex%3Balign-items%3Acenter%3Bjustify-content%3Acenter%3Bwidth%3A67px%3Bheight%3A30px%3Bbackground%3Argba(39%2C54%2C84%2C0.98)%3Bcolor%3Argba(247%2C250%2C255%2C0.99)%3Bpadding%3A4px%206px%3Bbox-sizing%3Aborder-box%3Boverflow%3Ahidden%3B%22%3E%3Cmath%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F1998%2FMath%2FMathML%22%3E%3Cmrow%20%20displaystyle%3D%22true%22%3E%3Cmrow%3E%3Cmsubsup%3E%3Cmo%3E%E2%88%91%3C%2Fmo%3E%3Cmrow%3E%3Cmi%3Ek%3C%2Fmi%3E%3Cmo%3E%3D%3C%2Fmo%3E%3Cmn%3E1%3C%2Fmn%3E%3C%2Fmrow%3E%3Cmi%3En%3C%2Fmi%3E%3C%2Fmsubsup%3E%3Cmi%3Ek%3C%2Fmi%3E%3C%2Fmrow%3E%3C%2Fmrow%3E%3C%2Fmath%3E%3C%2Fdiv%3E%3C%2FforeignObject%3E%3C%2Fsvg%3E#tex64-math",
+        "mathSignature": "",
+        "htmlLength": 2293,
+        "rect": {
+          "left": 1549,
+          "top": 94,
+          "width": 77,
+          "height": 38
+        }
+      }
+    ]
+  },
+  "math-display-block": {
+    "frameCandidates": [],
+    "styleNodes": [
+      {
+        "tag": "DIV",
+        "className": "monaco-scrollable-element  mac",
+        "rect": {
+          "left": 1449,
+          "top": 94,
+          "width": 177,
+          "height": 40
+        },
+        "background": "rgba(23, 30, 42, 0.98)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "0px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": ""
+      },
+      {
+        "tag": "DIV",
+        "className": "",
+        "rect": {
+          "left": 1449,
+          "top": 94,
+          "width": 175,
+          "height": 40
+        },
+        "background": "rgba(39, 54, 84, 0.98)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "6px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": ""
+      },
+      {
+        "tag": "IMG",
+        "className": "",
+        "rect": {
+          "left": 1453,
+          "top": 98,
+          "width": 167,
+          "height": 32
+        },
+        "background": "rgba(0, 0, 0, 0)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "4px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": ""
+      }
+    ],
+    "visibleMathLiveNodes": [],
+    "hoverText": "",
+    "hoverHtml": "<div class=\"monaco-scrollable-element  mac\" role=\"presentation\" style=\"position: relative; overflow: hidden; width: 177px; height: 40px; max-width: 750px; max-height: 250px;\"><div class=\"monaco-hover-content\" style=\"overflow: hidden; font-size: 12px; line-height: 1.66667; width: 177px; height: 40px; max-width: 750px; max-height: 250px;\"><div class=\"hover-row\" tabindex=\"0\"><div class=\"hover-row-contents\"><div class=\"markdown-hover\"><div class=\"hover-contents code-hover-contents\"><div class=\"rendered-markdown\"><div><img src=\"data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22167%22%20height%3D%2232%22%20viewBox%3D%220%200%20167%2032%22%3E%3CforeignObject%20x%3D%220%22%20y%3D%220%22%20width%3D%22167%22%20height%3D%2232%22%3E%3Cdiv%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F1999%2Fxhtml%22%20style%3D%22display%3Aflex%3Balign-items%3Acenter%3Bjustify-content%3Acenter%3Bwidth%3A167px%3Bheight%3A32px%3Bbackground%3Argba(39%2C54%2C84%2C0.98)%3Bcolor%3Argba(247%2C250%2C255%2C0.99)%3Bpadding%3A4px%206px%3Bbox-sizing%3Aborder-box%3Boverflow%3Ahidden%3B%22%3E%3Cmath%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F1998%2FMath%2FMathML%22%3E%3Cmrow%20%20displaystyle%3D%22true%22%3E%3Cmrow%3E%3Cmsubsup%3E%3Cmi%3E%CE%98%3C%2Fmi%3E%3Cmi%3ES%3C%2Fmi%3E%3Cmrow%3E%3Cmo%3E(%3C%2Fmo%3E%3Cmi%20mathvariant%3D%22normal%22%3Edet%3C%2Fmi%3E%3Cmo%3E)%3C%2Fmo%3E%3C%2Fmrow%3E%3C%2Fmsubsup%3E%3Cmo%3E%2B%3C%2Fmo%3E%3Cmi%3ER%3C%2Fmi%3E%3Cmo%3E%2B%3C%2Fmo%3E%3Cmsub%3E%3Cmi%3EX%3C%2Fmi%3E%3Cmrow%3E%3Cmi%3Ei%3C%2Fmi%3E%3Cmo%3E%3A%3C%2Fmo%3E%3Cmi%3Et%3C%2Fmi%3E%3C%2Fmrow%3E%3C%2Fmsub%3E%3Cmo%3E%E2%86%A6%3C%2Fmo%3E%3Cmsub%3E%3Cmi%3EX%3C%2Fmi%3E%3Cmrow%3E%3Cmi%3Ei%3C%2Fmi%3E%3Cmo%20separator%3D%22true%22%3E%2C%3C%2Fmo%3E%3Cmi%3Et%3C%2Fmi%3E%3C%2Fmrow%3E%3C%2Fmsub%3E%3C%2Fmrow%3E%3C%2Fmrow%3E%3C%2Fmath%3E%3C%2Fdiv%3E%3C%2FforeignObject%3E%3C%2Fsvg%3E#tex64-math\" alt=\"\"></div></div></div></div></div></div></div><div role=\"presentation\" aria-hidden=\"true\" class=\"invisible scrollbar horizontal\" style=\"position: absolute; width: 167px; height: 10px; left: 0px; bottom: 0px;\"><div class=\"slider\" style=\"position: absolute; top: 0px; left: 0px; height: 10px; transform: translate3d(0px, 0px, 0px); contain: strict; width: 167px;\"></div></div><div role=\"presentation\" aria-hidden=\"true\" class=\"invisible scrollbar vertical\" style=\"position: absolute; width: 10px; height: 40px; right: 0px; top: 0px;\"><div class=\"slider\" style=\"position: absolute; top: 0px; left: 0px; width: 10px; transform: translate3d(0px, 0px, 0px); contain: strict; height: 40px;\"></div></div><div class=\"shadow\"></div><div class=\"shadow\"></div><div class=\"shadow\"></div></div>",
+    "wrapperFrame": {
+      "className": "monaco-resizable-hover tex64-hover-docked",
+      "borderPx": 0,
+      "outlinePx": 0,
+      "radiusPx": 0,
+      "boxShadow": "none",
+      "background": "rgba(0, 0, 0, 0)"
+    },
+    "previewStyle": {
+      "background": "rgba(39, 54, 84, 0.98)",
+      "borderPx": 0,
+      "radiusPx": 6
+    },
+    "stabilitySamples": [
+      {
+        "column": 41,
+        "hoverId": "hover-1770787223035-b02c16b8df93a",
+        "imageSrc": "data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22167%22%20height%3D%2232%22%20viewBox%3D%220%200%20167%2032%22%3E%3CforeignObject%20x%3D%220%22%20y%3D%220%22%20width%3D%22167%22%20height%3D%2232%22%3E%3Cdiv%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F1999%2Fxhtml%22%20style%3D%22display%3Aflex%3Balign-items%3Acenter%3Bjustify-content%3Acenter%3Bwidth%3A167px%3Bheight%3A32px%3Bbackground%3Argba(39%2C54%2C84%2C0.98)%3Bcolor%3Argba(247%2C250%2C255%2C0.99)%3Bpadding%3A4px%206px%3Bbox-sizing%3Aborder-box%3Boverflow%3Ahidden%3B%22%3E%3Cmath%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F1998%2FMath%2FMathML%22%3E%3Cmrow%20%20displaystyle%3D%22true%22%3E%3Cmrow%3E%3Cmsubsup%3E%3Cmi%3E%CE%98%3C%2Fmi%3E%3Cmi%3ES%3C%2Fmi%3E%3Cmrow%3E%3Cmo%3E(%3C%2Fmo%3E%3Cmi%20mathvariant%3D%22normal%22%3Edet%3C%2Fmi%3E%3Cmo%3E)%3C%2Fmo%3E%3C%2Fmrow%3E%3C%2Fmsubsup%3E%3Cmo%3E%2B%3C%2Fmo%3E%3Cmi%3ER%3C%2Fmi%3E%3Cmo%3E%2B%3C%2Fmo%3E%3Cmsub%3E%3Cmi%3EX%3C%2Fmi%3E%3Cmrow%3E%3Cmi%3Ei%3C%2Fmi%3E%3Cmo%3E%3A%3C%2Fmo%3E%3Cmi%3Et%3C%2Fmi%3E%3C%2Fmrow%3E%3C%2Fmsub%3E%3Cmo%3E%E2%86%A6%3C%2Fmo%3E%3Cmsub%3E%3Cmi%3EX%3C%2Fmi%3E%3Cmrow%3E%3Cmi%3Ei%3C%2Fmi%3E%3Cmo%20separator%3D%22true%22%3E%2C%3C%2Fmo%3E%3Cmi%3Et%3C%2Fmi%3E%3C%2Fmrow%3E%3C%2Fmsub%3E%3C%2Fmrow%3E%3C%2Fmrow%3E%3C%2Fmath%3E%3C%2Fdiv%3E%3C%2FforeignObject%3E%3C%2Fsvg%3E#tex64-math",
+        "mathSignature": "",
+        "htmlLength": 2680,
+        "rect": {
+          "left": 1449,
+          "top": 94,
+          "width": 177,
+          "height": 40
+        }
+      },
+      {
+        "column": 43,
+        "hoverId": "hover-1770787223035-b02c16b8df93a",
+        "imageSrc": "data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22167%22%20height%3D%2232%22%20viewBox%3D%220%200%20167%2032%22%3E%3CforeignObject%20x%3D%220%22%20y%3D%220%22%20width%3D%22167%22%20height%3D%2232%22%3E%3Cdiv%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F1999%2Fxhtml%22%20style%3D%22display%3Aflex%3Balign-items%3Acenter%3Bjustify-content%3Acenter%3Bwidth%3A167px%3Bheight%3A32px%3Bbackground%3Argba(39%2C54%2C84%2C0.98)%3Bcolor%3Argba(247%2C250%2C255%2C0.99)%3Bpadding%3A4px%206px%3Bbox-sizing%3Aborder-box%3Boverflow%3Ahidden%3B%22%3E%3Cmath%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F1998%2FMath%2FMathML%22%3E%3Cmrow%20%20displaystyle%3D%22true%22%3E%3Cmrow%3E%3Cmsubsup%3E%3Cmi%3E%CE%98%3C%2Fmi%3E%3Cmi%3ES%3C%2Fmi%3E%3Cmrow%3E%3Cmo%3E(%3C%2Fmo%3E%3Cmi%20mathvariant%3D%22normal%22%3Edet%3C%2Fmi%3E%3Cmo%3E)%3C%2Fmo%3E%3C%2Fmrow%3E%3C%2Fmsubsup%3E%3Cmo%3E%2B%3C%2Fmo%3E%3Cmi%3ER%3C%2Fmi%3E%3Cmo%3E%2B%3C%2Fmo%3E%3Cmsub%3E%3Cmi%3EX%3C%2Fmi%3E%3Cmrow%3E%3Cmi%3Ei%3C%2Fmi%3E%3Cmo%3E%3A%3C%2Fmo%3E%3Cmi%3Et%3C%2Fmi%3E%3C%2Fmrow%3E%3C%2Fmsub%3E%3Cmo%3E%E2%86%A6%3C%2Fmo%3E%3Cmsub%3E%3Cmi%3EX%3C%2Fmi%3E%3Cmrow%3E%3Cmi%3Ei%3C%2Fmi%3E%3Cmo%20separator%3D%22true%22%3E%2C%3C%2Fmo%3E%3Cmi%3Et%3C%2Fmi%3E%3C%2Fmrow%3E%3C%2Fmsub%3E%3C%2Fmrow%3E%3C%2Fmrow%3E%3C%2Fmath%3E%3C%2Fdiv%3E%3C%2FforeignObject%3E%3C%2Fsvg%3E#tex64-math",
+        "mathSignature": "",
+        "htmlLength": 2680,
+        "rect": {
+          "left": 1449,
+          "top": 94,
+          "width": 177,
+          "height": 40
+        }
+      },
+      {
+        "column": 46,
+        "hoverId": "hover-1770787223035-b02c16b8df93a",
+        "imageSrc": "data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22167%22%20height%3D%2232%22%20viewBox%3D%220%200%20167%2032%22%3E%3CforeignObject%20x%3D%220%22%20y%3D%220%22%20width%3D%22167%22%20height%3D%2232%22%3E%3Cdiv%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F1999%2Fxhtml%22%20style%3D%22display%3Aflex%3Balign-items%3Acenter%3Bjustify-content%3Acenter%3Bwidth%3A167px%3Bheight%3A32px%3Bbackground%3Argba(39%2C54%2C84%2C0.98)%3Bcolor%3Argba(247%2C250%2C255%2C0.99)%3Bpadding%3A4px%206px%3Bbox-sizing%3Aborder-box%3Boverflow%3Ahidden%3B%22%3E%3Cmath%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F1998%2FMath%2FMathML%22%3E%3Cmrow%20%20displaystyle%3D%22true%22%3E%3Cmrow%3E%3Cmsubsup%3E%3Cmi%3E%CE%98%3C%2Fmi%3E%3Cmi%3ES%3C%2Fmi%3E%3Cmrow%3E%3Cmo%3E(%3C%2Fmo%3E%3Cmi%20mathvariant%3D%22normal%22%3Edet%3C%2Fmi%3E%3Cmo%3E)%3C%2Fmo%3E%3C%2Fmrow%3E%3C%2Fmsubsup%3E%3Cmo%3E%2B%3C%2Fmo%3E%3Cmi%3ER%3C%2Fmi%3E%3Cmo%3E%2B%3C%2Fmo%3E%3Cmsub%3E%3Cmi%3EX%3C%2Fmi%3E%3Cmrow%3E%3Cmi%3Ei%3C%2Fmi%3E%3Cmo%3E%3A%3C%2Fmo%3E%3Cmi%3Et%3C%2Fmi%3E%3C%2Fmrow%3E%3C%2Fmsub%3E%3Cmo%3E%E2%86%A6%3C%2Fmo%3E%3Cmsub%3E%3Cmi%3EX%3C%2Fmi%3E%3Cmrow%3E%3Cmi%3Ei%3C%2Fmi%3E%3Cmo%20separator%3D%22true%22%3E%2C%3C%2Fmo%3E%3Cmi%3Et%3C%2Fmi%3E%3C%2Fmrow%3E%3C%2Fmsub%3E%3C%2Fmrow%3E%3C%2Fmrow%3E%3C%2Fmath%3E%3C%2Fdiv%3E%3C%2FforeignObject%3E%3C%2Fsvg%3E#tex64-math",
+        "mathSignature": "",
+        "htmlLength": 2680,
+        "rect": {
+          "left": 1449,
+          "top": 94,
+          "width": 177,
+          "height": 40
+        }
+      }
+    ]
+  },
+  "math-environment": {
+    "frameCandidates": [],
+    "styleNodes": [
+      {
+        "tag": "DIV",
+        "className": "monaco-scrollable-element  mac",
+        "rect": {
+          "left": 1531,
+          "top": 94,
+          "width": 95,
+          "height": 43
+        },
+        "background": "rgba(23, 30, 42, 0.98)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "0px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": ""
+      },
+      {
+        "tag": "DIV",
+        "className": "",
+        "rect": {
+          "left": 1531,
+          "top": 94,
+          "width": 93,
+          "height": 43
+        },
+        "background": "rgba(39, 54, 84, 0.98)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "6px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": ""
+      },
+      {
+        "tag": "IMG",
+        "className": "",
+        "rect": {
+          "left": 1535,
+          "top": 98,
+          "width": 85,
+          "height": 35
+        },
+        "background": "rgba(0, 0, 0, 0)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "4px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": ""
+      }
+    ],
+    "visibleMathLiveNodes": [],
+    "hoverText": "",
+    "hoverHtml": "<div class=\"monaco-scrollable-element  mac\" role=\"presentation\" style=\"position: relative; overflow: hidden; width: 95px; height: 43px; max-width: 750px; max-height: 250px;\"><div class=\"monaco-hover-content\" style=\"overflow: hidden; font-size: 12px; line-height: 1.66667; width: 95px; height: 43px; max-width: 750px; max-height: 250px;\"><div class=\"hover-row\" tabindex=\"0\"><div class=\"hover-row-contents\"><div class=\"markdown-hover\"><div class=\"hover-contents code-hover-contents\"><div class=\"rendered-markdown\"><div><img src=\"data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2285%22%20height%3D%2235%22%20viewBox%3D%220%200%2085%2035%22%3E%3CforeignObject%20x%3D%220%22%20y%3D%220%22%20width%3D%2285%22%20height%3D%2235%22%3E%3Cdiv%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F1999%2Fxhtml%22%20style%3D%22display%3Aflex%3Balign-items%3Acenter%3Bjustify-content%3Acenter%3Bwidth%3A85px%3Bheight%3A35px%3Bbackground%3Argba(39%2C54%2C84%2C0.98)%3Bcolor%3Argba(247%2C250%2C255%2C0.99)%3Bpadding%3A4px%206px%3Bbox-sizing%3Aborder-box%3Boverflow%3Ahidden%3B%22%3E%3Cmath%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F1998%2FMath%2FMathML%22%3E%3Cmtable%20columnalign%3D%22center%20%22%3E%3Cmtr%3E%3Cmtd%3E%3Cmrow%3E%3Cmi%3EE%3C%2Fmi%3E%3Cmo%3E%3D%3C%2Fmo%3E%3Cmi%3Em%3C%2Fmi%3E%3Cmsup%3E%3Cmi%3Ec%3C%2Fmi%3E%3Cmn%3E2%3C%2Fmn%3E%3C%2Fmsup%3E%3C%2Fmrow%3E%3C%2Fmtd%3E%3C%2Fmtr%3E%3C%2Fmtable%3E%3C%2Fmath%3E%3C%2Fdiv%3E%3C%2FforeignObject%3E%3C%2Fsvg%3E#tex64-math\" alt=\"\"></div></div></div></div></div></div></div><div role=\"presentation\" aria-hidden=\"true\" class=\"invisible scrollbar horizontal\" style=\"position: absolute; width: 85px; height: 10px; left: 0px; bottom: 0px;\"><div class=\"slider\" style=\"position: absolute; top: 0px; left: 0px; height: 10px; transform: translate3d(0px, 0px, 0px); contain: strict; width: 85px;\"></div></div><div role=\"presentation\" aria-hidden=\"true\" class=\"invisible scrollbar vertical\" style=\"position: absolute; width: 10px; height: 43px; right: 0px; top: 0px;\"><div class=\"slider\" style=\"position: absolute; top: 0px; left: 0px; width: 10px; transform: translate3d(0px, 0px, 0px); contain: strict; height: 43px;\"></div></div><div class=\"shadow\"></div><div class=\"shadow\"></div><div class=\"shadow\"></div></div>",
+    "wrapperFrame": {
+      "className": "monaco-resizable-hover tex64-hover-docked",
+      "borderPx": 0,
+      "outlinePx": 0,
+      "radiusPx": 0,
+      "boxShadow": "none",
+      "background": "rgba(0, 0, 0, 0)"
+    },
+    "previewStyle": {
+      "background": "rgba(39, 54, 84, 0.98)",
+      "borderPx": 0,
+      "radiusPx": 6
+    },
+    "stabilitySamples": [
+      {
+        "column": 1,
+        "hoverId": "hover-1770787223035-b02c16b8df93a",
+        "imageSrc": "data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2285%22%20height%3D%2235%22%20viewBox%3D%220%200%2085%2035%22%3E%3CforeignObject%20x%3D%220%22%20y%3D%220%22%20width%3D%2285%22%20height%3D%2235%22%3E%3Cdiv%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F1999%2Fxhtml%22%20style%3D%22display%3Aflex%3Balign-items%3Acenter%3Bjustify-content%3Acenter%3Bwidth%3A85px%3Bheight%3A35px%3Bbackground%3Argba(39%2C54%2C84%2C0.98)%3Bcolor%3Argba(247%2C250%2C255%2C0.99)%3Bpadding%3A4px%206px%3Bbox-sizing%3Aborder-box%3Boverflow%3Ahidden%3B%22%3E%3Cmath%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F1998%2FMath%2FMathML%22%3E%3Cmtable%20columnalign%3D%22center%20%22%3E%3Cmtr%3E%3Cmtd%3E%3Cmrow%3E%3Cmi%3EE%3C%2Fmi%3E%3Cmo%3E%3D%3C%2Fmo%3E%3Cmi%3Em%3C%2Fmi%3E%3Cmsup%3E%3Cmi%3Ec%3C%2Fmi%3E%3Cmn%3E2%3C%2Fmn%3E%3C%2Fmsup%3E%3C%2Fmrow%3E%3C%2Fmtd%3E%3C%2Fmtr%3E%3C%2Fmtable%3E%3C%2Fmath%3E%3C%2Fdiv%3E%3C%2FforeignObject%3E%3C%2Fsvg%3E#tex64-math",
+        "mathSignature": "",
+        "htmlLength": 2283,
+        "rect": {
+          "left": 1531,
+          "top": 94,
+          "width": 95,
+          "height": 43
+        }
+      },
+      {
+        "column": 3,
+        "hoverId": "hover-1770787223035-b02c16b8df93a",
+        "imageSrc": "data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2285%22%20height%3D%2235%22%20viewBox%3D%220%200%2085%2035%22%3E%3CforeignObject%20x%3D%220%22%20y%3D%220%22%20width%3D%2285%22%20height%3D%2235%22%3E%3Cdiv%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F1999%2Fxhtml%22%20style%3D%22display%3Aflex%3Balign-items%3Acenter%3Bjustify-content%3Acenter%3Bwidth%3A85px%3Bheight%3A35px%3Bbackground%3Argba(39%2C54%2C84%2C0.98)%3Bcolor%3Argba(247%2C250%2C255%2C0.99)%3Bpadding%3A4px%206px%3Bbox-sizing%3Aborder-box%3Boverflow%3Ahidden%3B%22%3E%3Cmath%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F1998%2FMath%2FMathML%22%3E%3Cmtable%20columnalign%3D%22center%20%22%3E%3Cmtr%3E%3Cmtd%3E%3Cmrow%3E%3Cmi%3EE%3C%2Fmi%3E%3Cmo%3E%3D%3C%2Fmo%3E%3Cmi%3Em%3C%2Fmi%3E%3Cmsup%3E%3Cmi%3Ec%3C%2Fmi%3E%3Cmn%3E2%3C%2Fmn%3E%3C%2Fmsup%3E%3C%2Fmrow%3E%3C%2Fmtd%3E%3C%2Fmtr%3E%3C%2Fmtable%3E%3C%2Fmath%3E%3C%2Fdiv%3E%3C%2FforeignObject%3E%3C%2Fsvg%3E#tex64-math",
+        "mathSignature": "",
+        "htmlLength": 2283,
+        "rect": {
+          "left": 1531,
+          "top": 94,
+          "width": 95,
+          "height": 43
+        }
+      },
+      {
+        "column": 6,
+        "hoverId": "hover-1770787223035-b02c16b8df93a",
+        "imageSrc": "data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2285%22%20height%3D%2235%22%20viewBox%3D%220%200%2085%2035%22%3E%3CforeignObject%20x%3D%220%22%20y%3D%220%22%20width%3D%2285%22%20height%3D%2235%22%3E%3Cdiv%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F1999%2Fxhtml%22%20style%3D%22display%3Aflex%3Balign-items%3Acenter%3Bjustify-content%3Acenter%3Bwidth%3A85px%3Bheight%3A35px%3Bbackground%3Argba(39%2C54%2C84%2C0.98)%3Bcolor%3Argba(247%2C250%2C255%2C0.99)%3Bpadding%3A4px%206px%3Bbox-sizing%3Aborder-box%3Boverflow%3Ahidden%3B%22%3E%3Cmath%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F1998%2FMath%2FMathML%22%3E%3Cmtable%20columnalign%3D%22center%20%22%3E%3Cmtr%3E%3Cmtd%3E%3Cmrow%3E%3Cmi%3EE%3C%2Fmi%3E%3Cmo%3E%3D%3C%2Fmo%3E%3Cmi%3Em%3C%2Fmi%3E%3Cmsup%3E%3Cmi%3Ec%3C%2Fmi%3E%3Cmn%3E2%3C%2Fmn%3E%3C%2Fmsup%3E%3C%2Fmrow%3E%3C%2Fmtd%3E%3C%2Fmtr%3E%3C%2Fmtable%3E%3C%2Fmath%3E%3C%2Fdiv%3E%3C%2FforeignObject%3E%3C%2Fsvg%3E#tex64-math",
+        "mathSignature": "",
+        "htmlLength": 2283,
+        "rect": {
+          "left": 1531,
+          "top": 94,
+          "width": 95,
+          "height": 43
+        }
+      }
+    ]
+  },
+  "math-complex": {
+    "frameCandidates": [],
+    "styleNodes": [
+      {
+        "tag": "DIV",
+        "className": "monaco-scrollable-element  mac",
+        "rect": {
+          "left": 1402,
+          "top": 94,
+          "width": 224,
+          "height": 46
+        },
+        "background": "rgba(23, 30, 42, 0.98)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "0px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": ""
+      },
+      {
+        "tag": "DIV",
+        "className": "",
+        "rect": {
+          "left": 1402,
+          "top": 94,
+          "width": 222,
+          "height": 46
+        },
+        "background": "rgba(39, 54, 84, 0.98)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "6px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": ""
+      },
+      {
+        "tag": "IMG",
+        "className": "",
+        "rect": {
+          "left": 1406,
+          "top": 98,
+          "width": 214,
+          "height": 38
+        },
+        "background": "rgba(0, 0, 0, 0)",
+        "borderPx": 0,
+        "outlinePx": 0,
+        "boxShadow": "none",
+        "borderRadius": "4px",
+        "opacity": "1",
+        "zIndex": "auto",
+        "text": ""
+      }
+    ],
+    "visibleMathLiveNodes": [],
+    "hoverText": "",
+    "hoverHtml": "<div class=\"monaco-scrollable-element  mac\" role=\"presentation\" style=\"position: relative; overflow: hidden; width: 224px; height: 46px; max-width: 750px; max-height: 250px;\"><div class=\"monaco-hover-content\" style=\"overflow: hidden; font-size: 12px; line-height: 1.66667; width: 224px; height: 46px; max-width: 750px; max-height: 250px;\"><div class=\"hover-row\" tabindex=\"0\"><div class=\"hover-row-contents\"><div class=\"markdown-hover\"><div class=\"hover-contents code-hover-contents\"><div class=\"rendered-markdown\"><div><img src=\"data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22214%22%20height%3D%2238%22%20viewBox%3D%220%200%20214%2038%22%3E%3CforeignObject%20x%3D%220%22%20y%3D%220%22%20width%3D%22214%22%20height%3D%2238%22%3E%3Cdiv%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F1999%2Fxhtml%22%20style%3D%22display%3Aflex%3Balign-items%3Acenter%3Bjustify-content%3Acenter%3Bwidth%3A214px%3Bheight%3A38px%3Bbackground%3Argba(39%2C54%2C84%2C0.98)%3Bcolor%3Argba(247%2C250%2C255%2C0.99)%3Bpadding%3A4px%206px%3Bbox-sizing%3Aborder-box%3Boverflow%3Ahidden%3B%22%3E%3Cmath%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F1998%2FMath%2FMathML%22%3E%3Cmrow%20%20displaystyle%3D%22true%22%3E%3Cmrow%3E%3Cmsubsup%3E%3Cmi%3E%CE%98%3C%2Fmi%3E%3Cmi%3ES%3C%2Fmi%3E%3Cmrow%3E%3Cmo%3E(%3C%2Fmo%3E%3Cmi%20mathvariant%3D%22normal%22%3Edet%3C%2Fmi%3E%3Cmo%3E)%3C%2Fmo%3E%3C%2Fmrow%3E%3C%2Fmsubsup%3E%3Cmo%3E%2B%3C%2Fmo%3E%3Cmi%3ER%3C%2Fmi%3E%3Cmo%3E%2B%3C%2Fmo%3E%3Cmsub%3E%3Cmi%3EX%3C%2Fmi%3E%3Cmrow%3E%3Cmi%3Ei%3C%2Fmi%3E%3Cmo%3E%3A%3C%2Fmo%3E%3Cmi%3Et%3C%2Fmi%3E%3C%2Fmrow%3E%3C%2Fmsub%3E%3Cmo%3E%E2%86%A6%3C%2Fmo%3E%3Cmsub%3E%3Cmi%3EX%3C%2Fmi%3E%3Cmrow%3E%3Cmi%3Ei%3C%2Fmi%3E%3Cmo%20separator%3D%22true%22%3E%2C%3C%2Fmo%3E%3Cmi%3Et%3C%2Fmi%3E%3C%2Fmrow%3E%3C%2Fmsub%3E%3Cmo%3E%2B%3C%2Fmo%3E%3Cmfrac%3E%3Cmrow%3E%3Cmi%3E%E2%88%A5%3C%2Fmi%3E%3Cmo%3E%26%238290%3B%3C%2Fmo%3E%3Cmi%3EJ%3C%2Fmi%3E%3Cmo%3E%26%238290%3B%3C%2Fmo%3E%3Cmi%3E%E2%88%A5%3C%2Fmi%3E%3C%2Fmrow%3E%3Cmi%3E%CF%81%3C%2Fmi%3E%3C%2Fmfrac%3E%3C%2Fmrow%3E%3C%2Fmrow%3E%3C%2Fmath%3E%3C%2Fdiv%3E%3C%2FforeignObject%3E%3C%2Fsvg%3E#tex64-math\" alt=\"\"></div></div></div></div></div></div></div><div role=\"presentation\" aria-hidden=\"true\" class=\"invisible scrollbar horizontal\" style=\"position: absolute; width: 214px; height: 10px; left: 0px; bottom: 0px;\"><div class=\"slider\" style=\"position: absolute; top: 0px; left: 0px; height: 10px; transform: translate3d(0px, 0px, 0px); contain: strict; width: 214px;\"></div></div><div role=\"presentation\" aria-hidden=\"true\" class=\"invisible scrollbar vertical\" style=\"position: absolute; width: 10px; height: 46px; right: 0px; top: 0px;\"><div class=\"slider\" style=\"position: absolute; top: 0px; left: 0px; width: 10px; transform: translate3d(0px, 0px, 0px); contain: strict; height: 46px;\"></div></div><div class=\"shadow\"></div><div class=\"shadow\"></div><div class=\"shadow\"></div></div>",
+    "wrapperFrame": {
+      "className": "monaco-resizable-hover tex64-hover-docked",
+      "borderPx": 0,
+      "outlinePx": 0,
+      "radiusPx": 0,
+      "boxShadow": "none",
+      "background": "rgba(0, 0, 0, 0)"
+    },
+    "previewStyle": {
+      "background": "rgba(39, 54, 84, 0.98)",
+      "borderPx": 0,
+      "radiusPx": 6
+    },
+    "stabilitySamples": [
+      {
+        "column": 42,
+        "hoverId": "hover-1770787223035-b02c16b8df93a",
+        "imageSrc": "data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22214%22%20height%3D%2238%22%20viewBox%3D%220%200%20214%2038%22%3E%3CforeignObject%20x%3D%220%22%20y%3D%220%22%20width%3D%22214%22%20height%3D%2238%22%3E%3Cdiv%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F1999%2Fxhtml%22%20style%3D%22display%3Aflex%3Balign-items%3Acenter%3Bjustify-content%3Acenter%3Bwidth%3A214px%3Bheight%3A38px%3Bbackground%3Argba(39%2C54%2C84%2C0.98)%3Bcolor%3Argba(247%2C250%2C255%2C0.99)%3Bpadding%3A4px%206px%3Bbox-sizing%3Aborder-box%3Boverflow%3Ahidden%3B%22%3E%3Cmath%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F1998%2FMath%2FMathML%22%3E%3Cmrow%20%20displaystyle%3D%22true%22%3E%3Cmrow%3E%3Cmsubsup%3E%3Cmi%3E%CE%98%3C%2Fmi%3E%3Cmi%3ES%3C%2Fmi%3E%3Cmrow%3E%3Cmo%3E(%3C%2Fmo%3E%3Cmi%20mathvariant%3D%22normal%22%3Edet%3C%2Fmi%3E%3Cmo%3E)%3C%2Fmo%3E%3C%2Fmrow%3E%3C%2Fmsubsup%3E%3Cmo%3E%2B%3C%2Fmo%3E%3Cmi%3ER%3C%2Fmi%3E%3Cmo%3E%2B%3C%2Fmo%3E%3Cmsub%3E%3Cmi%3EX%3C%2Fmi%3E%3Cmrow%3E%3Cmi%3Ei%3C%2Fmi%3E%3Cmo%3E%3A%3C%2Fmo%3E%3Cmi%3Et%3C%2Fmi%3E%3C%2Fmrow%3E%3C%2Fmsub%3E%3Cmo%3E%E2%86%A6%3C%2Fmo%3E%3Cmsub%3E%3Cmi%3EX%3C%2Fmi%3E%3Cmrow%3E%3Cmi%3Ei%3C%2Fmi%3E%3Cmo%20separator%3D%22true%22%3E%2C%3C%2Fmo%3E%3Cmi%3Et%3C%2Fmi%3E%3C%2Fmrow%3E%3C%2Fmsub%3E%3Cmo%3E%2B%3C%2Fmo%3E%3Cmfrac%3E%3Cmrow%3E%3Cmi%3E%E2%88%A5%3C%2Fmi%3E%3Cmo%3E%26%238290%3B%3C%2Fmo%3E%3Cmi%3EJ%3C%2Fmi%3E%3Cmo%3E%26%238290%3B%3C%2Fmo%3E%3Cmi%3E%E2%88%A5%3C%2Fmi%3E%3C%2Fmrow%3E%3Cmi%3E%CF%81%3C%2Fmi%3E%3C%2Fmfrac%3E%3C%2Fmrow%3E%3C%2Fmrow%3E%3C%2Fmath%3E%3C%2Fdiv%3E%3C%2FforeignObject%3E%3C%2Fsvg%3E#tex64-math",
+        "mathSignature": "",
+        "htmlLength": 2915,
+        "rect": {
+          "left": 1402,
+          "top": 94,
+          "width": 224,
+          "height": 46
+        }
+      },
+      {
+        "column": 44,
+        "hoverId": "hover-1770787223035-b02c16b8df93a",
+        "imageSrc": "data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22214%22%20height%3D%2238%22%20viewBox%3D%220%200%20214%2038%22%3E%3CforeignObject%20x%3D%220%22%20y%3D%220%22%20width%3D%22214%22%20height%3D%2238%22%3E%3Cdiv%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F1999%2Fxhtml%22%20style%3D%22display%3Aflex%3Balign-items%3Acenter%3Bjustify-content%3Acenter%3Bwidth%3A214px%3Bheight%3A38px%3Bbackground%3Argba(39%2C54%2C84%2C0.98)%3Bcolor%3Argba(247%2C250%2C255%2C0.99)%3Bpadding%3A4px%206px%3Bbox-sizing%3Aborder-box%3Boverflow%3Ahidden%3B%22%3E%3Cmath%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F1998%2FMath%2FMathML%22%3E%3Cmrow%20%20displaystyle%3D%22true%22%3E%3Cmrow%3E%3Cmsubsup%3E%3Cmi%3E%CE%98%3C%2Fmi%3E%3Cmi%3ES%3C%2Fmi%3E%3Cmrow%3E%3Cmo%3E(%3C%2Fmo%3E%3Cmi%20mathvariant%3D%22normal%22%3Edet%3C%2Fmi%3E%3Cmo%3E)%3C%2Fmo%3E%3C%2Fmrow%3E%3C%2Fmsubsup%3E%3Cmo%3E%2B%3C%2Fmo%3E%3Cmi%3ER%3C%2Fmi%3E%3Cmo%3E%2B%3C%2Fmo%3E%3Cmsub%3E%3Cmi%3EX%3C%2Fmi%3E%3Cmrow%3E%3Cmi%3Ei%3C%2Fmi%3E%3Cmo%3E%3A%3C%2Fmo%3E%3Cmi%3Et%3C%2Fmi%3E%3C%2Fmrow%3E%3C%2Fmsub%3E%3Cmo%3E%E2%86%A6%3C%2Fmo%3E%3Cmsub%3E%3Cmi%3EX%3C%2Fmi%3E%3Cmrow%3E%3Cmi%3Ei%3C%2Fmi%3E%3Cmo%20separator%3D%22true%22%3E%2C%3C%2Fmo%3E%3Cmi%3Et%3C%2Fmi%3E%3C%2Fmrow%3E%3C%2Fmsub%3E%3Cmo%3E%2B%3C%2Fmo%3E%3Cmfrac%3E%3Cmrow%3E%3Cmi%3E%E2%88%A5%3C%2Fmi%3E%3Cmo%3E%26%238290%3B%3C%2Fmo%3E%3Cmi%3EJ%3C%2Fmi%3E%3Cmo%3E%26%238290%3B%3C%2Fmo%3E%3Cmi%3E%E2%88%A5%3C%2Fmi%3E%3C%2Fmrow%3E%3Cmi%3E%CF%81%3C%2Fmi%3E%3C%2Fmfrac%3E%3C%2Fmrow%3E%3C%2Fmrow%3E%3C%2Fmath%3E%3C%2Fdiv%3E%3C%2FforeignObject%3E%3C%2Fsvg%3E#tex64-math",
+        "mathSignature": "",
+        "htmlLength": 2915,
+        "rect": {
+          "left": 1402,
+          "top": 94,
+          "width": 224,
+          "height": 46
+        }
+      },
+      {
+        "column": 47,
+        "hoverId": "hover-1770787223035-b02c16b8df93a",
+        "imageSrc": "data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22214%22%20height%3D%2238%22%20viewBox%3D%220%200%20214%2038%22%3E%3CforeignObject%20x%3D%220%22%20y%3D%220%22%20width%3D%22214%22%20height%3D%2238%22%3E%3Cdiv%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F1999%2Fxhtml%22%20style%3D%22display%3Aflex%3Balign-items%3Acenter%3Bjustify-content%3Acenter%3Bwidth%3A214px%3Bheight%3A38px%3Bbackground%3Argba(39%2C54%2C84%2C0.98)%3Bcolor%3Argba(247%2C250%2C255%2C0.99)%3Bpadding%3A4px%206px%3Bbox-sizing%3Aborder-box%3Boverflow%3Ahidden%3B%22%3E%3Cmath%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F1998%2FMath%2FMathML%22%3E%3Cmrow%20%20displaystyle%3D%22true%22%3E%3Cmrow%3E%3Cmsubsup%3E%3Cmi%3E%CE%98%3C%2Fmi%3E%3Cmi%3ES%3C%2Fmi%3E%3Cmrow%3E%3Cmo%3E(%3C%2Fmo%3E%3Cmi%20mathvariant%3D%22normal%22%3Edet%3C%2Fmi%3E%3Cmo%3E)%3C%2Fmo%3E%3C%2Fmrow%3E%3C%2Fmsubsup%3E%3Cmo%3E%2B%3C%2Fmo%3E%3Cmi%3ER%3C%2Fmi%3E%3Cmo%3E%2B%3C%2Fmo%3E%3Cmsub%3E%3Cmi%3EX%3C%2Fmi%3E%3Cmrow%3E%3Cmi%3Ei%3C%2Fmi%3E%3Cmo%3E%3A%3C%2Fmo%3E%3Cmi%3Et%3C%2Fmi%3E%3C%2Fmrow%3E%3C%2Fmsub%3E%3Cmo%3E%E2%86%A6%3C%2Fmo%3E%3Cmsub%3E%3Cmi%3EX%3C%2Fmi%3E%3Cmrow%3E%3Cmi%3Ei%3C%2Fmi%3E%3Cmo%20separator%3D%22true%22%3E%2C%3C%2Fmo%3E%3Cmi%3Et%3C%2Fmi%3E%3C%2Fmrow%3E%3C%2Fmsub%3E%3Cmo%3E%2B%3C%2Fmo%3E%3Cmfrac%3E%3Cmrow%3E%3Cmi%3E%E2%88%A5%3C%2Fmi%3E%3Cmo%3E%26%238290%3B%3C%2Fmo%3E%3Cmi%3EJ%3C%2Fmi%3E%3Cmo%3E%26%238290%3B%3C%2Fmo%3E%3Cmi%3E%E2%88%A5%3C%2Fmi%3E%3C%2Fmrow%3E%3Cmi%3E%CF%81%3C%2Fmi%3E%3C%2Fmfrac%3E%3C%2Fmrow%3E%3C%2Fmrow%3E%3C%2Fmath%3E%3C%2Fdiv%3E%3C%2FforeignObject%3E%3C%2Fsvg%3E#tex64-math",
+        "mathSignature": "",
+        "htmlLength": 2915,
+        "rect": {
+          "left": 1402,
+          "top": 94,
+          "width": 224,
+          "height": 46
+        }
+      }
+    ]
+  }
+}

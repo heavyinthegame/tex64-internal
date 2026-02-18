@@ -1,0 +1,225 @@
+% !TEX TS-program = lualatex
+\documentclass[a4paper]{article}
+\usepackage{amsmath,amssymb}
+\RequirePackage{graphicx,xcolor}
+\usepackage{hyperref}
+\usepackage{cleveref}
+\usepackage{booktabs}
+
+% Compile-safe aliases for hover-only command variants.
+\providecommand{\Namecref}[1]{\namecref{#1}}
+\providecommand{\citet}[1]{\cite{#1}}
+\providecommand{\citep}[1]{\cite{#1}}
+\providecommand{\citeauthor}[1]{\texttt{#1}}
+\providecommand{\citeyear}[1]{0000}
+\providecommand{\autocite}[1]{\cite{#1}}
+\providecommand{\parencite}[1]{\cite{#1}}
+\providecommand{\textcite}[1]{\cite{#1}}
+\providecommand{\footcite}[1]{\cite{#1}}
+\providecommand{\supercite}[1]{\cite{#1}}
+
+\title{Hover Coverage Template}
+\author{tex64}
+\date{\today}
+
+\begin{document}
+\maketitle
+\tableofcontents
+
+\section{Overview}\label{sec:overview}
+This file is for checking every hover target type in tex64.
+
+% CHECK-PKG-01
+% hover on preamble tokens:
+% article / amsmath / amssymb / graphicx / xcolor / hyperref / cleveref
+
+% CHECK-REF-01 (resolved ref-like hovers)
+REF-ref: \ref{sec:methods} \\
+REF-eqref: \eqref{eq:newton} \\
+REF-pageref: \pageref{sec:methods} \\
+REF-autoref: \autoref{sec:methods} \\
+REF-cref: \cref{sec:methods} \\
+REF-Cref: \Cref{sec:methods} \\
+REF-namecref: \namecref{sec:methods} \\
+REF-Namecref: \Namecref{sec:methods} \\
+REF-nameref: \nameref{sec:methods} \\
+REF-Nameref: \Nameref{sec:methods}
+
+% CHECK-REF-02 (unresolved ref hover; kept out of compile path)
+\iffalse
+  REF-unresolved: \ref{sec:not-found}
+\fi
+
+% CHECK-CITE-01 (resolved cite-like hovers)
+CITE-cite: \cite{lamport1994} \\
+CITE-citet: \citet{lamport1994} \\
+CITE-citep: \citep{knuth1984} \\
+CITE-citeauthor: \citeauthor{lamport1994} \\
+CITE-citeyear: \citeyear{lamport1994} \\
+CITE-autocite: \autocite{lamport1994} \\
+CITE-parencite: \parencite{knuth1984} \\
+CITE-textcite: \textcite{lamport1994} \\
+CITE-footcite: \footcite{lamport1994} \\
+CITE-supercite: \supercite{knuth1984} \\
+CITE-multi: \cite[see]{knuth1984,lamport1994}
+
+% CHECK-CITE-02 (unresolved cite hover; kept out of compile path)
+\iffalse
+  CITE-unresolved: \cite{unknown2026}
+\fi
+
+% CHECK-MATH-01 (all math hover forms)
+MATH-inline: $E=mc^2$
+MATH-inline-paren: \(\int_0^1 x^2\,dx\)
+MATH-inline-absnorm: $\left|x\right| + \lVert v \rVert$
+MATH-display-bracket:
+\[
+  \sum_{k=1}^{n} k = \frac{n(n+1)}{2}
+\]
+MATH-display-dollar:
+$$
+  \Theta_S^{(\mathrm{det})} + R + X_{i:t} \mapsto X_{i,t}
+$$
+MATH-environment:
+\begin{equation}
+  \Theta_S^{(\mathrm{det})} + R + X_{i:t} \mapsto X_{i,t} + \frac{\|J\|}{\rho}
+\end{equation}
+
+% CHECK-MATH-02 (extended hover stress coverage)
+MATH-inline-fraction: $\frac{a+b}{c+d}$ \\
+MATH-inline-radical: $\sqrt{2} + \sqrt[n]{x+y}$ \\
+MATH-inline-delim-paren: $\left(\frac{x}{y}\right)$ \\
+MATH-inline-delim-bracket: $\left[x+y\right]$ \\
+MATH-inline-delim-brace: $\left\{x\in\mathbb{R}:x>0\right\}$ \\
+MATH-inline-delim-angle: $\left\langle u,v\right\rangle$ \\
+MATH-inline-delim-floorceil: $\left\lfloor x \right\rfloor,\left\lceil y \right\rceil$ \\
+MATH-inline-bars-single: $\left|x\right|+\|y\|$ \\
+MATH-inline-bars-double: $\left\|z\right\|+\lVert v\rVert+\|J\|$ \\
+MATH-inline-scripts: $a_{i_j}^{n^2}+b_{k,\ell}^{m_r}$ \\
+MATH-inline-accents: $\hat{x}+\bar{y}+\tilde{z}+\vec{v}+\dot{q}+\ddot{q}$ \\
+MATH-inline-logic: $\forall x\,\exists y\,(x<y)\Rightarrow P(x,y)$ \\
+MATH-inline-sets: $A\cup B,\ A\cap B,\ A\setminus B,\ A^\complement$ \\
+MATH-inline-relops: $a\approx b,\ a\equiv b\pmod n,\ a\sim b,\ a\propto b$ \\
+MATH-inline-opname: $\operatorname{argmax}_{x\in X} f(x),\ \operatorname{diag}(A)$ \\
+MATH-inline-greek: $\alpha,\beta,\gamma,\Gamma,\Delta,\Theta,\Omega$ \\
+MATH-inline-fonts: $\mathcal{F},\mathbb{R},\mathbf{x},\mathrm{d}x,\mathsf{A}$ \\
+MATH-inline-prob: $\Pr(A\mid B),\ \mathbb{E}[X],\ \mathrm{Var}(X)$ \\
+MATH-inline-limit: $\lim_{n\to\infty}\left(1+\frac{1}{n}\right)^n$ \\
+MATH-inline-sumprod: $\sum_{k=1}^{n}k^2,\ \prod_{i=1}^{m} i,\ \bigcup_{i=1}^{n}A_i$ \\
+MATH-inline-comment-boundary: $a+b$ % $c+d$ should not hover on right side
+\\
+MATH-inline-escaped-percent: $x \% y$
+
+MATH-display-cases:
+\[
+  f(x)=
+  \begin{cases}
+    x^2, & x\ge 0, \\
+    -x,  & x<0.
+  \end{cases}
+\]
+
+MATH-display-matrices:
+\[
+  A=
+  \begin{pmatrix}
+    1 & 2 \\
+    3 & 4
+  \end{pmatrix}
+  ,
+  \quad
+  B=
+  \begin{bmatrix}
+    a & b \\
+    c & d
+  \end{bmatrix}
+\]
+
+MATH-display-determinant:
+\[
+  \det(C)=
+  \begin{vmatrix}
+    1 & 0 \\
+    0 & 1
+  \end{vmatrix}
+\]
+
+MATH-display-operators:
+\[
+  \limsup_{n\to\infty} a_n,\qquad
+  \inf_{x\in\mathbb{R}} g(x),\qquad
+  \oint_{\gamma}\omega,\qquad
+  \iint_{\Omega} f(x,y)\,\mathrm{d}x\,\mathrm{d}y
+\]
+
+MATH-environment-align:
+\begin{align}
+  f(x) & = x^2 + 2x + 1 \\
+       & = (x+1)^2
+\end{align}
+
+MATH-environment-gather:
+\begin{gather}
+  \nabla\cdot\mathbf{E}=\frac{\rho}{\varepsilon_0} \\
+  \nabla\times\mathbf{E}=-\frac{\partial \mathbf{B}}{\partial t}
+\end{gather}
+
+MATH-environment-split:
+\begin{equation}
+  \begin{split}
+    S_n & = \sum_{i=1}^{n} i^2     \\
+        & = \frac{n(n+1)(2n+1)}{6}
+  \end{split}
+\end{equation}
+
+MATH-environment-multline:
+\begin{multline}
+  p(x)=a_0+a_1x+a_2x^2+a_3x^3+a_4x^4 \\
+  +a_5x^5+a_6x^6+a_7x^7+a_8x^8
+\end{multline}
+
+MATH-environment-alignat:
+\begin{alignat}{2}
+  x_1+x_2 & = 1, & \qquad x_1-x_2 & = 0 \\
+  y_1+y_2 & = 2, & \qquad y_1-y_2 & = 1
+\end{alignat}
+
+MATH-environment-flalign:
+\begin{flalign}
+  u+v & = w &  & \text{(left and right anchored)}
+\end{flalign}
+
+MATH-environment-eqnarray:
+\begin{eqnarray}
+  z & = & x+y \\
+    & = & y+x
+\end{eqnarray}
+
+% CHECK-INCLUDE-01 (resolved input/include path hovers)
+\include{sections/intro}
+\include{sections/methods}
+
+% CHECK-INCLUDE-02 (unresolved include path hover; kept out of compile path)
+\iffalse
+  INCLUDE-unresolved-input: \input{sections/not-found}
+  INCLUDE-unresolved-include: \include{sections/not-found-either}
+\fi
+
+% CHECK-GRAPHICS-01 (resolved includegraphics hovers)
+GRAPHICS-png: \includegraphics{figures/sample-image.png}
+GRAPHICS-png-opt: \includegraphics[width=0.6\linewidth]{figures/sample-image.png}
+GRAPHICS-pdf: \includegraphics{assets/pdfs/sample.pdf}
+% pdfLaTeX cannot include SVG directly; keep for hover only.
+\iffalse
+  GRAPHICS-svg: \includegraphics{figures/sample-vector.svg}
+\fi
+
+% CHECK-GRAPHICS-02 (unresolved graphics hover; kept out of compile path)
+\iffalse
+  GRAPHICS-unresolved: \includegraphics{figures/not-found}
+\fi
+
+\bibliographystyle{plain}
+\bibliography{refs}
+
+\end{document}

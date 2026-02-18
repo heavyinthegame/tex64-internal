@@ -4,6 +4,8 @@ const assertFetch = () => {
   }
 };
 
+const FIXED_GEMINI_MODEL = "gemini-3-flash-preview";
+
 const requestGemini = async ({
   proxyUrl,
   contents,
@@ -19,6 +21,7 @@ const requestGemini = async ({
   }
   assertFetch();
   const body = {
+    model: FIXED_GEMINI_MODEL,
     contents,
     systemInstruction,
     tools,
@@ -78,7 +81,14 @@ const requestGemini = async ({
       parts.forEach((part) => {
         if (part?.functionCall) {
           flushText();
-          collectedParts.push({ functionCall: part.functionCall });
+          const functionCallPart = { functionCall: part.functionCall };
+          if (typeof part.thoughtSignature === "string" && part.thoughtSignature) {
+            functionCallPart.thoughtSignature = part.thoughtSignature;
+          }
+          if (part.thought === true) {
+            functionCallPart.thought = true;
+          }
+          collectedParts.push(functionCallPart);
           return;
         }
         if (typeof part?.text === "string" && part.text.length > 0) {
@@ -151,5 +161,6 @@ const requestGemini = async ({
 };
 
 module.exports = {
+  FIXED_GEMINI_MODEL,
   requestGemini,
 };

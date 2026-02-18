@@ -19,6 +19,7 @@ type PendingReveal = {
   line: number;
   group: EditorGroupKey;
   focus?: boolean;
+  className?: string;
 };
 
 export type FileOpsState = {
@@ -54,7 +55,7 @@ type FileOpsDeps = {
   revealLine: (
     group: EditorGroupState,
     line: number,
-    options?: { focus?: boolean }
+    options?: { focus?: boolean; className?: string }
   ) => void;
   forEachEditorGroup: (handler: (group: EditorGroupState) => void) => void;
   scheduleAfterComposition: (group: EditorGroupState, action: () => void) => void;
@@ -251,7 +252,10 @@ export const createEditorSessionFileOps = (ctx: FileOpsDeps) => {
       state.pendingReveal.path === path &&
       state.pendingReveal.group === group.key
     ) {
-      revealLine(group, state.pendingReveal.line, { focus: state.pendingReveal.focus });
+      revealLine(group, state.pendingReveal.line, {
+        focus: state.pendingReveal.focus,
+        className: state.pendingReveal.className,
+      });
       state.pendingReveal = null;
     }
     if (isActiveGroup(group) && editor.focus) {
@@ -375,7 +379,7 @@ export const createEditorSessionFileOps = (ctx: FileOpsDeps) => {
             type: "saveFile",
             path,
             content: value,
-            format: false,
+            format: true,
             formatSource: "save",
             formatSettings: deps.settings.buildFormatSettingsPayload(),
           });
@@ -466,7 +470,7 @@ export const createEditorSessionFileOps = (ctx: FileOpsDeps) => {
               type: "saveFile",
               path,
               content,
-              format: false,
+              format: true,
               formatSource: "save",
               formatSettings: deps.settings.buildFormatSettingsPayload(),
             });

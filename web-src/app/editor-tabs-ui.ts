@@ -171,7 +171,11 @@ export const initEditorTabsUi = (
     deps.setSplitViewEnabled(deps.getSplitViewEnabled());
     deps.getGroups().forEach((group) => {
       if (group.root instanceof HTMLElement) {
-        group.root.addEventListener("mousedown", () => {
+        group.root.addEventListener("mousedown", (event) => {
+          const target = event.target;
+          if (target instanceof Element && target.closest(".editor-tab-close")) {
+            return;
+          }
           deps.setActiveGroup(group.key, { focusEditor: false });
         });
       }

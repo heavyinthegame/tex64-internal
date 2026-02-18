@@ -137,6 +137,7 @@ const buildNgramIndex = (items: string[], n: number) => {
 
 const CONTAINS_INDEX_2 = buildNgramIndex(TRIGGER_KEYS, 2);
 const CONTAINS_INDEX_3 = buildNgramIndex(TRIGGER_KEYS, 3);
+const WORD_CANDIDATE_LIMIT = 16;
 
 const getContainsCandidates = (query: string) => {
   if (!query) {
@@ -261,13 +262,13 @@ export const buildWordCandidates = (token: string, options: WordCandidateOptions
       }
       seen.add(keyId);
       results.push(candidate);
-      if (results.length >= 10) {
+      if (results.length >= WORD_CANDIDATE_LIMIT) {
         break;
       }
     }
   };
   pushMatches(prefixMatches);
-  if (results.length < 10) {
+  if (results.length < WORD_CANDIDATE_LIMIT) {
     pushMatches(containsMatches);
   }
 

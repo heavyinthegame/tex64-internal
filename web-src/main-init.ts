@@ -133,6 +133,7 @@ export const initMain = () => {
     },
   });
   const bridgeWindow = window as BridgeWindow;
+  bridgeWindow.__tex64TestRecognizeMath = (imageDataUrl: string) => recognizeMath(imageDataUrl);
   const appState = createAppState();
   const appActions = createAppActions(appState);
   const appContext = createAppContext({
@@ -403,6 +404,7 @@ export const initMain = () => {
     postToNative: (payload, silent) => postToNative(payload, silent),
     getActiveFilePath: () => editorSession.getActiveFilePath(),
     getActiveFileSnapshot: () => editorSession.getActiveFileSnapshot(),
+    getActiveSelectionSnapshot: () => editorSession.getActiveSelectionSnapshot(),
     getOpenFileSnapshots: (options) => editorSession.getOpenFileSnapshots(options),
     getRecentIssuesSnapshot: () => lastIssueSnapshot,
     showDiffModal: diffModalApi.showDiffModal,
@@ -481,7 +483,6 @@ export const initMain = () => {
     requestFormatCurrentFile: (source) => {
       buildOps.requestFormatCurrentFile(source);
     },
-    requestFormatPreview: (payload) => buildOps.requestFormatPreview(payload),
     postToNative: (payload, silent) => postToNative(payload, silent),
     getBlockMode: () => blockEditSession?.getMode() ?? "insert",
     resetBlockSession: (options) => resetBlockSession(options),
@@ -612,7 +613,6 @@ export const initMain = () => {
     getStoredCursorPosition: (path) => editorSession.getStoredCursorPosition(path),
     cacheCurrentBuffer: editorSession.cacheCurrentBuffer,
     saveCurrentFile: () => editorSession.saveCurrentFile(),
-    saveDirtyFiles: () => editorSession.saveDirtyFiles(),
     postToNative: (payload, silent) => postToNative(payload, silent),
     updateIssues: updateIssuesProxy,
     setPendingBuildIssuesFocus: (value) => setPendingBuildIssuesFocus(value),
@@ -741,8 +741,6 @@ export const initMain = () => {
     setActiveTab,
     normalizeTabKey: tabController.normalizeTabKey,
     getCurrentIssues,
-    saveCurrentFile: () => editorSession.saveCurrentFile(),
-    updateIssues,
     fileTree: {
       setTreeFocus: (value) => fileTreeUi.setTreeFocus(value),
     },
@@ -755,7 +753,6 @@ export const initMain = () => {
     buildOps: {
       setupActionButtons: () => buildOps.setupActionButtons(),
       startBuild: () => buildOps.startBuild(),
-      startBuildWithSave: () => buildOps.startBuildWithSave(),
     },
     rootSelectorUi: {
       setupActions: () => rootSelectorUi.setupActions(),
@@ -794,7 +791,7 @@ export const initMain = () => {
       return;
     }
     const action = url.hostname || url.pathname.replace(/^\/+/, "");
-    if (action !== "view-on-pdf") {
+    if (action !== "view-on-pdf" && action !== "open-source") {
       return;
     }
     const path = url.searchParams.get("path") ?? "";
@@ -805,6 +802,11 @@ export const initMain = () => {
     }
     event.preventDefault();
     event.stopPropagation();
+    if (action === "open-source") {
+      const groupKey = editorSession.getActiveEditorGroupKey();
+      editorSession.jumpToFileLine(path, line, groupKey, { force: true, focus: true });
+      return;
+    }
     postToNative(
       {
         type: "synctex:forward",
@@ -843,6 +845,7 @@ export const initMain = () => {
     handleRecentProjects: (projects) => launcherUi.updateRecentProjects(projects),
     search: {
       handleSearchUpdate: (payload) => searchUi.handleSearchUpdate(payload),
+      handleRenameResult: (payload) => searchUi.handleRenameResult(payload),
     },
     build: {
       setBuildState: (state, message) => buildOps.setBuildState(state, message),
@@ -880,6 +883,7 @@ export const initMain = () => {
       handleTool: (payload) => aiChatUi?.handleTool(payload),
       handleProposal: (proposal) => aiChatUi?.handleProposal(proposal),
       handleApplyResult: (payload) => aiChatUi?.handleApplyResult(payload),
+      handleUndoResult: (payload) => aiChatUi?.handleUndoResult(payload),
       handleError: (message, conversationId) =>
         aiChatUi?.handleError(message, conversationId),
     },
@@ -896,7 +900,9 @@ export const initMain = () => {
     },
     editorSession: {
       handleOpenFileResult: (payload) => editorSession.handleOpenFileResult(payload),
-      handleSaveResult: (payload) => editorSession.handleSaveResult(payload),
+      handleSaveResult: (payload) => {
+        editorSession.handleSaveResult(payload);
+      },
       handleRenameResult: (payload) => editorSession.handleRenameResult(payload),
       applyContentToOpenFile: (path, content, options) =>
         editorSession.applyContentToOpenFile(path, content, options),

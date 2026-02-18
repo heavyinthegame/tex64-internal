@@ -1,0 +1,88 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{amsthm}
+\usepackage{array}
+\usepackage{graphicx}
+\usepackage{hyperref}
+
+\newtheorem{theorem}{Theorem}
+
+\begin{document}
+
+\section{Section Heading Coverage} % SYNC_CASE:section.heading
+This paragraph validates plain prose mapping. % SYNC_CASE:text.paragraph
+This line includes inline math $a^2 + b^2 = c^2$. % SYNC_CASE:math.inline
+This line links to Equation~\ref{eq:energy}. % SYNC_CASE:ref.cross
+
+\subsection{Display Math Coverage} % SYNC_CASE:section.subheading
+\begin{equation}
+E = m c^2 \label{eq:energy} % SYNC_CASE:math.equation
+\end{equation}
+\begin{align}
+f(x) &= x^2 + 1 \\
+g(x) &= x^3 + 2x % SYNC_CASE:math.align_second
+\end{align}
+
+\subsection{List Coverage}
+\begin{itemize}
+\item Itemize entry with stable wording. % SYNC_CASE:list.itemize
+\end{itemize}
+\begin{enumerate}
+\item Enumerate entry with stable wording. % SYNC_CASE:list.enumerate
+\end{enumerate}
+\begin{description}
+\item[Token] Description entry with stable wording. % SYNC_CASE:list.description
+\end{description}
+
+\subsection{Theorem Coverage}
+\begin{theorem}
+If $x > 0$ then $x^2 > 0$. % SYNC_CASE:theorem.body
+\end{theorem}
+\begin{proof}
+A positive value multiplied by itself stays positive. % SYNC_CASE:proof.body
+\end{proof}
+
+\subsection{Table Coverage}
+\begin{table}[h]
+\centering
+\begin{tabular}{|l|c|}
+\hline
+Name & Value \\ % SYNC_CASE:table.header
+\hline
+alpha & 42 \\ % SYNC_CASE:table.row
+\hline
+\end{tabular}
+\caption{Caption text for the table target.} % SYNC_CASE:table.caption
+\end{table}
+
+\subsection{Figure Coverage}
+\begin{figure}[h]
+\centering
+\fbox{\rule{6cm}{3cm}} % SYNC_CASE:figure.box
+\caption{Caption text for the figure target.} % SYNC_CASE:figure.caption
+\end{figure}
+
+\subsection{Code and Link Coverage}
+\begin{verbatim}
+const meaning = 42; % SYNC_CASE:code.verbatim
+\end{verbatim}
+Use \texttt{const answer = 42;} inline. % SYNC_CASE:code.inline
+Project URL: \url{https://example.com/tex64/synctex}. % SYNC_CASE:url.inline
+
+A sentence with a footnote marker\footnote{Footnote body for SyncTeX coverage.}. % SYNC_CASE:footnote.anchor
+
+\section{Citation Coverage}
+A citation appears here \cite{ref:one}. % SYNC_CASE:cite.inline
+
+\begin{thebibliography}{9}
+\bibitem{ref:one}
+Author Name.
+\textit{Reference Entry}.
+2026. % SYNC_CASE:cite.bibitem
+\end{thebibliography}
+
+\appendix
+\section{Appendix Coverage} % SYNC_CASE:appendix.section
+Appendix text remains bidirectional. % SYNC_CASE:appendix.text
+
+\end{document}

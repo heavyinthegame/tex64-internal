@@ -118,6 +118,8 @@ export const initBlockInputUi = (
   let mathWysiwygApi: MathWysiwygApi | null = null;
   let openMatrixOpsPaletteForSuggestButton: (() => boolean) | null = null;
   let globalWysiwygKeydownBound = false;
+  const attachedMathInputListeners = new WeakSet<HTMLElement>();
+  const TEXTAREA_MATHFIELD_SHIM = Symbol("tex64.textarea-mathfield-shim");
   let mathInsertMode: MathInsertMode = "inline";
   let mathInlineWrap: MathInlineWrap = "inline-dollar";
   let mathDisplayWrap: MathDisplayWrap = "display-bracket";
@@ -135,6 +137,8 @@ export const initBlockInputUi = (
   const wysiwygPackOptions = Array.from(
     document.querySelectorAll<HTMLButtonElement>("[data-wysiwyg-pack]")
   );
+  const STYLE_WRAPPER_TEMPLATE_RE =
+    /^\\(?:mathbb|mathcal|mathfrak|mathsf|mathrm|mathbf|mathit|mathtt|operatorname)\{#\?\}$/;
 
   const setFormatMenuOpen = (open: boolean) => {
     formatMenuOpen = open;
@@ -286,13 +290,130 @@ export const initBlockInputUi = (
     return false;
   };
 
+  const decorateTextareaAsMathfield = (textarea: HTMLTextAreaElement) => {
+    const shimmed = textarea as HTMLTextAreaElement & {
+      [TEXTAREA_MATHFIELD_SHIM]?: boolean;
+      getValue?: (...args: unknown[]) => string;
+      mode?: "math";
+      position?: number;
+      lastOffset?: number;
+      selection?: unknown;
+    };
+    if (shimmed[TEXTAREA_MATHFIELD_SHIM]) {
+      return;
+    }
+    Object.defineProperty(shimmed, TEXTAREA_MATHFIELD_SHIM, {
+      value: true,
+      configurable: false,
+      writable: false,
+      enumerable: false,
+    });
+
+    const clamp = (value: number) => {
+      const length = textarea.value.length;
+      if (!Number.isFinite(value)) {
+        return length;
+      }
+      return Math.max(0, Math.min(length, Math.trunc(value)));
+    };
+    const readSelectionStart = () =>
+      typeof textarea.selectionStart === "number" ? textarea.selectionStart : textarea.value.length;
+    const readSelectionEnd = () =>
+      typeof textarea.selectionEnd === "number" ? textarea.selectionEnd : textarea.value.length;
+    const setSelection = (start: number, end: number) => {
+      const safeStart = clamp(start);
+      const safeEnd = clamp(end);
+      textarea.setSelectionRange(safeStart, safeEnd);
+    };
+
+    if (typeof shimmed.getValue !== "function") {
+      Object.defineProperty(shimmed, "getValue", {
+        configurable: true,
+        value: (...args: unknown[]) => {
+          if (args.length === 1 && args[0] === "latex") {
+            return textarea.value;
+          }
+          if (
+            args.length >= 3 &&
+            typeof args[0] === "number" &&
+            typeof args[1] === "number" &&
+            args[2] === "latex"
+          ) {
+            const start = clamp(args[0]);
+            const end = clamp(args[1]);
+            return textarea.value.slice(Math.min(start, end), Math.max(start, end));
+          }
+          return textarea.value;
+        },
+      });
+    }
+
+    Object.defineProperty(shimmed, "selection", {
+      configurable: true,
+      get: () => [readSelectionStart(), readSelectionEnd()],
+      set: (value: unknown) => {
+        if (Array.isArray(value) && value.length >= 2) {
+          const start = Number(value[0]);
+          const end = Number(value[1]);
+          if (Number.isFinite(start) && Number.isFinite(end)) {
+            setSelection(start, end);
+          }
+          return;
+        }
+        if (
+          value &&
+          typeof value === "object" &&
+          "ranges" in value &&
+          Array.isArray((value as { ranges?: unknown }).ranges)
+        ) {
+          const first = (value as { ranges: unknown[] }).ranges[0];
+          if (Array.isArray(first) && first.length >= 2) {
+            const start = Number(first[0]);
+            const end = Number(first[1]);
+            if (Number.isFinite(start) && Number.isFinite(end)) {
+              setSelection(start, end);
+            }
+          }
+        }
+      },
+    });
+
+    Object.defineProperty(shimmed, "position", {
+      configurable: true,
+      get: () => readSelectionEnd(),
+      set: (value: number) => {
+        setSelection(value, value);
+      },
+    });
+
+    Object.defineProperty(shimmed, "lastOffset", {
+      configurable: true,
+      get: () => textarea.value.length,
+    });
+
+    Object.defineProperty(shimmed, "mode", {
+      configurable: true,
+      get: () => "math",
+      set: () => {
+        // Keep textarea fallback in math mode for token detection consistency.
+      },
+    });
+  };
+
   const setMathInputElement = (element: HTMLElement | null) => {
     mathInput = element;
     mathFieldWrapped = false;
+    openMatrixOpsPaletteForSuggestButton = null;
     if (!mathInput) {
       return;
     }
+    if (mathInput instanceof HTMLTextAreaElement) {
+      decorateTextareaAsMathfield(mathInput);
+    }
     if (!currentMathValue) {
+      if (mathInput instanceof HTMLTextAreaElement) {
+        attachMathInputListener();
+      }
       return;
     }
     const resolvedValue =
@@ -301,6 +422,7 @@ export const initBlockInputUi = (
         : prepareMathValueForField(currentMathValue);
     if (mathInput instanceof HTMLTextAreaElement) {
       mathInput.value = resolvedValue;
+      attachMathInputListener();
       return;
     }
     mathFieldWrapped = resolvedValue !== currentMathValue;
@@ -377,16 +499,76 @@ export const initBlockInputUi = (
     if (mathInput instanceof HTMLElement && mathInput.tagName.toLowerCase() === "math-field") {
       return;
     }
-    mathInput.addEventListener("input", () => {
-      if (mathInput instanceof HTMLTextAreaElement) {
+    const inputElement = mathInput;
+    if (attachedMathInputListeners.has(inputElement)) {
+      return;
+    }
+    attachedMathInputListeners.add(inputElement);
+
+    if (inputElement instanceof HTMLTextAreaElement) {
+      decorateTextareaAsMathfield(inputElement);
+      mathWysiwygApi?.attach(inputElement);
+    }
+
+    inputElement.addEventListener("input", () => {
+      if (inputElement instanceof HTMLTextAreaElement) {
         mathFieldWrapped = false;
-        currentMathValue = mathInput.value;
+        currentMathValue = inputElement.value;
         return;
       }
       mathFieldWrapped = false;
-      const value = (mathInput as { value?: string }).value;
+      const value = (inputElement as { value?: string }).value;
       currentMathValue = typeof value === "string" ? value : "";
     });
+
+    if (inputElement instanceof HTMLTextAreaElement) {
+      const textArea = inputElement;
+      textArea.addEventListener("keydown", (event: KeyboardEvent) => {
+        if (mathWysiwygApi?.handleKeydown(event)) {
+          event.stopImmediatePropagation();
+          return;
+        }
+        if (event.isComposing) {
+          return;
+        }
+        const isSuggestShortcut =
+          (event.ctrlKey || event.metaKey) && !event.altKey && event.key === ".";
+        if (isSuggestShortcut) {
+          const opened = Boolean(mathWysiwygApi?.openExplicitSuggestions());
+          if (opened) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+          }
+          return;
+        }
+        if (event.key === "Escape") {
+          mathWysiwygApi?.close();
+          return;
+        }
+      });
+      textArea.addEventListener("focus", () => {
+        mathKeyboardVisibilityHandler();
+        textArea.classList.add("is-focused");
+      });
+      textArea.addEventListener("blur", () => {
+        textArea.classList.remove("is-focused");
+        mathWysiwygApi?.close();
+      });
+      textArea.addEventListener("compositionstart", (event) => {
+        event.stopPropagation();
+        mathWysiwygApi?.setComposing(true);
+      });
+      textArea.addEventListener("compositionend", (event) => {
+        event.stopPropagation();
+        mathWysiwygApi?.setComposing(false);
+      });
+      textArea.addEventListener("click", () => {
+        // Keep fallback suggestions in sync with caret movement.
+      });
+      textArea.addEventListener("keyup", () => {
+        // Auto updates are handled by math-wysiwyg listeners attached above.
+      });
+    }
   };
 
   const attachMathFieldEvents = (mathfield: HTMLElement) => {
@@ -415,6 +597,21 @@ export const initBlockInputUi = (
 
     const closeWysiwygSuggestions = () => {
       mathWysiwygApi?.close();
+    };
+
+    const readMathFieldLatex = (
+      target: { getValue?: (...args: unknown[]) => unknown },
+      ...args: unknown[]
+    ) => {
+      if (typeof target.getValue !== "function") {
+        return null;
+      }
+      try {
+        const value = target.getValue(...args);
+        return typeof value === "string" ? value : null;
+      } catch {
+        return null;
+      }
     };
 
     let mathFieldNormalizing = false;
@@ -528,8 +725,13 @@ export const initBlockInputUi = (
       if (selection.start === selection.end) {
         return false;
       }
-      const selectedLatex = mathfieldApi.getValue(selection.start, selection.end, "latex");
-      if (typeof selectedLatex !== "string") {
+      const selectedLatex = readMathFieldLatex(
+        mathfieldApi,
+        selection.start,
+        selection.end,
+        "latex"
+      );
+      if (!selectedLatex) {
         return false;
       }
       const insertLatex = `\\frac{${selectedLatex}}{${PLACEHOLDER_LATEX}}`;
@@ -727,8 +929,8 @@ export const initBlockInputUi = (
       if (selection.start !== selection.end) {
         return false;
       }
-      const latex = mathfieldApi.getValue("latex");
-      if (typeof latex !== "string") {
+      const latex = readMathFieldLatex(mathfieldApi, "latex");
+      if (!latex) {
         return false;
       }
       const cursorIndex = offsetToIndex(mathfieldApi, selection.end);
@@ -839,8 +1041,8 @@ export const initBlockInputUi = (
         return false;
       }
       const selection = getMathFieldSelectionRange(mathfieldApi);
-      const latex = mathfieldApi.getValue("latex");
-      if (typeof latex !== "string") {
+      const latex = readMathFieldLatex(mathfieldApi, "latex");
+      if (!latex) {
         return false;
       }
       const cursorIndex = offsetToIndex(mathfieldApi, selection.end);
@@ -927,17 +1129,11 @@ export const initBlockInputUi = (
         } else {
           let handled = false;
           if (typeof mathfieldApi.executeCommand === "function") {
-            const before =
-              typeof mathfieldApi.getValue === "function"
-                ? mathfieldApi.getValue("latex")
-                : null;
+            const before = readMathFieldLatex(mathfieldApi, "latex");
             try {
               const ok = Boolean(mathfieldApi.executeCommand("addColumnAfter"));
               if (ok) {
-                const after =
-                  typeof mathfieldApi.getValue === "function"
-                    ? mathfieldApi.getValue("latex")
-                    : null;
+                const after = readMathFieldLatex(mathfieldApi, "latex");
                 handled =
                   typeof before === "string" && typeof after === "string"
                     ? before !== after
@@ -1212,11 +1408,7 @@ export const initBlockInputUi = (
       selectionStart: number;
       selectionEnd: number;
     }) => {
-      if (typeof mathField.setValue === "function") {
-        mathField.setValue(next.text);
-      } else if (typeof mathField.value === "string") {
-        mathField.value = next.text;
-      }
+      writeMathFieldValue(mathField, next.text);
 
       const startOffset = indexToOffset(mathField, next.selectionStart);
       const endOffset = indexToOffset(mathField, next.selectionEnd);
@@ -1228,7 +1420,7 @@ export const initBlockInputUi = (
       (scriptKind || templateKind) &&
       typeof mathField.getValue === "function"
     ) {
-      const rawValue = mathField.getValue("latex");
+      const rawValue = readMathFieldValue(mathField);
       if (typeof rawValue === "string") {
         const selectionOffset = getMathFieldSelectionRange(mathField);
         const selectionIndex = {
@@ -1264,6 +1456,37 @@ export const initBlockInputUi = (
           applyMathFieldTextEdit(result);
           return;
         }
+      }
+    }
+
+    // Some single-slot style wrappers (e.g. \mathbb{#?}) can degrade to a one-atom selection
+    // in MathLive when inserted via \placeholder{}, causing the next keystroke to replace
+    // the whole expression. Insert "{}" directly and place the caret inside instead.
+    if (
+      !scriptKind &&
+      !templateKind &&
+      typeof mathField.getValue === "function" &&
+      STYLE_WRAPPER_TEMPLATE_RE.test(key.latex)
+    ) {
+      const rawValue = readMathFieldValue(mathField);
+      if (typeof rawValue === "string") {
+        const selectionOffset = getMathFieldSelectionRange(mathField);
+        const selectionIndex = {
+          start: offsetToIndex(mathField, selectionOffset.start),
+          end: offsetToIndex(mathField, selectionOffset.end),
+        };
+        const selectedText = rawValue.slice(selectionIndex.start, selectionIndex.end);
+        const replacement = key.latex.replace(/#\?/g, selectedText);
+        const nextText =
+          rawValue.slice(0, selectionIndex.start) +
+          replacement +
+          rawValue.slice(selectionIndex.end);
+        writeMathFieldValue(mathField, nextText);
+        const cursorIndex = selectionIndex.start + replacement.length - 1;
+        const cursorOffset = indexToOffset(mathField, cursorIndex);
+        setSelectionRange(mathField as MathFieldPlaceholderApi, cursorOffset, cursorOffset);
+        mathInput.dispatchEvent(new Event("input", { bubbles: true }));
+        return;
       }
     }
 

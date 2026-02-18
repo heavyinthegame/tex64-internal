@@ -23,6 +23,8 @@ const log = (message) => {
   console.log(`[completion-e2e ${now()}] ${message}`);
 };
 
+const toPosix = (value) => value.split(path.sep).join("/");
+
 const pause = async (ms = stepDelayMs) => {
   if (ms <= 0) {
     return;
@@ -37,10 +39,26 @@ const createWorkspaceCopy = async () => {
   return { tempDir, workspacePath };
 };
 
-const postToBridge = async (page, payload) => {
-  await page.evaluate((value) => {
-    window.tex64Bridge.postMessage(value);
-  }, payload);
+const waitForLauncherVisible = async (page, timeout = 15000) => {
+  await page.waitForFunction(
+    () => {
+      const launcher = document.getElementById("launcher");
+      return Boolean(
+        launcher &&
+          launcher.classList.contains("is-visible") &&
+          launcher.getAttribute("aria-hidden") === "false" &&
+          document.body.classList.contains("has-launcher")
+      );
+    },
+    undefined,
+    { timeout }
+  );
+};
+
+const openWorkspaceViaLauncher = async (page) => {
+  await waitForLauncherVisible(page, 20000);
+  await page.waitForSelector("#launcher-open", { timeout: 10000 });
+  await page.click("#launcher-open");
 };
 
 const waitForWorkspaceReady = async (page) => {
@@ -193,10 +211,12 @@ const saveCurrentFile = async (page) => {
 const run = async () => {
   const { tempDir, workspacePath } = await createWorkspaceCopy();
   const workspaceMainTex = path.join(workspacePath, "main.tex");
+  const userDataPath = path.join(tempDir, "userdata");
   let electronApp;
 
   try {
     log(`workspace copy: ${workspacePath}`);
+    await fs.mkdir(userDataPath, { recursive: true });
     log("launching Electron...");
     electronApp = await electron.launch({
       args: ["."],
@@ -204,14 +224,19 @@ const run = async () => {
       slowMo: Number.isFinite(slowMoMs) ? Math.max(0, slowMoMs) : 0,
       env: {
         ...process.env,
+        TEX64_E2E: "1",
+        TEX64_E2E_USERDATA: userDataPath,
+        TEX64_E2E_DIALOG_QUEUE: JSON.stringify({
+          openWorkspace: [toPosix(workspacePath)],
+        }),
       },
     });
 
     const page = await electronApp.firstWindow();
     await page.setViewportSize({ width: 1600, height: 980 });
 
-    log("opening workspace via bridge...");
-    await postToBridge(page, { type: "openRecentProject", path: workspacePath });
+    log("opening workspace via launcher...");
+    await openWorkspaceViaLauncher(page);
     await waitForWorkspaceReady(page);
     log("workspace and index are ready");
 

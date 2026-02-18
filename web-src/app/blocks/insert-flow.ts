@@ -42,17 +42,6 @@ type BlockInsertDeps = {
   updateFallback: (message: string) => void;
   getEditorAlignEnvEnabled: () => boolean;
   requestFormatCurrentFile: (source: string) => void;
-  requestFormatPreview?: (payload: {
-    path: string;
-    content: string;
-    source?: string;
-  }) => Promise<{
-    path: string;
-    ok: boolean;
-    content?: string;
-    error?: string;
-    source?: string;
-  }>;
   postToNative?: (
     payload: { type: string; [key: string]: unknown },
     silent?: boolean
@@ -357,6 +346,12 @@ export const initBlockInsertFlow = (
     if (!activeGroup.editor) {
       return;
     }
+    if (!activeGroup.currentFilePath || !activeGroup.currentFilePath.endsWith(".tex")) {
+      deps.updateIssues(1, "ブロックは .tex ファイルでのみ挿入できます。", "error", [
+        { severity: "error", message: "ブロックは .tex ファイルでのみ挿入できます。" },
+      ]);
+      return;
+    }
     const editorForDetect = activeGroup.editor;
     const blockMode = deps.getBlockMode?.() ?? "insert";
     const detectPosition = editorForDetect.getPosition?.() ?? null;
@@ -444,40 +439,6 @@ export const initBlockInsertFlow = (
       let replaceSnippet: PendingBlockApply["replaceSnippet"] = null;
       let diffStartOffset = startOffset;
       let diffEndOffset = endOffset;
-      const filePath = activeGroup.currentFilePath;
-      const canPreviewFormat =
-        !!deps.requestFormatPreview &&
-        typeof filePath === "string" &&
-        filePath.toLowerCase().endsWith(".tex");
-      if (canPreviewFormat && typeof model.getOffsetAt === "function") {
-        const originalContent = model.getValue();
-        const rawModified =
-          originalContent.slice(0, startOffset) +
-          formattedSnippet +
-          originalContent.slice(endOffset);
-        const previewResult = await deps.requestFormatPreview?.({
-          path: filePath,
-          content: rawModified,
-        });
-        if (triggerSeq !== triggerInsertSeq) {
-          return;
-        }
-        if (previewResult?.ok && typeof previewResult.content === "string") {
-          const change = findChangedRange(originalContent, previewResult.content);
-          if (change) {
-            formattedSnippet = previewResult.content.slice(change.start, change.endAfter);
-            resolvedDraft = { ...draft, snippet: formattedSnippet };
-            diffStartOffset = change.start;
-            diffEndOffset = change.endBefore;
-            replaceRange = toEditorRangeFromOffsets(
-              model,
-              diffStartOffset,
-              diffEndOffset
-            );
-            replaceSnippet = formattedSnippet;
-          }
-        }
-      }
       if (triggerSeq !== triggerInsertSeq) {
         return;
       }

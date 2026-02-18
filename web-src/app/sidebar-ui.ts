@@ -27,6 +27,7 @@ export const initSidebarVisibility = (
 
   const primarySidebarTabs: TabKey[] = [
     "files",
+    "search",
     "outline",
     "blocks",
     "ai",
@@ -126,7 +127,13 @@ export const initSidebarVisibility = (
             }
           }
         });
-        const normalizedOrder = normalizePrimaryTabOrder(nextOrder);
+        let normalizedOrder = normalizePrimaryTabOrder(nextOrder);
+        if (!nextOrder.includes("search")) {
+          const withoutSearch: TabKey[] = normalizedOrder.filter((key) => key !== "search");
+          const filesIndex = withoutSearch.indexOf("files");
+          withoutSearch.splice(filesIndex >= 0 ? filesIndex + 1 : 0, 0, "search");
+          normalizedOrder = withoutSearch;
+        }
         if (normalizedOrder.length > 0) {
           primaryTabOrder = normalizedOrder;
         }

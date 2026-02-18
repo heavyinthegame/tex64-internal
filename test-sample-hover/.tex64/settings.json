@@ -1,0 +1,34 @@
+{
+  "buildProfiles": [
+    {
+      "id": "b7181abf-543e-4fdf-84b4-12df1141b53f",
+      "name": "New profile",
+      "outDir": null,
+      "extraArgs": null
+    },
+    {
+      "id": "93a2c4b8-9b26-441e-992e-a92b3b77d19c",
+      "name": "New profile",
+      "outDir": null,
+      "extraArgs": null
+    },
+    {
+      "id": "03662c69-9ca0-44e0-896a-afe5c5c99d64",
+      "name": "New profile",
+      "outDir": null,
+      "extraArgs": null
+    },
+    {
+      "id": "85145dab-deae-4978-a7ea-f459b774486c",
+      "name": "New profile",
+      "outDir": null,
+      "extraArgs": null
+    },
+    {
+      "id": "100e9c7a-2c2a-4bd8-8e05-cf2cd6311628",
+      "name": "New profile",
+      "outDir": null,
+      "extraArgs": null
+    }
+  ]
+}

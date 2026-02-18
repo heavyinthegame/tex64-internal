@@ -5,6 +5,7 @@ import type { AgentProposal } from "./types.js";
 export type ProposalCardDeps = {
   postToNative: (payload: { type: string; [key: string]: unknown }, silent?: boolean) => boolean;
   continueAfterApply: Set<string>;
+  dismissProposal: (proposalId: string) => void;
   setPendingProposalId: (value: string | null) => void;
   showDiffModal?: (
     before: string,
@@ -38,7 +39,8 @@ export const createProposalCard = (proposal: AgentProposal, deps: ProposalCardDe
   const modifiedContent = proposal.content ?? "";
   const isBinary = proposal.isBinary === true;
 
-  const proposalType = proposal.isNewFile ? "new" : proposal.type || "write";
+  const rawType = proposal.type || "write";
+  const proposalType = rawType === "write" && proposal.isNewFile ? "new" : rawType;
   const badge = document.createElement("span");
   badge.className = "ai-proposal-badge";
 
@@ -115,6 +117,15 @@ export const createProposalCard = (proposal: AgentProposal, deps: ProposalCardDe
     event.stopPropagation();
     deps.continueAfterApply.add(proposal.id);
     deps.postToNative({ type: "agent:apply", proposalId: proposal.id });
+  });
+
+  const cancelButton = document.createElement("button");
+  cancelButton.type = "button";
+  cancelButton.className = "panel-button ghost";
+  cancelButton.textContent = "取り消し";
+  cancelButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    deps.dismissProposal(proposal.id);
   });
 
   const diffContainer = document.createElement("div");
@@ -239,7 +250,7 @@ export const createProposalCard = (proposal: AgentProposal, deps: ProposalCardDe
     }
   });
 
-  actions.append(previewButton, applyButton, applyNextButton);
+  actions.append(previewButton, cancelButton, applyButton, applyNextButton);
   card.append(header, summary, actions, diffContainer);
   return card;
 };

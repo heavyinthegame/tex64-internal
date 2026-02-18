@@ -112,6 +112,11 @@ export const initMathCaptureUi = (
     }
     renderSources();
     setModalOpen(mathCaptureWindowModal as HTMLElement | null, true);
+    if (mathCaptureWindowSearch instanceof HTMLInputElement) {
+      requestAnimationFrame(() => {
+        mathCaptureWindowSearch.focus();
+      });
+    }
     window.addEventListener("keydown", handleWindowPickerKeyDown);
   };
 
@@ -132,8 +137,8 @@ export const initMathCaptureUi = (
   };
 
   const openCropper = (options?: { imageUrl?: string; sizeLabel?: string }) => {
-    if (mathCaptureCropImage instanceof HTMLImageElement && options?.imageUrl) {
-      mathCaptureCropImage.src = options.imageUrl;
+    if (mathCaptureCropImage instanceof HTMLImageElement) {
+      mathCaptureCropImage.src = options?.imageUrl ?? "";
     }
     if (mathCaptureCropSize instanceof HTMLElement && options?.sizeLabel) {
       mathCaptureCropSize.textContent = options.sizeLabel;

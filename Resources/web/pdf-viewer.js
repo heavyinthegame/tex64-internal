@@ -44,9 +44,12 @@ const createParentBridge = () => {
 };
 
 const resolveBridge = () => window.tex64Pdf || createParentBridge();
+const isEmbeddedViewer = () =>
+  !window.tex64Pdf && Boolean(window.parent && window.parent !== window);
 
 const initPdfViewer = () => {
   const bridge = resolveBridge();
+  document.body.classList.toggle("is-embedded", isEmbeddedViewer());
   const titleEl = document.getElementById("pdf-title");
   const statusEl = document.getElementById("pdf-status");
   const sidebarToggleBtn = document.getElementById("pdf-sidebar-toggle");
@@ -86,7 +89,7 @@ const initPdfViewer = () => {
   const WHEEL_ZOOM_SENSITIVITY = 0.008;
   const ZOOM_DRAW_DELAY = 160;
   const CLICK_BIAS_X = 0;
-  const CLICK_BIAS_Y = 0;
+  const CLICK_BIAS_Y = 2;
   const state = {
     doc: null,
     url: null,
@@ -98,6 +101,8 @@ const initPdfViewer = () => {
     pendingSync: null,
     activeMarker: null,
     lastSync: null,
+    lastSyncDebug: null,
+    lastReverseDebug: null,
     markerTimer: null,
     sidebarVisible: false,
     sidebarTab: "outline",
@@ -461,6 +466,155 @@ const initPdfViewer = () => {
     }
   };
 
+  const contextMenuState = {
+    menuEl: null,
+    dismissHandlers: [],
+  };
+
+  const hideContextMenu = () => {
+    if (contextMenuState.menuEl) {
+      contextMenuState.menuEl.remove();
+      contextMenuState.menuEl = null;
+    }
+    contextMenuState.dismissHandlers.forEach((handler) => {
+      document.removeEventListener("pointerdown", handler);
+      document.removeEventListener("scroll", handler, true);
+      document.removeEventListener("keydown", handler);
+    });
+    contextMenuState.dismissHandlers = [];
+  };
+
+  const scheduleContextMenuDismiss = () => {
+    const dismiss = (event) => {
+      if (event.type === "pointerdown") {
+        if (event.target instanceof Node && contextMenuState.menuEl?.contains(event.target)) {
+          return;
+        }
+      }
+      if (event.type === "keydown" && event.key !== "Escape") {
+        return;
+      }
+      hideContextMenu();
+    };
+    document.addEventListener("pointerdown", dismiss);
+    document.addEventListener("scroll", dismiss, true);
+    document.addEventListener("keydown", dismiss);
+    contextMenuState.dismissHandlers.push(dismiss);
+  };
+
+  const openReverseContextMenu = (event, point) => {
+    if (!isReverseSynctexEnabled()) {
+      return;
+    }
+    hideContextMenu();
+    if (!point) {
+      return;
+    }
+    const menu = document.createElement("div");
+    menu.className = "pdf-context-menu";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "pdf-context-menu-item";
+    button.textContent = "ソースへ移動";
+    button.addEventListener("click", (clickEvent) => {
+      clickEvent.preventDefault();
+      clickEvent.stopPropagation();
+      hideContextMenu();
+      postReverseRequest(point);
+    });
+    menu.appendChild(button);
+    if (document.body) {
+      document.body.appendChild(menu);
+    }
+    const menuRect = menu.getBoundingClientRect();
+    const menuWidth = menuRect.width || 150;
+    const menuHeight = menuRect.height || 42;
+    const left = Math.max(8, Math.min(event.clientX, window.innerWidth - menuWidth - 8));
+    const top = Math.max(
+      8,
+      Math.min(event.clientY, window.innerHeight - menuHeight - 8)
+    );
+    menu.style.left = `${left}px`;
+    menu.style.top = `${top}px`;
+    contextMenuState.menuEl = menu;
+    scheduleContextMenuDismiss();
+    button.focus();
+  };
+
+  const resolvePageContentOffset = (pageEl) => {
+    if (!(pageEl instanceof HTMLElement)) {
+      return { left: 0, top: 0 };
+    }
+    const clientLeft = Number(pageEl.clientLeft);
+    const clientTop = Number(pageEl.clientTop);
+    if (
+      Number.isFinite(clientLeft) &&
+      Number.isFinite(clientTop) &&
+      (clientLeft > 0 || clientTop > 0)
+    ) {
+      return {
+        left: clientLeft,
+        top: clientTop,
+      };
+    }
+    const style = window.getComputedStyle(pageEl);
+    const borderLeft = Number.parseFloat(style.borderLeftWidth ?? "0");
+    const borderTop = Number.parseFloat(style.borderTopWidth ?? "0");
+    return {
+      left: Number.isFinite(borderLeft) ? borderLeft : 0,
+      top: Number.isFinite(borderTop) ? borderTop : 0,
+    };
+  };
+
+  const resolveViewportScale = (pageView) => {
+    const pageDiv = pageView?.div;
+    const viewportWidth = Number(pageView?.viewport?.width);
+    const viewportHeight = Number(pageView?.viewport?.height);
+    const contentWidth =
+      pageDiv instanceof HTMLElement && Number.isFinite(pageDiv.clientWidth)
+        ? pageDiv.clientWidth
+        : Number.NaN;
+    const contentHeight =
+      pageDiv instanceof HTMLElement && Number.isFinite(pageDiv.clientHeight)
+        ? pageDiv.clientHeight
+        : Number.NaN;
+    const scaleX =
+      Number.isFinite(contentWidth) &&
+      contentWidth > 0 &&
+      Number.isFinite(viewportWidth) &&
+      viewportWidth > 0
+        ? contentWidth / viewportWidth
+        : 1;
+    const scaleY =
+      Number.isFinite(contentHeight) &&
+      contentHeight > 0 &&
+      Number.isFinite(viewportHeight) &&
+      viewportHeight > 0
+        ? contentHeight / viewportHeight
+        : 1;
+    return {
+      x: Number.isFinite(scaleX) && scaleX > 0 ? scaleX : 1,
+      y: Number.isFinite(scaleY) && scaleY > 0 ? scaleY : 1,
+    };
+  };
+
+  const resolvePagePdfHeight = (pageView) => {
+    const rawHeight = Number(pageView?.viewport?.rawDims?.pageHeight);
+    if (Number.isFinite(rawHeight) && rawHeight > 0) {
+      return rawHeight;
+    }
+    const viewBox = pageView?.viewport?.viewBox;
+    if (Array.isArray(viewBox) && viewBox.length >= 4) {
+      const top = Number(viewBox[1]);
+      const bottom = Number(viewBox[3]);
+      const height = Math.abs(bottom - top);
+      if (Number.isFinite(height) && height > 0) {
+        return height;
+      }
+    }
+    return null;
+  };
+
   const resolveClickPoint = (event) => {
     if (!event || typeof event !== "object") {
       return null;
@@ -488,35 +642,122 @@ const initPdfViewer = () => {
     if (!pageView?.viewport) {
       return null;
     }
+    const isNearActiveMarker = () => {
+      if (!(state.activeMarker instanceof HTMLElement)) {
+        return false;
+      }
+      const markerRect = state.activeMarker.getBoundingClientRect();
+      if (!Number.isFinite(markerRect.left) || !Number.isFinite(markerRect.top)) {
+        return false;
+      }
+      const markerX = markerRect.left + markerRect.width / 2;
+      const markerY = markerRect.top + markerRect.height / 2;
+      const dx = Number(event.clientX) - markerX;
+      const dy = Number(event.clientY) - markerY;
+      if (!Number.isFinite(dx) || !Number.isFinite(dy)) {
+        return false;
+      }
+      return dx * dx + dy * dy <= 2 * 2;
+    };
     const rect = pageEl.getBoundingClientRect();
-    const viewX = event.clientX - rect.left;
-    const viewY = event.clientY - rect.top;
-    if (!Number.isFinite(viewX) || !Number.isFinite(viewY)) {
+    const contentOffset = resolvePageContentOffset(pageEl);
+    const viewportScale = resolveViewportScale(pageView);
+    const isTextLayerClick =
+      target instanceof Element && target.closest(".textLayer") instanceof Element;
+    const applyTextBias = isTextLayerClick && !isNearActiveMarker();
+    const biasX = applyTextBias ? CLICK_BIAS_X : 0;
+    const biasY = applyTextBias ? CLICK_BIAS_Y : 0;
+    const rawContentX = event.clientX - rect.left - contentOffset.left + biasX;
+    const rawContentY = event.clientY - rect.top - contentOffset.top + biasY;
+    if (!Number.isFinite(rawContentX) || !Number.isFinite(rawContentY)) {
       return null;
     }
-    const [x, y] = pageView.viewport.convertToPdfPoint(viewX, viewY);
-    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+    const rawViewX = rawContentX / viewportScale.x;
+    const rawViewY = rawContentY / viewportScale.y;
+    if (!Number.isFinite(rawViewX) || !Number.isFinite(rawViewY)) {
       return null;
     }
-    return { page, x, y };
+    const maxViewX =
+      Number.isFinite(pageView.viewport.width) && pageView.viewport.width > 0
+        ? pageView.viewport.width
+        : Number.POSITIVE_INFINITY;
+    const maxViewY =
+      Number.isFinite(pageView.viewport.height) && pageView.viewport.height > 0
+        ? pageView.viewport.height
+        : Number.POSITIVE_INFINITY;
+    const viewX = Math.min(Math.max(rawViewX, 0), maxViewX);
+    const viewY = Math.min(Math.max(rawViewY, 0), maxViewY);
+    const [pdfX, pdfYBottom] = pageView.viewport.convertToPdfPoint(viewX, viewY);
+    if (!Number.isFinite(pdfX) || !Number.isFinite(pdfYBottom)) {
+      return null;
+    }
+    const pagePdfHeight = resolvePagePdfHeight(pageView);
+    const synctexY =
+      Number.isFinite(pagePdfHeight) && pagePdfHeight > 0
+        ? pagePdfHeight - pdfYBottom
+        : pdfYBottom;
+    state.lastReverseDebug = {
+      page,
+      x: pdfX,
+      y: synctexY,
+      rawContentX,
+      rawContentY,
+      viewX,
+      viewY,
+      biasX,
+      biasY,
+      textLayerClick: isTextLayerClick,
+      nearMarker: isNearActiveMarker(),
+    };
+    return { page, x: pdfX, y: synctexY };
   };
 
 
   const applySync = (payload) => {
     const pageIndex = payload.page - 1;
     const pageView = pdfViewer.getPageView(pageIndex);
-    if (!pageView || !scrollEl) {
+    if (
+      !pageView ||
+      !scrollEl ||
+      !(pageView.div instanceof HTMLElement) ||
+      !pageView.div.isConnected ||
+      !pageView.viewport
+    ) {
       state.pendingSync = payload;
       return;
     }
     state.lastSync = payload;
     clearSyncMarker();
-    const [viewX, viewY] = pageView.viewport.convertToViewportPoint(
+    const pagePdfHeight = resolvePagePdfHeight(pageView);
+    const payloadY = Number(payload.y);
+    const normalizedY =
+      Number.isFinite(pagePdfHeight) &&
+      pagePdfHeight > 0 &&
+      Number.isFinite(payloadY)
+        ? pagePdfHeight - payloadY
+        : payloadY;
+    const [rawViewX, rawViewY] = pageView.viewport.convertToViewportPoint(
       payload.x,
-      payload.y
+      normalizedY
     );
+    const viewportScale = resolveViewportScale(pageView);
+    const viewX = rawViewX * viewportScale.x;
+    const viewY = rawViewY * viewportScale.y;
+    state.lastSyncDebug = {
+      page: payload.page,
+      x: payload.x,
+      y: payload.y,
+      normalizedY,
+      viewX,
+      viewY,
+    };
+    const contentOffset = resolvePageContentOffset(pageView.div);
     scrollEl.scrollTo({
-      top: pageView.div.offsetTop + viewY - scrollEl.clientHeight / 2,
+      top:
+        pageView.div.offsetTop +
+        contentOffset.top +
+        viewY -
+        scrollEl.clientHeight / 2,
       behavior: "auto",
     });
     if (pageView.div) {
@@ -608,6 +849,15 @@ const initPdfViewer = () => {
       state.pendingSync = null;
       applySync(payload);
     }
+  });
+
+  eventBus.on("pagerendered", () => {
+    if (!state.pendingSync) {
+      return;
+    }
+    const payload = state.pendingSync;
+    state.pendingSync = null;
+    applySync(payload);
   });
 
   eventBus.on("scalechanging", (event) => {
@@ -858,6 +1108,22 @@ const initPdfViewer = () => {
   }
 
   if (pagesEl) {
+    pagesEl.addEventListener("contextmenu", (event) => {
+      if (!event) {
+        return;
+      }
+      if (!isReverseSynctexEnabled()) {
+        return;
+      }
+      const point = resolveClickPoint(event);
+      if (!point) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      openReverseContextMenu(event, point);
+    });
+
     pagesEl.addEventListener("click", (event) => {
       if (!event) {
         return;

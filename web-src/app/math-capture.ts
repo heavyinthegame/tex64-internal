@@ -1,5 +1,5 @@
 import type { AppContext } from "./context.js";
-import type { IssuesStatus, IssueItem } from "./types.js";
+import type { IssuesStatus, IssueItem, BridgeWindow } from "./types.js";
 import type { MathCaptureUiApi, MathCaptureWindowSource } from "./math-capture-ui.js";
 
 type MathCaptureDeps = {
@@ -36,18 +36,13 @@ export const initMathCapture = (
     mathCaptureCropSize,
   } = context.dom;
 
-  const getCaptureApi = () =>
-    (context.bridgeWindow as {
-      tex64Capture?: {
-        listSources?: (options?: {
-          thumbnailSize?: { width: number; height: number };
-        }) => Promise<CaptureSourceWithSize[]>;
-      };
-    }).tex64Capture ?? null;
+  const getCaptureApi = () => {
+    const bridgeWindow = context.bridgeWindow as BridgeWindow;
+    return bridgeWindow.__tex64TestCaptureApi ?? bridgeWindow.tex64Capture ?? null;
+  };
 
   let sources: CaptureSourceWithSize[] = [];
   let selectedSource: CaptureSourceWithSize | null = null;
-  let isDragging = false;
   let dragStart = { x: 0, y: 0 };
   let selection = { x: 0, y: 0, width: 0, height: 0 };
 
@@ -57,6 +52,7 @@ export const initMathCapture = (
     "ウィンドウ一覧の取得に失敗しました。",
     "ウィンドウ一覧の取得に失敗しました。画面収録の許可を確認してください。",
     "取り込み可能なウィンドウがありません。画面収録の許可を確認してください。",
+    "選択した画面のサムネイル取得に失敗しました。別の画面を選択してください。",
     "切り取りに失敗しました。",
   ]);
 
@@ -229,6 +225,10 @@ export const initMathCapture = (
     onWindowSelect: (id) => {
       selectedSource = sources.find((source) => source.id === id) ?? null;
       if (!selectedSource) return;
+      if (!selectedSource.thumbnailUrl) {
+        setStatus("選択した画面のサムネイル取得に失敗しました。別の画面を選択してください。");
+        return;
+      }
       deps.captureUi.closeWindowPicker();
       deps.captureUi.openCropper({
         imageUrl: selectedSource.thumbnailUrl,
@@ -270,9 +270,31 @@ export const initMathCapture = (
   let interactionMode: "idle" | "create" | "move" | "resize" = "idle";
   let resizeHandle = "";
   let startSelection = { x: 0, y: 0, width: 0, height: 0 };
+  const stopInteraction = (pointerId?: number) => {
+    if (!(mathCaptureCropCanvas instanceof HTMLElement)) {
+      return;
+    }
+    interactionMode = "idle";
+    resizeHandle = "";
+    mathCaptureCropCanvas.style.cursor = "crosshair";
+    if (
+      Number.isFinite(pointerId) &&
+      mathCaptureCropCanvas.hasPointerCapture(pointerId)
+    ) {
+      try {
+        mathCaptureCropCanvas.releasePointerCapture(pointerId);
+      } catch {
+        // ignore release failures on canceled pointers
+      }
+    }
+    updateSelectionUi();
+  };
 
   if (mathCaptureCropCanvas instanceof HTMLElement) {
     mathCaptureCropCanvas.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0) {
+        return;
+      }
       const geometry = resolveImageGeometry();
       if (!geometry) return;
       
@@ -283,7 +305,11 @@ export const initMathCapture = (
       
       dragStart = { x, y };
       startSelection = { ...selection };
-      mathCaptureCropCanvas.setPointerCapture(event.pointerId);
+      try {
+        mathCaptureCropCanvas.setPointerCapture(event.pointerId);
+      } catch {
+        // ignore capture failures for unsupported pointer sequences
+      }
 
       // Check handle resize
       if (target.classList.contains("capture-crop-handle")) {
@@ -407,9 +433,19 @@ export const initMathCapture = (
 
     mathCaptureCropCanvas.addEventListener("pointerup", (event) => {
       if (interactionMode === "idle") return;
-      interactionMode = "idle";
-      mathCaptureCropCanvas.releasePointerCapture(event.pointerId);
-      updateSelectionUi();
+      stopInteraction(event.pointerId);
+    });
+
+    mathCaptureCropCanvas.addEventListener("pointercancel", (event) => {
+      stopInteraction(event.pointerId);
+    });
+
+    mathCaptureCropCanvas.addEventListener("lostpointercapture", (event) => {
+      const pointerEvent =
+        event instanceof PointerEvent
+          ? event
+          : null;
+      stopInteraction(pointerEvent?.pointerId);
     });
   }
 

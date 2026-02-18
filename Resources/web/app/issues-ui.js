@@ -46,20 +46,28 @@ export const initIssuesUi = (context, deps) => {
             const message = document.createElement("div");
             message.className = "issue-message";
             message.textContent = detail.message || issue.message;
+            const detailBlock = document.createElement("div");
+            detailBlock.className = "issue-extra";
             const resolution = document.createElement("div");
             resolution.className = "issue-resolution";
-            resolution.textContent = (_a = getIssueResolution(issue)) !== null && _a !== void 0 ? _a : "";
             const hint = document.createElement("div");
             hint.className = "issue-hintline";
             const isRuntimeAction = issue.action === "open-runtime" && typeof deps.onOpenRuntimeSettings === "function";
             const hasJumpTarget = Boolean(detail.path || detail.line);
             item.disabled = !isRuntimeAction && !hasJumpTarget;
+            const resolutionText = (_a = getIssueResolution(issue)) !== null && _a !== void 0 ? _a : "";
+            const showResolution = Boolean(resolutionText) && (issue.severity === "error" || isRuntimeAction);
+            resolution.textContent = resolutionText;
             hint.textContent = isRuntimeAction
-                ? "クリックで実行環境を開く"
+                ? "クリックでRuntimeを開く"
                 : hasJumpTarget
-                    ? "クリックで該当行へ移動"
-                    : "位置情報がないため移動できません";
-            item.append(header, message, resolution, hint);
+                    ? "クリックで移動"
+                    : "移動先なし";
+            if (showResolution) {
+                detailBlock.append(resolution);
+            }
+            detailBlock.append(hint);
+            item.append(header, message, detailBlock);
             item.addEventListener("click", () => {
                 var _a;
                 if (isRuntimeAction) {

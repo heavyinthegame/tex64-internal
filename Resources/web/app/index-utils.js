@@ -7,6 +7,16 @@ export const dedupeByKey = (entries) => {
     });
     return Array.from(map.values()).sort((a, b) => a.key.localeCompare(b.key, "ja"));
 };
+export const dedupeByKeyAndLocation = (entries) => {
+    const map = new Map();
+    entries.forEach((entry) => {
+        const token = `${entry.key}|${entry.path}|${entry.line}`;
+        if (!map.has(token)) {
+            map.set(token, entry);
+        }
+    });
+    return Array.from(map.values()).sort((a, b) => a.path === b.path ? a.line - b.line : a.path.localeCompare(b.path, "ja"));
+};
 export const dedupeSections = (entries) => {
     const map = new Map();
     entries.forEach((entry) => {

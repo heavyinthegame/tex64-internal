@@ -49,7 +49,7 @@ export const initBuildProfilesUi = (context, deps) => {
                 ? hasPendingSave
                     ? "保存中..."
                     : "変更は自動で保存されます。"
-                : "Default は tex64 の標準設定です。プロジェクト固有の outDir や biber/shell-escape が必要な場合はプロファイルを作成してください。"
+                : ""
             : "ワークスペースを開くとビルドプロファイルを編集できます。";
     };
     const getSelectedBuildProfileId = () => {
@@ -242,7 +242,20 @@ export const initBuildProfilesUi = (context, deps) => {
             return;
         }
         commitBuildProfilesUpdate(true);
-        deps.postToNative({ type: "build:clean", deep: deep === true }, false);
+        const activeId = getSelectedBuildProfileId();
+        const activeProfile = activeId && activeId !== ""
+            ? buildProfiles.find((profile) => profile.id === activeId) || null
+            : null;
+        deps.postToNative({
+            type: "build:clean",
+            deep: deep === true,
+            buildProfile: activeProfile
+                ? {
+                    outDir: (activeProfile.outDir !== null && activeProfile.outDir !== void 0 ? activeProfile.outDir : null),
+                    extraArgs: (activeProfile.extraArgs !== null && activeProfile.extraArgs !== void 0 ? activeProfile.extraArgs : null),
+                }
+                : null,
+        }, false);
     };
     if (settingsBuildProfileSelect instanceof HTMLSelectElement) {
         settingsBuildProfileSelect.addEventListener("change", () => {

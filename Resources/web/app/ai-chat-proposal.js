@@ -17,7 +17,8 @@ export const createProposalCard = (proposal, deps) => {
     const originalContent = (_a = proposal.originalContent) !== null && _a !== void 0 ? _a : "";
     const modifiedContent = (_b = proposal.content) !== null && _b !== void 0 ? _b : "";
     const isBinary = proposal.isBinary === true;
-    const proposalType = proposal.isNewFile ? "new" : proposal.type || "write";
+    const rawType = proposal.type || "write";
+    const proposalType = rawType === "write" && proposal.isNewFile ? "new" : rawType;
     const badge = document.createElement("span");
     badge.className = "ai-proposal-badge";
     switch (proposalType) {
@@ -88,6 +89,14 @@ export const createProposalCard = (proposal, deps) => {
         event.stopPropagation();
         deps.continueAfterApply.add(proposal.id);
         deps.postToNative({ type: "agent:apply", proposalId: proposal.id });
+    });
+    const cancelButton = document.createElement("button");
+    cancelButton.type = "button";
+    cancelButton.className = "panel-button ghost";
+    cancelButton.textContent = "取り消し";
+    cancelButton.addEventListener("click", (event) => {
+        event.stopPropagation();
+        deps.dismissProposal(proposal.id);
     });
     const diffContainer = document.createElement("div");
     diffContainer.className = "ai-proposal-diff";
@@ -208,7 +217,7 @@ export const createProposalCard = (proposal, deps) => {
             diffContainer.dataset.ready = "true";
         }
     });
-    actions.append(previewButton, applyButton, applyNextButton);
+    actions.append(previewButton, cancelButton, applyButton, applyNextButton);
     card.append(header, summary, actions, diffContainer);
     return card;
 };

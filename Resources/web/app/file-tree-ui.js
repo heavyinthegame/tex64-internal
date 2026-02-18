@@ -133,9 +133,7 @@ export const initFileTreeUi = (context, deps) => {
         createModalKind = kind;
         const basePath = resolveCreateBasePath();
         setText(createModalTitle, kind === "file" ? "新規ファイルを作成" : "新規フォルダを作成");
-        setText(createModalSubtitle, kind === "file"
-            ? "作成するファイル名を入力してください。"
-            : "作成するフォルダ名を入力してください。");
+        setText(createModalSubtitle, "");
         setText(createModalParent, basePath ? basePath : "ワークスペース直下");
         setText(createModalLabel, kind === "file" ? "ファイル名（拡張子付き）" : "フォルダ名");
         if (createModalInput instanceof HTMLInputElement) {
@@ -205,9 +203,7 @@ export const initFileTreeUi = (context, deps) => {
             openCreateModal(kind);
             return;
         }
-        const title = kind === "file"
-            ? "新規ファイル名を入力してください（例: chapter/intro.tex）"
-            : "新規フォルダ名を入力してください（例: chapter）";
+        const title = kind === "file" ? "新規ファイル名（例: chapter/intro.tex）" : "新規フォルダ名（例: chapter）";
         const input = window.prompt(title);
         if (!input) {
             return;
@@ -297,6 +293,9 @@ export const initFileTreeUi = (context, deps) => {
     };
     const requestRevealInFinder = (path) => {
         deps.postToNative({ type: "revealInFinder", path });
+    };
+    const requestOpenInTerminal = (path) => {
+        deps.postToNative({ type: "openInTerminal", path });
     };
     const requestDeleteItem = (path, kind) => {
         const dirtyPaths = deps.getDirtyPaths();
@@ -401,6 +400,11 @@ export const initFileTreeUi = (context, deps) => {
             label: "Finderで表示",
             action: () => requestRevealInFinder(path),
         },
+        {
+            type: "action",
+            label: "ターミナルで開く",
+            action: () => requestOpenInTerminal(path),
+        },
         { type: "separator" },
         {
             type: "action",
@@ -437,6 +441,11 @@ export const initFileTreeUi = (context, deps) => {
             type: "action",
             label: "Finderで表示",
             action: () => requestRevealInFinder(path),
+        },
+        {
+            type: "action",
+            label: "ターミナルで開く",
+            action: () => requestOpenInTerminal(path),
         },
         { type: "separator" },
         {

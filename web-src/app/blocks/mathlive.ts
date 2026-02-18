@@ -24,83 +24,193 @@ export type MathLiveApi = {
 
 export const initMathLive = (context: AppContext, deps: MathLiveDeps): MathLiveApi => {
   const { blockMathInputContainer } = context.dom;
+  let setupInFlight = false;
+  let setupRetryScheduled = false;
+  let containerPointerDownHandler: ((event: PointerEvent) => void) | null = null;
 
   const setupMathField = async () => {
-    if (!blockMathInputContainer) {
-      console.error("MathLive container not found");
+    if (setupInFlight) {
       return;
     }
+    setupInFlight = true;
 
-    if (blockMathInputContainer.querySelector("math-field")) {
-      return;
-    }
-
-    const MathLiveGlobal = (window as any).MathLive;
-    const hasMathLive = !!MathLiveGlobal;
-    const hasMathfieldElement = hasMathLive && !!MathLiveGlobal.MathfieldElement;
-    const loadError = (window as any).MATHLIVE_LOAD_ERROR;
-
-    if (!customElements.get("math-field")) {
-      if (hasMathfieldElement) {
-        try {
-          customElements.define("math-field", MathLiveGlobal.MathfieldElement);
-        } catch {
-          // element may already be defined
-        }
-      }
-    }
-
-    if (!customElements.get("math-field")) {
-      const debugInfo = `MathLive: ${hasMathLive ? "OK" : "NG"}, MathfieldElement: ${
-        hasMathfieldElement ? "OK" : "NG"
-      }, LoadError: ${loadError || "none"}`;
-      blockMathInputContainer.textContent = `Loading... (${debugInfo})`;
-      try {
-        await Promise.race([
-          customElements.whenDefined("math-field"),
-          new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 10000)),
-        ]);
-        blockMathInputContainer.textContent = "";
-      } catch {
-        blockMathInputContainer.innerHTML = `
-          <div style="font-size:12px;">MathLiveの読み込みに失敗しました。</div>
-          <div style="font-size:10px;color:#888;margin-top:4px;">${debugInfo}</div>
-        `;
-        blockMathInputContainer.style.color = "#ff6b6b";
+    const scheduleSetupRetry = () => {
+      if (setupRetryScheduled) {
         return;
       }
-    }
+      setupRetryScheduled = true;
+      window.addEventListener(
+        "mathlive-ready",
+        () => {
+          setupRetryScheduled = false;
+          void setupMathField();
+        },
+        { once: true }
+      );
+    };
 
-    if (MathLiveGlobal?.convertLatexToMarkup) {
-      deps.onMathLiveReady();
-    } else {
-      deps.onEnsureMathLiveReady();
-    }
+    const readCurrentInputValue = () => {
+      if (!blockMathInputContainer) {
+        return "";
+      }
+      const existingInput = blockMathInputContainer.querySelector("#block-math-input") as
+        | HTMLTextAreaElement
+        | (HTMLElement & {
+            getValue?: (format?: string) => unknown;
+            value?: unknown;
+          })
+        | null;
+      if (!existingInput) {
+        return "";
+      }
+      const mathfieldInput = existingInput as {
+        getValue?: (format?: string) => unknown;
+        value?: unknown;
+      };
+      if (typeof mathfieldInput.getValue === "function") {
+        try {
+          const value = mathfieldInput.getValue("latex");
+          if (typeof value === "string") {
+            return value;
+          }
+        } catch {
+          // ignore read failure
+        }
+      }
+      if (typeof mathfieldInput.value === "string") {
+        return mathfieldInput.value;
+      }
+      return "";
+    };
 
-    const mathfield = document.createElement("math-field") as any;
-    mathfield.id = "block-math-input";
-    mathfield.className = "block-math-field";
+    const createMathInputFallback = (message?: string, preserveValue = "") => {
+      if (!blockMathInputContainer) {
+        return;
+      }
+      if (containerPointerDownHandler) {
+        blockMathInputContainer.removeEventListener("pointerdown", containerPointerDownHandler);
+        containerPointerDownHandler = null;
+      }
+      blockMathInputContainer.innerHTML = "";
+      blockMathInputContainer.style.removeProperty("color");
 
-    const scrollHost = document.createElement("div");
-    scrollHost.className = "block-math-scroll";
-    scrollHost.appendChild(mathfield);
+      const scrollHost = document.createElement("div");
+      scrollHost.className = "block-math-scroll";
 
-    const menuToggle = document.createElement("button");
-    menuToggle.type = "button";
-    menuToggle.className = "block-math-menu-toggle";
-    menuToggle.setAttribute("aria-label", "数式メニュー");
-    menuToggle.setAttribute("aria-haspopup", "menu");
-    menuToggle.tabIndex = -1;
-    menuToggle.innerHTML = `
+      const fallbackInput = document.createElement("textarea");
+      fallbackInput.id = "block-math-input";
+      fallbackInput.className = "block-input block-math-input";
+      fallbackInput.setAttribute("rows", "4");
+      fallbackInput.setAttribute("spellcheck", "false");
+      fallbackInput.setAttribute("aria-label", "数式入力（テキスト）");
+      fallbackInput.placeholder = "LaTeX を入力";
+      fallbackInput.style.width = "100%";
+      fallbackInput.style.minHeight = "96px";
+      fallbackInput.style.resize = "vertical";
+      if (preserveValue) {
+        fallbackInput.value = preserveValue;
+      }
+
+      scrollHost.appendChild(fallbackInput);
+      blockMathInputContainer.appendChild(scrollHost);
+
+      if (message) {
+        const note = document.createElement("div");
+        note.style.fontSize = "10px";
+        note.style.color = "var(--muted)";
+        note.style.padding = "0 12px 10px";
+        note.textContent = message;
+        blockMathInputContainer.appendChild(note);
+      }
+
+      deps.onMathFieldCreated(fallbackInput);
+    };
+
+    try {
+      if (!blockMathInputContainer) {
+        console.error("MathLive container not found");
+        return;
+      }
+
+      if (blockMathInputContainer.querySelector("math-field")) {
+        return;
+      }
+
+      const preservedValue = readCurrentInputValue();
+      const existingFallback = blockMathInputContainer.querySelector(
+        "textarea#block-math-input"
+      ) as HTMLTextAreaElement | null;
+
+      const MathLiveGlobal = (window as any).MathLive;
+      const hasMathLive = !!MathLiveGlobal;
+      const hasMathfieldElement = hasMathLive && !!MathLiveGlobal.MathfieldElement;
+      const loadError = (window as any).MATHLIVE_LOAD_ERROR;
+
+      if (!customElements.get("math-field")) {
+        if (hasMathfieldElement) {
+          try {
+            customElements.define("math-field", MathLiveGlobal.MathfieldElement);
+          } catch {
+            // element may already be defined
+          }
+        }
+      }
+
+      if (!customElements.get("math-field")) {
+        const debugInfo = `MathLive: ${hasMathLive ? "OK" : "NG"}, MathfieldElement: ${
+          hasMathfieldElement ? "OK" : "NG"
+        }, LoadError: ${loadError || "none"}`;
+        scheduleSetupRetry();
+        if (!existingFallback) {
+          createMathInputFallback("MathLive loading...", preservedValue);
+        }
+        try {
+          await Promise.race([
+            customElements.whenDefined("math-field"),
+            new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 10000)),
+          ]);
+        } catch {
+          if (customElements.get("math-field")) {
+            // A late define can race with timeout; continue with math-field setup.
+          } else {
+            const retryValue = readCurrentInputValue() || preservedValue;
+            createMathInputFallback(`MathLive unavailable (${debugInfo})`, retryValue);
+            scheduleSetupRetry();
+            return;
+          }
+        }
+      }
+
+      if ((window as any).MathLive?.convertLatexToMarkup) {
+        deps.onMathLiveReady();
+      } else {
+        deps.onEnsureMathLiveReady();
+      }
+
+      const mathfield = document.createElement("math-field") as any;
+      mathfield.id = "block-math-input";
+      mathfield.className = "block-math-field";
+
+      const scrollHost = document.createElement("div");
+      scrollHost.className = "block-math-scroll";
+      scrollHost.appendChild(mathfield);
+
+      const menuToggle = document.createElement("button");
+      menuToggle.type = "button";
+      menuToggle.className = "block-math-menu-toggle";
+      menuToggle.setAttribute("aria-label", "数式メニュー");
+      menuToggle.setAttribute("aria-haspopup", "menu");
+      menuToggle.tabIndex = -1;
+      menuToggle.innerHTML = `
       <span class="block-math-menu-line"></span>
       <span class="block-math-menu-line"></span>
       <span class="block-math-menu-line"></span>
     `;
 
-    blockMathInputContainer.innerHTML = "";
-    blockMathInputContainer.appendChild(scrollHost);
-    blockMathInputContainer.appendChild(menuToggle);
-    const closeMathFieldMenu = () => {
+      blockMathInputContainer.innerHTML = "";
+      blockMathInputContainer.appendChild(scrollHost);
+      blockMathInputContainer.appendChild(menuToggle);
+      const closeMathFieldMenu = () => {
       const internalMenu = (mathfield as { _mathfield?: { menu?: any } })._mathfield?.menu;
       if (internalMenu && typeof internalMenu.hide === "function") {
         if (internalMenu.state && internalMenu.state !== "closed") {
@@ -121,63 +231,78 @@ export const initMathLive = (context: AppContext, deps: MathLiveDeps): MathLiveA
           executeCommand.call(mathfield, "toggleContextMenu");
         }
       }
-    };
-    const toggleMathFieldMenu = () => {
-      const executeCommand = (mathfield as { executeCommand?: (command: string) => void })
-        .executeCommand;
-      if (typeof executeCommand === "function") {
-        executeCommand.call(mathfield, "toggleContextMenu");
-      }
-    };
-    menuToggle.addEventListener("pointerdown", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-    });
-    menuToggle.addEventListener("focus", () => {
-      menuToggle.blur();
-    });
-    menuToggle.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      toggleMathFieldMenu();
-    });
-    blockMathInputContainer.addEventListener("pointerdown", (event) => {
-      const path = typeof event.composedPath === "function" ? event.composedPath() : [];
-      const clickedMenuToggle = path.some((node) => {
-        if (!(node instanceof HTMLElement)) return false;
-        if (node.classList?.contains("block-math-menu-toggle")) return true;
-        if (node.getAttribute?.("part") === "menu-toggle") return true;
-        return node.classList?.contains("ML__menu-toggle") ?? false;
+      };
+      const toggleMathFieldMenu = () => {
+        const executeCommand = (mathfield as { executeCommand?: (command: string) => void })
+          .executeCommand;
+        if (typeof executeCommand === "function") {
+          executeCommand.call(mathfield, "toggleContextMenu");
+        }
+      };
+      menuToggle.addEventListener("pointerdown", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
       });
-      const clickedMathMenu = path.some((node) => {
-        if (!(node instanceof HTMLElement)) return false;
-        if (node.matches?.("menu.ui-menu-container")) return true;
-        return !!node.closest?.("menu.ui-menu-container");
+      menuToggle.addEventListener("focus", () => {
+        menuToggle.blur();
       });
-      if (!clickedMenuToggle && !clickedMathMenu) {
-        closeMathFieldMenu();
+      menuToggle.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        toggleMathFieldMenu();
+      });
+      if (containerPointerDownHandler) {
+        blockMathInputContainer.removeEventListener("pointerdown", containerPointerDownHandler);
       }
-      if (!clickedMathMenu && !clickedMenuToggle && typeof mathfield.focus === "function") {
-        mathfield.focus();
+      containerPointerDownHandler = (event: PointerEvent) => {
+        const path = typeof event.composedPath === "function" ? event.composedPath() : [];
+        const clickedMenuToggle = path.some((node) => {
+          if (!(node instanceof HTMLElement)) return false;
+          if (node.classList?.contains("block-math-menu-toggle")) return true;
+          if (node.getAttribute?.("part") === "menu-toggle") return true;
+          return node.classList?.contains("ML__menu-toggle") ?? false;
+        });
+        const clickedMathMenu = path.some((node) => {
+          if (!(node instanceof HTMLElement)) return false;
+          if (node.matches?.("menu.ui-menu-container")) return true;
+          return !!node.closest?.("menu.ui-menu-container");
+        });
+        if (!clickedMenuToggle && !clickedMathMenu) {
+          closeMathFieldMenu();
+        }
+        if (!clickedMathMenu && !clickedMenuToggle && typeof mathfield.focus === "function") {
+          mathfield.focus();
+        }
+      };
+      blockMathInputContainer.addEventListener("pointerdown", containerPointerDownHandler);
+      deps.onMathFieldCreated(mathfield);
+      if (preservedValue) {
+        try {
+          if (typeof mathfield.setValue === "function") {
+            mathfield.setValue(preservedValue);
+          } else if (typeof mathfield.value === "string") {
+            mathfield.value = preservedValue;
+          }
+        } catch {
+          // ignore restore failure
+        }
       }
-    });
-    deps.onMathFieldCreated(mathfield);
 
-    if (typeof mathfield.setOptions === "function") {
-      mathfield.setOptions({
-        smartMode: false,
-        smartFence: false,
-        defaultMode: "math",
-        inlineShortcuts: {},
-        onInlineShortcut: () => "",
-        virtualKeyboardMode: "off",
-        fontsDirectory: "mathlive/fonts",
-        soundsDirectory: null,
-        keypressSound: null,
-        plonkSound: null,
-        locale: "ja",
-      });
-    }
+      if (typeof mathfield.setOptions === "function") {
+        mathfield.setOptions({
+          smartMode: false,
+          smartFence: false,
+          defaultMode: "math",
+          inlineShortcuts: {},
+          onInlineShortcut: () => "",
+          virtualKeyboardMode: "off",
+          fontsDirectory: "mathlive/fonts",
+          soundsDirectory: null,
+          keypressSound: null,
+          plonkSound: null,
+          locale: "ja",
+        });
+      }
 
     // MathLive doesn't support some LaTeX font commands natively (e.g. \mathds),
     // but macros let us render them while preserving the original command in `getValue("latex")`.
@@ -383,11 +508,22 @@ export const initMathLive = (context: AppContext, deps: MathLiveDeps): MathLiveA
       mathfield.shadowRoot.appendChild(style);
     };
 
-    setTimeout(() => {
-      injectStyles();
-    }, 0);
+      setTimeout(() => {
+        injectStyles();
+      }, 0);
 
-    deps.onAttachMathFieldEvents(mathfield);
+      deps.onAttachMathFieldEvents(mathfield);
+    } catch (error) {
+      const recoveredValue = readCurrentInputValue();
+      const message = error instanceof Error ? error.message : String(error);
+      console.error("MathLive setup failed; fallback to textarea:", error);
+      createMathInputFallback(`MathLive setup error (${message})`, recoveredValue);
+      if (!customElements.get("math-field")) {
+        scheduleSetupRetry();
+      }
+    } finally {
+      setupInFlight = false;
+    }
   };
 
   return { setupMathField };

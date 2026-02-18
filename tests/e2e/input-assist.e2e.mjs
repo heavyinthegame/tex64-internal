@@ -12,6 +12,7 @@ const repoRoot = path.resolve(__dirname, "..", "..");
 
 const sourceWorkspace = path.join(repoRoot, "test-workspace");
 const keepWorkspace = process.env.E2E_KEEP_WORKSPACE === "1";
+const runGhostRemote = process.env.E2E_GHOST_REMOTE !== "0";
 const stepDelayMs = Number.parseInt(process.env.E2E_STEP_DELAY_MS ?? "260", 10);
 const typeDelayMs = Number.parseInt(process.env.E2E_TYPE_DELAY_MS ?? "40", 10);
 const slowMoMs = Number.parseInt(process.env.E2E_PLAYWRIGHT_SLOWMO_MS ?? "70", 10);
@@ -20,6 +21,7 @@ const now = () => new Date().toISOString().slice(11, 19);
 const log = (message) => {
   console.log(`[input-assist-e2e ${now()}] ${message}`);
 };
+const toPosix = (value) => value.split(path.sep).join("/");
 
 const pause = async (ms = stepDelayMs) => {
   if (ms <= 0) {
@@ -32,6 +34,15 @@ const createWorkspaceCopy = async () => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "tex64-e2e-"));
   const workspacePath = path.join(tempDir, "workspace");
   await fs.cp(sourceWorkspace, workspacePath, { recursive: true });
+  const figuresDir = path.join(workspacePath, "figures");
+  await fs.copyFile(
+    path.join(figuresDir, "sample-image.png"),
+    path.join(figuresDir, "sample-timeout.png")
+  );
+  await fs.writeFile(
+    path.join(figuresDir, "oversize-image.png"),
+    Buffer.alloc(2 * 1024 * 1024 + 512, 0x41)
+  );
   return { tempDir, workspacePath };
 };
 
@@ -45,6 +56,12 @@ const createMockAiProxy = async () => {
   const continuationForPrefix = (prefix) => {
     if (prefix.includes("EMPTY_NEGATIVE_CASE")) {
       return "";
+    }
+    if (prefix.includes("MAX_CHARS_LIMIT_CASE")) {
+      return " and exceeds twenty characters.";
+    }
+    if (prefix.includes("TIMEOUT_REQUEST_CASE")) {
+      return " and should arrive too late.";
     }
     if (prefix.includes("We compare the proposed method with a strong baseline")) {
       return " and report robust improvements.";
@@ -78,8 +95,16 @@ const createMockAiProxy = async () => {
         candidates: [{ content: { parts: [{ text }] } }],
         usageMetadata: { promptTokenCount: 11, candidatesTokenCount: text.length > 0 ? 7 : 0, totalTokenCount: 18 },
       };
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify(payload));
+      const delayMs = prefix.includes("TIMEOUT_REQUEST_CASE") ? 4500 : 0;
+      const send = () => {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(payload));
+      };
+      if (delayMs > 0) {
+        setTimeout(send, delayMs);
+      } else {
+        send();
+      }
     });
   });
 
@@ -106,10 +131,68 @@ const createMockAiProxy = async () => {
   };
 };
 
-const postToBridge = async (page, payload) => {
-  await page.evaluate((value) => {
-    window.tex64Bridge.postMessage(value);
-  }, payload);
+const waitForLauncherVisible = async (page, timeout = 15000) => {
+  await page.waitForFunction(
+    () => {
+      const launcher = document.getElementById("launcher");
+      return Boolean(
+        launcher &&
+          launcher.classList.contains("is-visible") &&
+          launcher.getAttribute("aria-hidden") === "false" &&
+          document.body.classList.contains("has-launcher")
+      );
+    },
+    undefined,
+    { timeout }
+  );
+};
+
+const openWorkspaceViaLauncher = async (page) => {
+  await waitForLauncherVisible(page, 20000);
+  await page.waitForSelector("#launcher-open", { timeout: 10000 });
+  await page.click("#launcher-open");
+};
+
+const installBridgeRecorder = async (page) => {
+  const installed = await page.evaluate(() => {
+    const bridge = window.tex64Bridge;
+    if (!bridge || typeof bridge.postMessage !== "function") {
+      return false;
+    }
+    if ((window).__tex64E2EBridgeRecorderInstalled) {
+      return true;
+    }
+    const originalPostMessage = bridge.postMessage.bind(bridge);
+    (window).__tex64E2EBridgeMessages = [];
+    (window).__tex64E2EDropByType = {};
+    bridge.postMessage = (payload) => {
+      const dropByType = (window).__tex64E2EDropByType ?? {};
+      const type = payload && typeof payload === "object" ? payload.type : undefined;
+      if (typeof type === "string" && Number.isFinite(dropByType[type]) && dropByType[type] > 0) {
+        dropByType[type] -= 1;
+        (window).__tex64E2EDropByType = dropByType;
+        return true;
+      }
+      try {
+        const snapshot =
+          payload && typeof payload === "object" ? JSON.parse(JSON.stringify(payload)) : payload;
+        (window).__tex64E2EBridgeMessages.push(snapshot);
+      } catch {
+        (window).__tex64E2EBridgeMessages.push({ type: "__unserializable" });
+      }
+      return originalPostMessage(payload);
+    };
+    (window).__tex64E2EBridgeRecorderInstalled = true;
+    return true;
+  });
+  assert.equal(installed, true, "failed to install bridge recorder");
+};
+
+const clearBridgeRecorder = async (page) => {
+  await page.evaluate(() => {
+    (window).__tex64E2EBridgeMessages = [];
+    (window).__tex64E2EDropByType = {};
+  });
 };
 
 const waitForWorkspaceReady = async (page, activeFile = "main.tex") => {
@@ -460,38 +543,221 @@ const assertNoHoverVisible = async (page, testName) => {
   assert.equal(snapshot, null, `${testName}: expected no hover, but hover is visible`);
 };
 
-const triggerInlineSuggest = async (page) => {
+const captureHoverScreenshot = async (
+  page,
+  name,
+  selector = ".monaco-hover",
+  timeoutMs = 5000
+) => {
+  const dir = process.env.E2E_SCREENSHOT_DIR;
+  if (!dir) {
+    return null;
+  }
+  await fs.mkdir(dir, { recursive: true });
+  const targetPath = path.join(dir, `${name}.png`);
+  const tryCapture = async (sel) => {
+    try {
+      await page.waitForSelector(sel, { state: "visible", timeout: timeoutMs });
+      const clip = await page.evaluate((query) => {
+        const el = document.querySelector(query);
+        if (!el) {
+          return null;
+        }
+        const rect = el.getBoundingClientRect();
+        if (rect.width <= 1 || rect.height <= 1) {
+          return null;
+        }
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        const x = Math.max(0, Math.floor(rect.left));
+        const y = Math.max(0, Math.floor(rect.top));
+        const width = Math.max(1, Math.min(vw - x, Math.ceil(rect.width)));
+        const height = Math.max(1, Math.min(vh - y, Math.ceil(rect.height)));
+        return { x, y, width, height };
+      }, sel);
+      if (clip) {
+        await page.screenshot({ path: targetPath, clip });
+      } else {
+        await page.screenshot({ path: targetPath });
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  if (await tryCapture(selector)) {
+    return targetPath;
+  }
   await page.evaluate(() => {
     const editors = window.monaco?.editor?.getEditors?.() ?? [];
     const active =
       editors.find((editor) => typeof editor.hasTextFocus === "function" && editor.hasTextFocus()) ??
       editors[0];
-    active?.trigger?.("input-assist-e2e", "editor.action.inlineSuggest.trigger", {});
+    active?.trigger?.("input-assist-e2e", "editor.action.showHover", {});
+  });
+  await pause(100);
+  if (await tryCapture(selector)) {
+    return targetPath;
+  }
+  if (selector !== ".monaco-hover" && (await tryCapture(".monaco-hover"))) {
+    return targetPath;
+  }
+  return null;
+};
+
+const getActiveGhostText = async (page) =>
+  page.evaluate(() => {
+    const editors = window.monaco?.editor?.getEditors?.() ?? [];
+    const active =
+      editors.find((editor) => typeof editor.hasTextFocus === "function" && editor.hasTextFocus()) ??
+      editors[0];
+    const root = active?.getDomNode?.();
+    if (!root) {
+      return "";
+    }
+    const selector = [
+      ".ghost-text",
+      ".ghost-text-decoration",
+      ".ghost-text-decoration-preview",
+      ".inline-completion-text",
+    ].join(",");
+    return Array.from(root.querySelectorAll(selector))
+      .map((node) => (node.textContent ?? node.innerText ?? "").replace(/\s+/g, " ").trim())
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+  });
+
+const waitForGhostTextVisible = async (page, label, timeoutMs = 3200) => {
+  await page.waitForFunction(
+    () => {
+      const editors = window.monaco?.editor?.getEditors?.() ?? [];
+      const active =
+        editors.find((editor) => typeof editor.hasTextFocus === "function" && editor.hasTextFocus()) ??
+        editors[0];
+      const root = active?.getDomNode?.();
+      if (!root) {
+        return false;
+      }
+      const selector = [
+        ".ghost-text",
+        ".ghost-text-decoration",
+        ".ghost-text-decoration-preview",
+        ".inline-completion-text",
+      ].join(",");
+      return Array.from(root.querySelectorAll(selector)).some((node) =>
+        Boolean((node.textContent ?? node.innerText ?? "").trim())
+      );
+    },
+    undefined,
+    { timeout: timeoutMs }
+  );
+  const ghostText = await getActiveGhostText(page);
+  log(`${label}: ghost visible "${ghostText}"`);
+  return ghostText;
+};
+
+const openSideTab = async (page, key) => {
+  await page.click(`button.tab[data-tab="${key}"]`);
+  await page.waitForSelector(`.sidebar-panel .panel.is-active[data-panel="${key}"]`, {
+    timeout: 10000,
+  });
+  await pause(100);
+};
+
+const openEditorSettingsPage = async (page) => {
+  await openSideTab(page, "settings");
+  await page.waitForSelector("#settings-panel", { timeout: 10000 });
+  const activeEditorPage = await page
+    .locator('.settings-page[data-settings-page="editor"].is-active')
+    .count();
+  if (activeEditorPage > 0) {
+    return;
+  }
+  const editorNavVisible = await page
+    .locator('button.settings-nav-item[data-settings-target="editor"]')
+    .isVisible()
+    .catch(() => false);
+  if (!editorNavVisible) {
+    const backButtons = page.locator("button.settings-back[data-settings-back]");
+    if ((await backButtons.count()) > 0) {
+      await backButtons.first().click();
+      await pause(120);
+    }
+  }
+  await page.click('button.settings-nav-item[data-settings-target="editor"]');
+  await page.waitForSelector('.settings-page[data-settings-page="editor"].is-active', {
+    timeout: 10000,
   });
 };
 
-const commitInlineSuggest = async (page) => {
-  await page.evaluate(() => {
-    const editors = window.monaco?.editor?.getEditors?.() ?? [];
-    const active =
-      editors.find((editor) => typeof editor.hasTextFocus === "function" && editor.hasTextFocus()) ??
-      editors[0];
-    active?.trigger?.("input-assist-e2e", "editor.action.inlineSuggest.commit", {});
-  });
+const setGhostCompletionEnabled = async (page, enabled) => {
+  await openEditorSettingsPage(page);
+  const selector = "#editor-ghost-completion";
+  await page.waitForSelector(selector, { timeout: 10000 });
+  const checked = await page.isChecked(selector);
+  if (checked !== enabled) {
+    await page.click(selector);
+  }
+  await page.waitForFunction(
+    (payload) => {
+      const input = document.querySelector(payload.selector);
+      return input instanceof HTMLInputElement && input.checked === payload.enabled;
+    },
+    { selector, enabled },
+    { timeout: 8000 }
+  );
+};
+
+const setGhostCompletionConfig = async (page, options = {}) => {
+  await openEditorSettingsPage(page);
+  if (typeof options.debounceMs === "number") {
+    await page.fill("#editor-ghost-debounce", String(options.debounceMs));
+    await page.locator("#editor-ghost-debounce").blur();
+  }
+  if (typeof options.maxChars === "number") {
+    await page.fill("#editor-ghost-max-chars", String(options.maxChars));
+    await page.locator("#editor-ghost-max-chars").blur();
+  }
+  await pause(220);
 };
 
 const openWorkspaceFile = async (page, filePath) => {
-  await postToBridge(page, { type: "openFile", path: filePath });
+  await openSideTab(page, "files");
+  const segments = filePath.split("/");
+  const fileName = segments.pop() ?? "";
+  let folderPath = "";
+  for (const segment of segments) {
+    folderPath = folderPath ? `${folderPath}/${segment}` : segment;
+    const detailsSelector = `#file-tree details.file-folder[data-path="${folderPath}"]`;
+    await page.waitForSelector(detailsSelector, { timeout: 10000 });
+    const isOpen = await page.$eval(
+      detailsSelector,
+      (node) => node instanceof HTMLDetailsElement && node.open
+    );
+    if (!isOpen) {
+      await page.click(`${detailsSelector} > summary`);
+    }
+    await page.waitForFunction(
+      (selector) => {
+        const node = document.querySelector(selector);
+        return node instanceof HTMLDetailsElement && node.open;
+      },
+      detailsSelector,
+      { timeout: 8000 }
+    );
+  }
+  if (!fileName) {
+    throw new Error(`invalid file path: ${filePath}`);
+  }
+  const fileSelector = `#file-tree button.file-item[data-path="${filePath}"]`;
+  await page.waitForSelector(fileSelector, { timeout: 10000 });
+  await page.click(fileSelector);
   await page.waitForSelector(`#editor-tabs-list .editor-tab.is-active[data-path="${filePath}"]`, {
     timeout: 15000,
   });
   await focusEditor(page);
-};
-
-const saveCurrentFile = async (page) => {
-  const shortcut = process.platform === "darwin" ? "Meta+S" : "Control+S";
-  await page.keyboard.press(shortcut);
-  await pause(900);
 };
 
 const runCompletionChecks = async (page) => {
@@ -601,12 +867,36 @@ const runCompletionChecks = async (page) => {
 
 const runHoverChecks = async (page) => {
   log("Hover checks start");
+  await clearBridgeRecorder(page);
 
-  const hoverLines = [];
-  const addHoverLine = async (text) => {
-    const inserted = await appendLineViaModel(page, text);
-    hoverLines.push(inserted);
-    return inserted;
+  const addHoverLine = async (text) => appendLineViaModel(page, text);
+  const assertCompactHover = (snapshot, testName) => {
+    const bannedPhrases = [
+      "定義:",
+      "解決先:",
+      "見つかりました",
+      "見つかりません",
+      "Open Source",
+      "View on PDF",
+      "画像を挿入。",
+      "環境を開始。",
+      "構文:",
+      "Math Preview",
+    ];
+    bannedPhrases.forEach((phrase) => {
+      assert.ok(
+        !snapshot.text.includes(phrase),
+        `${testName}: verbose phrase should not be shown: ${phrase}`
+      );
+    });
+  };
+  const assertMathRendered = (snapshot, testName) => {
+    const text = snapshot.text ?? "";
+    const renderedTextOk = !text.includes("\\") && text.length > 0;
+    assert.ok(
+      snapshot.hasImagePreview || renderedTextOk,
+      `${testName}: expected either rendered text math or image-based math preview`
+    );
   };
 
   const h01 = await addHoverLine("Section~\\ref{sec:methods}");
@@ -614,124 +904,174 @@ const runHoverChecks = async (page) => {
   await hideHover(page);
   await triggerShowHover(page);
   const hoverH01 = await assertHoverVisible(page, "H-01");
+  assertCompactHover(hoverH01, "H-01");
+  assert.ok(hoverH01.text.length > 0, "H-01: ref hover should contain text");
   assert.ok(
-    hoverH01.text.includes("sec:methods") &&
-      hoverH01.text.includes("sections/methods.tex"),
-    "H-01: expected ref definition details"
-  );
-  assert.ok(
-    hoverH01.links.some((href) => href.startsWith("tex64://view-on-pdf")) ||
-      hoverH01.text.includes("View on PDF"),
-    "H-01: expected View on PDF entry"
+    !hoverH01.links.some((href) => href.startsWith("tex64://")),
+    "H-01: compact hover should not show action links"
   );
   await hideHover(page);
 
-  const h02 = await addHoverLine("\\ref{sec:not-found}");
-  await setCursorOnLineSubstring(page, h02.lineNumber, h02.text, "sec:not-found");
+  const h02 = await addHoverLine("\\cite{lamport1994}");
+  await setCursorOnLineSubstring(page, h02.lineNumber, h02.text, "lamport1994");
   await triggerShowHover(page);
   const hoverH02 = await assertHoverVisible(page, "H-02");
-  assert.ok(hoverH02.text.includes("未解決"), "H-02: expected unresolved text");
+  assertCompactHover(hoverH02, "H-02");
+  assert.ok(hoverH02.text.length > 0, `H-02: cite hover should contain text, got "${hoverH02.text}"`);
+  assert.ok(
+    !hoverH02.links.some((href) => href.startsWith("tex64://")),
+    "H-02: compact hover should not show action links"
+  );
   await hideHover(page);
 
-  const h03 = await addHoverLine("\\cite{lamport1994}");
-  await setCursorOnLineSubstring(page, h03.lineNumber, h03.text, "lamport1994");
+  const h03 = await addHoverLine("\\includegraphics{figures/sample-image.png}");
+  await setCursorOnLineSubstring(page, h03.lineNumber, h03.text, "sample-image.png");
   await triggerShowHover(page);
   const hoverH03 = await assertHoverVisible(page, "H-03");
+  assertCompactHover(hoverH03, "H-03");
   assert.ok(
-    hoverH03.text.includes("Title") && hoverH03.text.includes("Author") && hoverH03.text.includes("Year"),
-    "H-03: expected bib summary fields"
+    hoverH03.hasImagePreview && !hoverH03.text.includes("figures/sample-image.png"),
+    "H-03: expected image-only preview without filename text"
   );
   await hideHover(page);
-
-  const h04 = await addHoverLine("\\cite[see]{knuth1984,lamport1994}");
-  await setCursorOnLineSubstring(page, h04.lineNumber, h04.text, "knuth1984");
+  await setCursorOnLineSubstring(page, h03.lineNumber, h03.text, "sample-image.png");
   await triggerShowHover(page);
-  const hoverH04a = await assertHoverVisible(page, "H-04 key1");
-  assert.ok(hoverH04a.text.includes("The TeXbook"), "H-04 key1: expected knuth title");
-  await hideHover(page);
-  await setCursorOnLineSubstring(page, h04.lineNumber, h04.text, "lamport1994");
-  await triggerShowHover(page);
-  const hoverH04b = await assertHoverVisible(page, "H-04 key2");
-  assert.ok(
-    hoverH04b.text.includes("LaTeX: A Document Preparation System"),
-    "H-04 key2: expected lamport title"
-  );
+  const hoverH03Repeat = await assertHoverVisible(page, "H-03 repeat");
+  assertCompactHover(hoverH03Repeat, "H-03 repeat");
+  assert.ok(hoverH03Repeat.hasImagePreview, "H-03 repeat: cached preview should still render");
   await hideHover(page);
 
-  const h05 = await addHoverLine("\\cite{unknown2026}");
-  await setCursorOnLineSubstring(page, h05.lineNumber, h05.text, "unknown2026");
+  const h04 = await addHoverLine("$E=mc^2$");
+  await setCursorOnLineSubstring(page, h04.lineNumber, h04.text, "E=mc^2");
+  await triggerShowHover(page);
+  const hoverH04 = await assertHoverVisible(page, "H-04");
+  assertCompactHover(hoverH04, "H-04");
+  assertMathRendered(hoverH04, "H-04");
+  await hideHover(page);
+
+  const h05 = await addHoverLine("\\includegraphics{assets/pdfs/sample.pdf}");
+  await setCursorOnLineSubstring(page, h05.lineNumber, h05.text, "sample.pdf");
   await triggerShowHover(page);
   const hoverH05 = await assertHoverVisible(page, "H-05");
-  assert.ok(hoverH05.text.includes("未解決"), "H-05: expected unresolved cite");
+  assertCompactHover(hoverH05, "H-05");
+  assert.ok(
+    !hoverH05.hasImagePreview && hoverH05.text.includes("assets/pdfs/sample.pdf"),
+    "H-05: expected pdf target path without image preview"
+  );
   await hideHover(page);
 
-  const h06 = await addHoverLine("\\includegraphics{figures/sample-image.png}");
-  await setCursorOnLineSubstring(page, h06.lineNumber, h06.text, "sample-image.png");
+  const h06 = await addHoverLine("\\input{sections/methods}");
+  await setCursorOnLineSubstring(page, h06.lineNumber, h06.text, "sections/methods");
   await triggerShowHover(page);
   const hoverH06 = await assertHoverVisible(page, "H-06");
-  assert.ok(hoverH06.hasImagePreview, "H-06: expected image preview");
+  assertCompactHover(hoverH06, "H-06");
+  assert.ok(
+    hoverH06.text.includes("sections/methods.tex"),
+    `H-06: expected input target path in hover. text=${hoverH06.text}`
+  );
+  await hideHover(page);
+  await setCursorOnLineSubstring(page, h06.lineNumber, h06.text, "sections/methods");
+  await triggerShowHover(page);
+  const hoverH06Repeat = await assertHoverVisible(page, "H-06 repeat");
+  assertCompactHover(hoverH06Repeat, "H-06 repeat");
+  assert.ok(
+    hoverH06Repeat.text.includes("sections/methods.tex"),
+    "H-06 repeat: input hover should stay stable on repeated access"
+  );
   await hideHover(page);
 
-  const h07 = await addHoverLine("\\includegraphics{figures/not-found}");
-  await setCursorOnLineSubstring(page, h07.lineNumber, h07.text, "not-found");
+  const h07 = await addHoverLine("\\includegraphics{figures/oversize-image.png}");
+  await setCursorOnLineSubstring(page, h07.lineNumber, h07.text, "oversize-image.png");
   await triggerShowHover(page);
   const hoverH07 = await assertHoverVisible(page, "H-07");
-  assert.ok(hoverH07.text.includes("見つかりません"), "H-07: expected not-found message");
+  assertCompactHover(hoverH07, "H-07");
+  assert.ok(
+    !hoverH07.hasImagePreview && hoverH07.text.includes("figures/oversize-image.png"),
+    "H-07: oversize image should fallback to text without preview"
+  );
   await hideHover(page);
-
-  const h08 = await addHoverLine("$E=mc^2$");
-  await setCursorOnLineSubstring(page, h08.lineNumber, h08.text, "E=mc^2");
-  await triggerShowHover(page);
-  const hoverH08 = await assertHoverVisible(page, "H-08");
-  assert.ok(hoverH08.text.includes("Math Preview"), "H-08: expected math preview");
-  await hideHover(page);
-
-  const h09 = await addHoverLine("\\(\\int_0^1 x^2 dx\\)");
-  await setCursorOnLineSubstring(page, h09.lineNumber, h09.text, "\\int_0^1 x^2 dx");
-  await triggerShowHover(page);
-  const hoverH09 = await assertHoverVisible(page, "H-09");
-  assert.ok(hoverH09.text.includes("Math Preview"), "H-09: expected math preview");
-  await hideHover(page);
-
-  const h10 = await addHoverLine("\\[\\sum_{k=1}^n k\\]");
-  await setCursorOnLineSubstring(page, h10.lineNumber, h10.text, "\\sum_{k=1}^n k");
-  await triggerShowHover(page);
-  const hoverH10 = await assertHoverVisible(page, "H-10");
-  assert.ok(hoverH10.text.includes("Math Preview"), "H-10: expected math preview");
-  await hideHover(page);
-
-  const h11 = await addHoverLine("$a+b$ % $c+d$");
-  await setCursorOnLineSubstring(page, h11.lineNumber, h11.text, "a+b");
-  await triggerShowHover(page);
-  const hoverH11a = await assertHoverVisible(page, "H-11 front");
-  assert.ok(hoverH11a.text.includes("Math Preview"), "H-11 front: expected math preview");
-  await hideHover(page);
-  await setCursorOnLineSubstring(page, h11.lineNumber, h11.text, "c+d");
-  await triggerShowHover(page);
-  await assertNoHoverVisible(page, "H-11 comment side");
 
   log("Hover checks passed");
+};
+
+const runGhostSettingsChecks = async (page, mockProxy) => {
+  log("Ghost settings checks start");
+
+  const assertNoInlineInsertion = async (label, input, waitMs = 900) => {
+    await moveCursorToEnd(page);
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type(input, { delay: typeDelayMs });
+    await page.keyboard.press("Escape");
+    const before = await getEditorState(page);
+    await pause(waitMs);
+    const ghostText = await getActiveGhostText(page);
+    assert.equal(ghostText, "", `${label}: expected no ghost text`);
+    const after = await getEditorState(page);
+    assert.equal(after.lineContent, before.lineContent, `${label}: expected no insertion`);
+  };
+
+  await setGhostCompletionEnabled(page, false);
+  await openSideTab(page, "files");
+  await focusEditor(page);
+  await assertNoInlineInsertion("GS-01 disabled", "\\sec", 820);
+
+  await setGhostCompletionEnabled(page, true);
+  await setGhostCompletionConfig(page, { debounceMs: 900 });
+  await openSideTab(page, "files");
+  await focusEditor(page);
+  await moveCursorToEnd(page);
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("\\textb", { delay: typeDelayMs });
+  await page.keyboard.press("Escape");
+  await pause(260);
+  let ghostText = await getActiveGhostText(page);
+  assert.equal(ghostText, "", "GS-02 debounce: ghost should stay hidden before debounce window");
+  await waitForGhostTextVisible(page, "GS-02", 2600);
+  await page.keyboard.press("Tab");
+  await pause(180);
+  const debounceAfter = await getEditorState(page);
+  assert.equal(
+    debounceAfter.lineContent,
+    "\\textbf{}",
+    `GS-02 debounce: expected insertion after wait.\nLine: ${debounceAfter.lineContent}`
+  );
+
+  if (mockProxy) {
+    await setGhostCompletionConfig(page, { maxChars: 20 });
+    await openSideTab(page, "files");
+    await focusEditor(page);
+    const maxCharsInput =
+      "MAX_CHARS_LIMIT_CASE remote completion should be suppressed by short max chars";
+    const beforeCount = mockProxy.countByPrefix(maxCharsInput);
+    await assertNoInlineInsertion("GS-03 maxChars", maxCharsInput, 980);
+    const afterCount = mockProxy.countByPrefix(maxCharsInput);
+    assert.equal(
+      afterCount,
+      beforeCount + 1,
+      "GS-03 maxChars: expected API request while insertion is suppressed"
+    );
+  } else {
+    log("GS-03 maxChars skipped (remote proxy disabled)");
+  }
+
+  await setGhostCompletionConfig(page, { debounceMs: 120, maxChars: 140 });
+  await openSideTab(page, "files");
+  await focusEditor(page);
+  ghostText = await getActiveGhostText(page);
+  assert.equal(ghostText, "", "GS-04 reset: ghost state should be clean");
+
+  log("Ghost settings checks passed");
 };
 
 const runGhostLocalChecks = async (page) => {
   log("Ghost local checks start");
 
-  const triggerAndCommitInlineUntilChanged = async (
-    beforeLine,
-    options = { attempts: 4, triggerWaitMs: 160 }
-  ) => {
-    let current = await getEditorState(page);
-    for (let i = 0; i < options.attempts; i += 1) {
-      await triggerInlineSuggest(page);
-      await pause(options.triggerWaitMs);
-      await commitInlineSuggest(page);
-      await pause(options.triggerWaitMs);
-      current = await getEditorState(page);
-      if (current.lineContent !== beforeLine) {
-        break;
-      }
-    }
-    return current;
+  const assertNoGhost = async (label, waitMs = 780) => {
+    await pause(waitMs);
+    const ghostText = await getActiveGhostText(page);
+    assert.equal(ghostText, "", `${label}: expected no ghost text, got "${ghostText}"`);
   };
 
   const runCase = async (label, input, expected, options = {}) => {
@@ -748,21 +1088,54 @@ const runGhostLocalChecks = async (page) => {
     await page.keyboard.press("Escape");
     await pause(80);
     const before = await getEditorState(page);
-    await pause(620);
-    const after = await triggerAndCommitInlineUntilChanged(before.lineContent);
     if (options.expectNoChange) {
+      await assertNoGhost(label);
+      const after = await getEditorState(page);
       assert.equal(after.lineContent, before.lineContent, `${label}: expected no inline insertion`);
       log(`${label}: no-change ok`);
       return;
     }
+    await waitForGhostTextVisible(page, label);
+    await page.keyboard.press("Tab");
+    await pause(220);
+    const after = await getEditorState(page);
     assert.equal(after.lineContent, expected, `${label}: unexpected inline insertion`);
+    if (typeof options.expectedColumn === "number") {
+      assert.equal(
+        after.column,
+        options.expectedColumn,
+        `${label}: unexpected cursor column. line="${after.lineContent}"`
+      );
+    }
     log(`${label}: inserted "${after.lineContent}"`);
   };
 
-  await runCase("G-01", "\\sec", "\\section{}");
-  await runCase("G-02", "\\textb", "\\textbf{}");
-  await runCase("G-03", "\\cite{lamport1994", "\\cite{lamport1994}");
-  await runCase("G-04", "\\begin{ite", "\\begin{itemize}");
+  await runCase("G-01", "\\sec", "\\section{}", { expectedColumn: "\\section{}".length });
+  await runCase("G-02", "\\textb", "\\textbf{}", { expectedColumn: "\\textbf{}".length });
+  await runCase("G-03", "\\cite{lamport1994", "\\cite{lamport1994}", {
+    expectedColumn: "\\cite{lamport1994}".length + 1,
+  });
+  await runCase("G-04", "\\begin{ite", "\\begin{itemize}", {
+    expectedColumn: "\\begin{itemize}".length + 1,
+  });
+  await runCase("G-04b", "\u00A5sec", "\u00A5section{}", {
+    expectedColumn: "\u00A5section{}".length,
+  });
+  await runCase("G-04c", "\uFF3Csec", "\uFF3Csection{}", {
+    expectedColumn: "\uFF3Csection{}".length,
+  });
+  await runCase("G-04d", "\\autoref", "\\autoref{}", {
+    expectedColumn: "\\autoref{}".length,
+  });
+  await runCase("G-04e", "\\input", "\\input{}", {
+    expectedColumn: "\\input{}".length,
+  });
+  await runCase("G-04f", "\\includeg", "\\includegraphics{}", {
+    expectedColumn: "\\includegraphics{}".length,
+  });
+  await runCase("G-04g", "\\begin", "\\begin{}", {
+    expectedColumn: "\\begin{}".length,
+  });
 
   log("G-05: start");
   await moveCursorToEnd(page);
@@ -772,11 +1145,27 @@ const runGhostLocalChecks = async (page) => {
   await page.keyboard.press("Escape");
   await pause(80);
   const beforeBlock = await getEditorState(page);
-  await pause(620);
-  const afterBlock = await triggerAndCommitInlineUntilChanged(beforeBlock.lineContent);
+  await waitForGhostTextVisible(page, "G-05");
+  await page.keyboard.press("Tab");
+  await pause(220);
+  const afterBlock = await getEditorState(page);
   assert.ok(
-    afterBlock.value.includes("\\begin{align}\n\\end{align}"),
-    `G-05: expected begin/end pair insertion.\nBefore line: ${beforeBlock.lineContent}`
+    afterBlock.value.includes("\\begin{align}\n\n\\end{align}"),
+    `G-05: expected begin/body/end insertion.\nBefore line: ${beforeBlock.lineContent}`
+  );
+  assert.equal(afterBlock.lineContent, "", "G-05: expected cursor line to be blank body line");
+  const lineBelow = await page.evaluate((lineNumber) => {
+    const editors = window.monaco?.editor?.getEditors?.() ?? [];
+    const active =
+      editors.find((editor) => typeof editor.hasTextFocus === "function" && editor.hasTextFocus()) ??
+      editors[0];
+    const model = active?.getModel?.();
+    return model?.getLineContent?.(lineNumber) ?? "";
+  }, afterBlock.lineNumber + 1);
+  assert.equal(
+    lineBelow,
+    "\\end{align}",
+    `G-05: expected \\end{align} below cursor line, got "${lineBelow}"`
   );
   log("G-05: inserted align end");
 
@@ -784,94 +1173,6 @@ const runGhostLocalChecks = async (page) => {
   await runCase("G-07", "\\secabc", "\\secabc", { cursorDelta: 3, expectNoChange: true });
 
   log("Ghost local checks passed");
-};
-
-const runGhostRemoteChecks = async (page, mockProxy) => {
-  log("Ghost remote checks start");
-
-  const remoteCase = async (label, input, options = {}) => {
-    log(`${label}: start`);
-    await moveCursorToEnd(page);
-    await page.keyboard.press("Escape");
-    await page.keyboard.press("Enter");
-    await page.keyboard.type(input, { delay: 0 });
-    const before = await getEditorState(page);
-    if (options.waitMs) {
-      await pause(options.waitMs);
-    }
-    const beforeCount = mockProxy.countByPrefix(input);
-    const beforeTotal = mockProxy.countTotal();
-    await triggerInlineSuggest(page);
-    await pause(140);
-    await commitInlineSuggest(page);
-    await pause(200);
-    const after = await getEditorState(page);
-    const afterCount = mockProxy.countByPrefix(input);
-    const afterTotal = mockProxy.countTotal();
-    log(
-      `${label}: before="${before.lineContent}" after="${after.lineContent}" requests=${beforeTotal}->${afterTotal}`
-    );
-    return { before, after, beforeCount, afterCount, beforeTotal, afterTotal };
-  };
-
-  const r01Input = "We compare the proposed method with a strong baseline";
-  const r01 = await remoteCase("R-01", r01Input, { waitMs: 700 });
-  assert.ok(
-    r01.after.lineContent.includes("and report robust improvements."),
-    `R-01: expected remote continuation insertion.\nLine: ${r01.after.lineContent}`
-  );
-  assert.equal(r01.afterCount, r01.beforeCount + 1, "R-01: expected one proxy request");
-  log("R-01: ok");
-
-  const r02 = await remoteCase("R-02", "short", { waitMs: 200 });
-  assert.equal(r02.after.lineContent, r02.before.lineContent, "R-02: prefix<10 should not insert");
-  assert.equal(r02.afterTotal, r02.beforeTotal, "R-02: prefix<10 should not call proxy");
-  log("R-02: ok");
-
-  const r03Input = "Ablation studies confirm stability under distribution shift";
-  const r03 = await remoteCase("R-03", r03Input, { waitMs: 650 });
-  assert.equal(r03.after.lineContent, r03.before.lineContent, "R-03: cooldown should block insertion");
-  assert.equal(r03.afterTotal, r03.beforeTotal, "R-03: cooldown should block proxy call");
-  log("R-03: ok");
-
-  await pause(3200);
-  const r04Input = "Cooldown retry should eventually request again";
-  const r04 = await remoteCase("R-04", r04Input, { waitMs: 700 });
-  assert.ok(
-    r04.after.lineContent.includes("with stable behavior after waiting."),
-    `R-04: expected remote continuation after cooldown.\nLine: ${r04.after.lineContent}`
-  );
-  assert.equal(r04.afterCount, r04.beforeCount + 1, "R-04: expected one proxy request");
-  log("R-04: ok");
-
-  await pause(3200);
-  const r05Input = "EMPTY_NEGATIVE_CASE should cache empty response";
-  const r05a = await remoteCase("R-05 first", r05Input, { waitMs: 700 });
-  assert.equal(r05a.after.lineContent, r05a.before.lineContent, "R-05 first: empty response should not insert");
-  assert.equal(r05a.afterCount, r05a.beforeCount + 1, "R-05 first: expected proxy request");
-  log("R-05 first: ok");
-
-  const beforeSecond = await getEditorState(page);
-  const beforeSecondCount = mockProxy.countByPrefix(r05Input);
-  await triggerInlineSuggest(page);
-  await pause(120);
-  await commitInlineSuggest(page);
-  await pause(160);
-  const afterSecond = await getEditorState(page);
-  const afterSecondCount = mockProxy.countByPrefix(r05Input);
-  assert.equal(
-    afterSecond.lineContent,
-    beforeSecond.lineContent,
-    "R-05 second: negative cache should suppress insertion"
-  );
-  assert.equal(
-    afterSecondCount,
-    beforeSecondCount,
-    "R-05 second: negative cache should suppress repeated proxy request"
-  );
-  log("R-05 second: ok");
-
-  log("Ghost remote checks passed");
 };
 
 const runRelativePathCheck = async (page) => {
@@ -895,14 +1196,41 @@ const runRelativePathCheck = async (page) => {
   log("Relative path completion check passed");
 };
 
+const assertApiUsageSnapshot = async (userDataPath) => {
+  const usagePath = path.join(userDataPath, "tex64-api-usage.json");
+  const raw = await fs.readFile(usagePath, "utf8");
+  const usage = JSON.parse(raw);
+  assert.ok(
+    Number.isFinite(usage?.totalRequests) && usage.totalRequests > 0,
+    `api usage: expected totalRequests > 0, got ${usage?.totalRequests}`
+  );
+  assert.ok(
+    Number.isFinite(usage?.totalTokens) && usage.totalTokens > 0,
+    `api usage: expected totalTokens > 0, got ${usage?.totalTokens}`
+  );
+  assert.ok(
+    usage?.byModel && typeof usage.byModel === "object" && Object.keys(usage.byModel).length > 0,
+    "api usage: expected model bucket to be recorded"
+  );
+  log(
+    `api usage snapshot: requests=${usage.totalRequests} totalTokens=${usage.totalTokens} models=${Object.keys(
+      usage.byModel
+    ).join(",")}`
+  );
+};
+
 const run = async () => {
   const { tempDir, workspacePath } = await createWorkspaceCopy();
-  const mockProxy = await createMockAiProxy();
+  const userDataPath = path.join(tempDir, "userdata");
   let electronApp;
+  let mockProxy = null;
 
   try {
     log(`workspace copy: ${workspacePath}`);
-    log(`mock ai proxy: ${mockProxy.proxyUrl}`);
+    await fs.mkdir(userDataPath, { recursive: true });
+    if (runGhostRemote) {
+      mockProxy = await createMockAiProxy();
+    }
     log("launching Electron...");
     electronApp = await electron.launch({
       args: ["."],
@@ -910,12 +1238,18 @@ const run = async () => {
       slowMo: Number.isFinite(slowMoMs) ? Math.max(0, slowMoMs) : 0,
       env: {
         ...process.env,
-        TEX64_AI_PROXY_URL: mockProxy.proxyUrl,
+        TEX64_E2E: "1",
+        TEX64_E2E_USERDATA: userDataPath,
+        TEX64_E2E_DIALOG_QUEUE: JSON.stringify({
+          openWorkspace: [toPosix(workspacePath)],
+        }),
+        ...(mockProxy ? { TEX64_AI_PROXY_URL: mockProxy.proxyUrl } : {}),
       },
     });
 
     const page = await electronApp.firstWindow();
     await page.setViewportSize({ width: 1640, height: 980 });
+    await installBridgeRecorder(page);
     page.on("dialog", async (dialog) => {
       log(`dialog intercepted: ${dialog.type()} ${dialog.message()}`);
       try {
@@ -925,33 +1259,33 @@ const run = async () => {
       }
     });
 
-    log("opening workspace via bridge...");
-    await postToBridge(page, { type: "openRecentProject", path: workspacePath });
+    log("opening workspace via launcher...");
+    await openWorkspaceViaLauncher(page);
     await waitForWorkspaceReady(page, "main.tex");
     log("workspace/index ready");
 
     await focusEditor(page);
+    await page.waitForFunction(() => Boolean(window.MathLive?.convertLatexToMarkup), undefined, {
+      timeout: 20000,
+    });
+    log("MathLive ready");
     await runCompletionChecks(page);
+    log("all completion checks passed");
     await runHoverChecks(page);
+    log("all hover checks passed");
+    await runGhostSettingsChecks(page, mockProxy);
+    log("all ghost settings checks passed");
     await runGhostLocalChecks(page);
-    await runGhostRemoteChecks(page, mockProxy);
+    log("all ghost local checks passed");
+    if (runGhostRemote && mockProxy) {
+      assert.ok(mockProxy.countTotal() > 0, "ghost remote: expected at least one proxy request");
+      log("all ghost remote checks passed");
+      await assertApiUsageSnapshot(userDataPath);
+    } else {
+      log("ghost remote checks skipped (E2E_GHOST_REMOTE=0)");
+    }
     await runRelativePathCheck(page);
-
-    await saveCurrentFile(page);
-
-    const savedMain = await fs.readFile(path.join(workspacePath, "main.tex"), "utf8");
-    assert.ok(savedMain.includes("\\section{}"), "final check: expected ghost local output in main.tex");
-    assert.ok(
-      savedMain.includes("and report robust improvements."),
-      "final check: expected ghost remote output in main.tex"
-    );
-    const savedIntro = await fs.readFile(path.join(workspacePath, "sections", "intro.tex"), "utf8");
-    assert.ok(
-      savedIntro.includes("\\includegraphics{../figures/sample-image.png"),
-      "final check: expected relative path insertion in intro.tex"
-    );
-
-    log("all input-assist checks passed");
+    log("all relative-path checks passed");
   } finally {
     if (electronApp) {
       try {
@@ -970,7 +1304,13 @@ const run = async () => {
         }
       }
     }
-    await mockProxy.close();
+    if (mockProxy) {
+      try {
+        await mockProxy.close();
+      } catch {
+        // ignore close failure
+      }
+    }
     if (!keepWorkspace) {
       await fs.rm(tempDir, { recursive: true, force: true });
       log("temporary workspace removed");

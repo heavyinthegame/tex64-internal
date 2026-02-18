@@ -29,10 +29,15 @@ body {
   height: 100%;
 }
 
+body.is-embedded .pdf-app {
+  grid-template-rows: 1fr;
+}
+
 .pdf-body {
   display: flex;
   min-height: 0;
   overflow: hidden;
+  position: relative;
 }
 
 .pdf-sidebar {
@@ -141,6 +146,10 @@ body {
   flex-wrap: wrap;
 }
 
+body.is-embedded .pdf-toolbar {
+  display: none;
+}
+
 .pdf-toolbar-group {
   display: inline-flex;
   align-items: center;
@@ -214,12 +223,23 @@ body {
 }
 
 .pdf-scroll {
-  flex: 1 1 auto;
-  min-width: 0;
-  min-height: 0;
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 260px;
   overflow: auto;
   background: radial-gradient(circle at top, rgba(92, 156, 255, 0.08), transparent 60%);
   padding: 16px 18px 40px;
+}
+
+body.is-embedded .pdf-scroll {
+  padding: 0;
+  background: #0f1117;
+}
+
+.pdf-sidebar.is-hidden ~ .pdf-scroll {
+  left: 0;
 }
 
 .pdf-pages {
@@ -264,4 +284,36 @@ body {
 
 body.is-inverted .page {
   filter: invert(1) hue-rotate(180deg);
+}
+
+.pdf-context-menu {
+  position: fixed;
+  z-index: 50;
+  min-width: 150px;
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid var(--panel-border);
+  background: rgba(29, 35, 43, 0.96);
+  backdrop-filter: blur(4px);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+  user-select: none;
+}
+
+.pdf-context-menu-item {
+  width: 100%;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.pdf-context-menu-item:hover,
+.pdf-context-menu-item:focus-visible {
+  border-color: rgba(92, 156, 255, 0.5);
+  background: rgba(92, 156, 255, 0.16);
+  outline: none;
 }

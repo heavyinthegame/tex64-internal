@@ -10,17 +10,30 @@ const LATEX_REF_COMMANDS = [
   "ref",
   "eqref",
   "pageref",
+  "vref",
+  "Vref",
+  "vpageref",
+  "Vpageref",
   "autoref",
   "cref",
   "Cref",
+  "nameref",
+  "Nameref",
   "namecref",
+  "Namecref",
   "labelcref",
+  "Labelcref",
   "cpageref",
   "Cpageref",
+  "fullref",
+  "fref",
+  "Fref",
 ];
 const LATEX_REF_RANGE_COMMANDS = [
   "crefrange",
   "Crefrange",
+  "vrefrange",
+  "Vrefrange",
   "cpagerefrange",
   "Cpagerefrange",
 ];
@@ -28,15 +41,21 @@ const LATEX_CITE_COMMANDS = [
   "cite",
   "citet",
   "citep",
+  "citealt",
   "citealp",
+  "citetext",
   "citeauthor",
+  "citefullauthor",
   "citeyear",
   "citeyearpar",
   "Cite",
   "Citet",
   "Citep",
+  "Citealt",
   "Citealp",
+  "Citetext",
   "Citeauthor",
+  "Citefullauthor",
   "Citeyear",
   "Citeyearpar",
   "nocite",
@@ -48,10 +67,30 @@ const LATEX_CITE_COMMANDS = [
   "Footcite",
   "autocite",
   "Autocite",
+  "autocites",
+  "Autocites",
   "smartcite",
   "Smartcite",
+  "smartcites",
+  "Smartcites",
   "supercite",
   "Supercite",
+  "supercites",
+  "Supercites",
+  "footfullcite",
+  "Footfullcite",
+  "notecite",
+  "Notecite",
+  "pnotecite",
+  "Pnotecite",
+  "fnotecite",
+  "Fnotecite",
+  "volcite",
+  "Volcite",
+  "pvolcite",
+  "Pvolcite",
+  "tvolcite",
+  "Tvolcite",
   "cites",
   "Cites",
   "parencites",
@@ -98,20 +137,22 @@ const replaceKeyInList = (value, from, to) => {
   return { text: updated.join(","), count };
 };
 
-const LABEL_PATTERN = /(\\label\*?)\{([^}]*)\}/g;
+const LABEL_PATTERN = /(\\label\*?)\s*\{([^}]*)\}/g;
 const REF_PATTERN = new RegExp(
-  `(\\\\(?:${LATEX_REF_COMMANDS.join("|")})\\*?)\\{([^}]*)\\}`,
+  `(\\\\(?:${LATEX_REF_COMMANDS.join("|")})\\*?)\\s*\\{([^}]*)\\}`,
   "g"
 );
 const REF_RANGE_PATTERN = new RegExp(
-  `(\\\\(?:${LATEX_REF_RANGE_COMMANDS.join("|")})\\*?)\\{([^}]*)\\}\\{([^}]*)\\}`,
+  `(\\\\(?:${LATEX_REF_RANGE_COMMANDS.join("|")})\\*?)\\s*\\{([^}]*)\\}\\s*\\{([^}]*)\\}`,
   "g"
 );
 const CITE_PATTERN = new RegExp(
-  `(\\\\(?:${LATEX_CITE_COMMANDS.join("|")})\\*?(?:\\[[^\\]]*\\])*)\\{([^}]*)\\}`,
+  `(\\\\(?:${LATEX_CITE_COMMANDS.join("|")})\\*?(?:\\s*\\[[^\\]]*\\])*)\\s*\\{([^}]*)\\}`,
   "g"
 );
-const BIBITEM_PATTERN = /(\\bibitem\*?(?:\[[^\]]*\])?)\{([^}]*)\}/g;
+const BIBITEM_PATTERN = /(\\bibitem\*?(?:\s*\[[^\]]*\])?)\s*\{([^}]*)\}/g;
+const BIB_REFERENCE_FIELD_PATTERN =
+  /^(\s*(?:crossref|xref|xdata|entryset|related)\s*=\s*[{"])([^}"\r\n]*)([}"])/gim;
 
 const renameLatexInText = (content, { from, to, renameLabels, renameCites }) => {
   let totalCount = 0;
@@ -171,16 +212,27 @@ const renameLatexInText = (content, { from, to, renameLabels, renameCites }) => 
 };
 
 const renameBibEntryKey = (content, from, to) => {
-  const pattern = new RegExp(
+  const entryPattern = new RegExp(
     `(^\\s*@\\w+\\s*\\{\\s*)${escapeRegex(from)}(\\s*,)`,
     "gmi"
   );
-  let count = 0;
-  const text = content.replace(pattern, (_match, prefix, suffix) => {
-    count += 1;
+  let totalCount = 0;
+  const renamedEntries = content.replace(entryPattern, (_match, prefix, suffix) => {
+    totalCount += 1;
     return `${prefix}${to}${suffix}`;
   });
-  return { text, count };
+  const text = renamedEntries.replace(
+    BIB_REFERENCE_FIELD_PATTERN,
+    (match, prefix, keys, suffix) => {
+      const result = replaceKeyInList(keys, from, to);
+      if (result.count === 0) {
+        return match;
+      }
+      totalCount += result.count;
+      return `${prefix}${result.text}${suffix}`;
+    }
+  );
+  return { text, count: totalCount };
 };
 
 module.exports = {

@@ -1,12 +1,48 @@
 export const initSearchUi = (context, deps) => {
     const { searchInput, searchButton, searchResults, searchRenameFrom, searchRenameTo, searchRenameLabel, searchRenameCite, searchRenameRun, searchRenameOpenAi, searchRenameStatus, } = context.dom;
     let searchResultsData = [];
-    let searchMessage = "検索結果はここに表示します。";
+    const defaultSearchMessage = "";
+    let searchMessage = defaultSearchMessage;
     let lastSearchQuery = "";
+    let currentSearchRequestId = 0;
     let renameBusy = false;
-    const defaultRenameMessage = "ラベル名や引用キーを入力してください。";
+    const defaultRenameMessage = "";
     let renameStatusMessage = defaultRenameMessage;
     let renameStatusState = "idle";
+    const renderPreviewWithHighlight = (target, result, query) => {
+        var _a;
+        const text = (_a = result.preview) !== null && _a !== void 0 ? _a : "";
+        if (!text) {
+            target.textContent = "";
+            return;
+        }
+        let start = typeof result.matchStart === "number" && Number.isFinite(result.matchStart)
+            ? Math.max(0, Math.floor(result.matchStart))
+            : -1;
+        const fallbackQuery = query.trim().toLowerCase();
+        if (start < 0 && fallbackQuery) {
+            start = text.toLowerCase().indexOf(fallbackQuery);
+        }
+        let length = typeof result.matchLength === "number" && Number.isFinite(result.matchLength)
+            ? Math.max(0, Math.floor(result.matchLength))
+            : fallbackQuery.length;
+        if (start < 0 || length <= 0 || start >= text.length) {
+            target.textContent = text;
+            return;
+        }
+        const end = Math.min(text.length, start + length);
+        target.textContent = "";
+        if (start > 0) {
+            target.appendChild(document.createTextNode(text.slice(0, start)));
+        }
+        const highlight = document.createElement("mark");
+        highlight.className = "search-match-highlight";
+        highlight.textContent = text.slice(start, end);
+        target.appendChild(highlight);
+        if (end < text.length) {
+            target.appendChild(document.createTextNode(text.slice(end)));
+        }
+    };
     const renderSearchResults = () => {
         if (!(searchResults instanceof HTMLElement)) {
             return;
@@ -44,8 +80,13 @@ export const initSearchUi = (context, deps) => {
             const name = document.createElement("span");
             name.textContent = path;
             name.style.marginLeft = "6px";
+            name.style.flex = "1 1 auto";
+            const count = document.createElement("span");
+            count.className = "search-file-count";
+            count.textContent = `${groupList.length}件`;
             header.appendChild(icon);
             header.appendChild(name);
+            header.appendChild(count);
             groupDiv.appendChild(header);
             groupList.forEach((result) => {
                 const item = document.createElement("button");
@@ -56,7 +97,7 @@ export const initSearchUi = (context, deps) => {
                 line.textContent = `行 ${result.line}`;
                 const preview = document.createElement("div");
                 preview.className = "search-match-preview";
-                preview.textContent = result.preview;
+                renderPreviewWithHighlight(preview, result, lastSearchQuery);
                 item.appendChild(line);
                 item.appendChild(preview);
                 item.addEventListener("click", () => {
@@ -92,7 +133,17 @@ export const initSearchUi = (context, deps) => {
         }
     };
     const handleSearchUpdate = (payload) => {
-        lastSearchQuery = payload.query;
+        const incomingRequestId = typeof payload.requestId === "number" && Number.isFinite(payload.requestId)
+            ? Math.floor(payload.requestId)
+            : null;
+        if (incomingRequestId !== null && incomingRequestId !== currentSearchRequestId) {
+            return;
+        }
+        const incomingQuery = typeof payload.query === "string" ? payload.query.trim() : "";
+        if (incomingRequestId === null && incomingQuery !== lastSearchQuery) {
+            return;
+        }
+        lastSearchQuery = incomingQuery;
         searchResultsData = Array.isArray(payload.results) ? payload.results : [];
         if (payload.message) {
             searchMessage = payload.message;
@@ -100,7 +151,7 @@ export const initSearchUi = (context, deps) => {
         else if (searchResultsData.length === 0) {
             searchMessage =
                 lastSearchQuery.trim().length === 0
-                    ? "検索語を入力してください。"
+                    ? ""
                     : "一致する結果がありません。";
         }
         renderSearchResults();
@@ -151,7 +202,7 @@ export const initSearchUi = (context, deps) => {
         }
         const { from, to, kinds } = validation;
         setRenameBusy(true);
-        setRenameStatus("提案を作成中です...（未保存がある場合は保存してください）", "busy");
+        setRenameStatus("提案を作成中...", "busy");
         const context = deps.buildRenameContext ? deps.buildRenameContext() : undefined;
         deps.postToNative({
             type: "search:renameSymbol",
@@ -180,27 +231,35 @@ export const initSearchUi = (context, deps) => {
         setRenameStatus(message, "ok");
     };
     const requestSearch = (query) => {
-        lastSearchQuery = query;
+        const normalizedQuery = query.trim();
+        lastSearchQuery = normalizedQuery;
+        currentSearchRequestId += 1;
+        const requestId = currentSearchRequestId;
         if (!deps.getWorkspaceRootKey()) {
             searchResultsData = [];
             searchMessage = "ワークスペースが未選択です。";
             renderSearchResults();
             return;
         }
-        if (query.trim().length === 0) {
+        if (normalizedQuery.length === 0) {
             searchResultsData = [];
-            searchMessage = "検索語を入力してください。";
+            searchMessage = "";
             renderSearchResults();
             return;
         }
         searchResultsData = [];
         searchMessage = "検索中...";
         renderSearchResults();
-        deps.postToNative({ type: "search", query });
+        deps.postToNative({
+            type: "search",
+            query: normalizedQuery,
+            requestId,
+        });
     };
     const reset = (message) => {
+        currentSearchRequestId += 1;
         searchResultsData = [];
-        searchMessage = message !== null && message !== void 0 ? message : "検索結果はここに表示します。";
+        searchMessage = message !== null && message !== void 0 ? message : defaultSearchMessage;
         renderSearchResults();
     };
     if (searchButton instanceof HTMLButtonElement) {

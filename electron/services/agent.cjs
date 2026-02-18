@@ -53,8 +53,12 @@ const TOOL_STATUS_LABELS = {
   propose_rename: "変更案作成中",
   propose_create_directory: "変更案作成中",
 };
+const MAX_USER_INLINE_DATA_BYTES = 5 * 1024 * 1024;
+const MAX_USER_INLINE_DATA_TOTAL_BYTES = 8 * 1024 * 1024;
+const MAX_APPLY_UNDO_ENTRIES = 40;
+const BASE64_DATA_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 
-const buildSystemPrompt = (context, rootPath, policy) => {
+const buildSystemPrompt = (context, rootPath, policy, options) => {
   const activeFilePath = context?.activeFilePath ?? "";
   const activeFileContent =
     typeof context?.activeFileContent === "string" ? context.activeFileContent : "";
@@ -79,10 +83,28 @@ const buildSystemPrompt = (context, rootPath, policy) => {
   const allowedLabel = allowedList.length > 0 ? allowedList.join(" / ") : "";
   const fileSizeLabel = formatByteLimit(policy?.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES);
   const readFilesLimit = policy?.maxReadFiles ?? DEFAULT_MAX_READ_FILES;
-  const agentMode = context?.agentMode === "paper" ? "paper" : "general";
+  const contextControls =
+    context?.contextControls && typeof context.contextControls === "object"
+      ? context.contextControls
+      : null;
+  const includeSelection =
+    contextControls && typeof contextControls.includeSelection === "boolean"
+      ? contextControls.includeSelection
+      : false;
+  const includeOpenFiles =
+    contextControls && typeof contextControls.includeOpenFiles === "boolean"
+      ? contextControls.includeOpenFiles
+      : true;
+  const includeIssues =
+    contextControls && typeof contextControls.includeIssues === "boolean"
+      ? contextControls.includeIssues
+      : true;
+  const explicitContextPaths = Array.isArray(context?.explicitContextPaths)
+    ? context.explicitContextPaths.filter((entry) => typeof entry === "string" && entry.trim())
+    : [];
 
   const lines = [
-    "あなたは tex64 に統合されたAIアシスタントです。",
+    "あなたは TeX64 に統合されたAIアシスタントです。",
     "LaTeXプロジェクトの編集を支援します。",
     "",
     "## 利用可能なツール",
@@ -104,10 +126,20 @@ const buildSystemPrompt = (context, rootPath, policy) => {
     "- propose_create_directory: ディレクトリ作成を提案",
     "",
     "## 必須ルール",
+    "- 目的は、ユーザーの論文執筆を自律的に前進させること。各ターンで完成に近づく提案を行う",
+    "- 変更は重要度で判断し、重大な不整合・ビルド失敗・論旨破綻に直結しない軽微な気になる点は無理に直さない",
+    "- 闇雲に変更せず、ユーザーとの対話・明示指示・現在の文脈から必要性を見極めてツール呼び出しと変更提案を行う",
     "- 検証が必要なタスクでは run_build を使って確認する（ユーザー依頼がある場合は必ず実行）",
     "- 変更は全て propose_* で提案する（適用はユーザー承認、または autoApply 有効時に自動）",
-    "- 1回の応答で提案する変更（propose_*）は原則1つだけ（小さく刻んで進める）",
+    "- 1回の応答で、関連するまとまった変更（複数ファイル/複数箇所）を提案してよい",
     "- 変更前に必ず read_file / read_files で現状を確認する（アクティブファイルのスナップショットが提供されている場合はそれを利用してよい）",
+    "- 必要ならツール呼び出しを複数回繰り返してよい（1回で終える必要はない）",
+    "- エラー修正や検証では run_build / read_file / propose_patch を反復し、解決に向けて段階的に進める",
+    "- ユーザーの執筆意図が明確な場合は、必要な範囲で本文を自律的に書き進める提案を優先する",
+    "- ユーザー入力には画像添付（inlineData）が含まれる場合がある。内容を読み取り、提案に反映する",
+    options?.allowRunCommand === true
+      ? "- run_command は許可設定中（allowRunCommand=true）のため実行可能"
+      : "- run_command は無効（allowRunCommand=false）。利用せず他ツールで対応する",
     `- ブロック対象: ${blockedLabel}${allowedLabel ? `（許可: ${allowedLabel}）` : ""}`,
     Number.isFinite(readFilesLimit)
       ? `- read_files は最大${readFilesLimit}件まで`
@@ -119,25 +151,18 @@ const buildSystemPrompt = (context, rootPath, policy) => {
     "- 大きな変更は propose_patch で部分編集を優先する",
     "",
     "## 出力ルール",
-    "- ユーザー向けの最終応答の冒頭に、短い要約を必ず付ける",
-    "- 形式: 「方針: ...」「理由: ...」の2行（各1文程度）",
-    "- 最後に「次の提案: ...」を1行で必ず書く（次に何をすべきかを明確にする）",
-    "- 内部の推論や思考過程は書かない",
-    "",
-    ...(agentMode === "paper"
-      ? [
-          "## 論文モード",
-          "- ユーザーが考えなくても論文が進むように、常に次の一手を提案する",
-          "- 迷ったら仮の文章を入れて前に進め、TODOで穴埋め箇所を残す",
-          "- 章立て/導入/関連/手法/実験/結果/考察/結論/参考文献の整合を優先する",
-          "",
-        ]
-      : []),
+    "- 最終応答には方針と次の提案を必ず含める",
     "## ワークスペース",
     `- Root: ${rootPath}`,
-    `- Agent mode: ${agentMode}`,
     `- Active file: ${activeFilePath || "(none)"}`,
+    `- Context controls: selection=${includeSelection ? "on" : "off"}, openFiles=${
+      includeOpenFiles ? "on" : "off"
+    }, issues=${includeIssues ? "on" : "off"}`,
   ];
+
+  if (explicitContextPaths.length > 0) {
+    lines.push(`- User referenced files: ${explicitContextPaths.join(", ")}`);
+  }
 
   if (openFileLabel) {
     lines.push(`- Open files: ${openFileLabel}`);
@@ -153,6 +178,39 @@ const buildSystemPrompt = (context, rootPath, policy) => {
       lines.push(`- Active file note: 先頭${activeFileContent.length}文字のみ（全${fullLength}文字）`);
     }
     lines.push("", "## Active file snapshot", "```", activeFileContent, "```");
+  }
+
+  const activeSelection =
+    context?.activeSelection && typeof context.activeSelection === "object"
+      ? context.activeSelection
+      : null;
+  if (activeSelection && typeof activeSelection.text === "string" && activeSelection.text) {
+    const pathLabel =
+      typeof activeSelection.path === "string" && activeSelection.path.trim()
+        ? activeSelection.path.trim()
+        : "(unknown)";
+    const startLine =
+      typeof activeSelection.startLine === "number" ? activeSelection.startLine : null;
+    const startColumn =
+      typeof activeSelection.startColumn === "number" ? activeSelection.startColumn : null;
+    const endLine = typeof activeSelection.endLine === "number" ? activeSelection.endLine : null;
+    const endColumn =
+      typeof activeSelection.endColumn === "number" ? activeSelection.endColumn : null;
+    const rangeLabel =
+      startLine && startColumn && endLine && endColumn
+        ? `${startLine}:${startColumn}-${endLine}:${endColumn}`
+        : "(range unknown)";
+    lines.push("", "## Active selection", `- File: ${pathLabel}`, `- Range: ${rangeLabel}`);
+    if (activeSelection.truncated) {
+      const fullLength =
+        typeof activeSelection.textLength === "number"
+          ? activeSelection.textLength
+          : activeSelection.text.length;
+      lines.push(`- Selection note: 先頭${activeSelection.text.length}文字のみ（全${fullLength}文字）`);
+    }
+    lines.push("```", activeSelection.text, "```");
+  } else if (context?.activeSelectionRequested === true) {
+    lines.push("", "## Active selection", "- Selection requested but no active selection was found.");
   }
 
   const openSnapshots = Array.isArray(context?.openFileSnapshots)
@@ -227,6 +285,65 @@ const buildSystemPrompt = (context, rootPath, policy) => {
   return lines.join("\n");
 };
 
+const decodeBase64Strict = (value) => {
+  const normalized = typeof value === "string" ? value.replace(/\s+/g, "") : "";
+  if (normalized.length % 4 !== 0) {
+    return null;
+  }
+  if (!BASE64_DATA_PATTERN.test(normalized)) {
+    return null;
+  }
+  const buffer = Buffer.from(normalized, "base64");
+  const noPadNormalized = normalized.replace(/=+$/g, "");
+  const noPadEncoded = buffer.toString("base64").replace(/=+$/g, "");
+  if (noPadNormalized !== noPadEncoded) {
+    return null;
+  }
+  return { normalized, byteLength: buffer.length };
+};
+
+const normalizeUserMessageParts = (message, parts) => {
+  const normalized = [];
+  let hasTextPart = false;
+  let totalInlineBytes = 0;
+  if (Array.isArray(parts)) {
+    for (const part of parts) {
+      const text = typeof part?.text === "string" ? part.text : "";
+      if (text.trim()) {
+        normalized.push({ text });
+        hasTextPart = true;
+      }
+      const mimeType =
+        typeof part?.inlineData?.mimeType === "string" ? part.inlineData.mimeType.trim() : "";
+      const dataRaw = typeof part?.inlineData?.data === "string" ? part.inlineData.data : "";
+      const decoded = decodeBase64Strict(dataRaw);
+      if (!decoded) {
+        continue;
+      }
+      if (decoded.byteLength > MAX_USER_INLINE_DATA_BYTES) {
+        continue;
+      }
+      if (totalInlineBytes + decoded.byteLength > MAX_USER_INLINE_DATA_TOTAL_BYTES) {
+        continue;
+      }
+      if (mimeType.startsWith("image/")) {
+        totalInlineBytes += decoded.byteLength;
+        normalized.push({
+          inlineData: {
+            mimeType,
+            data: decoded.normalized,
+          },
+        });
+      }
+    }
+  }
+  const normalizedMessage = typeof message === "string" ? message : "";
+  if (!hasTextPart && normalizedMessage.trim()) {
+    normalized.unshift({ text: normalizedMessage });
+  }
+  return normalized.length > 0 ? normalized : null;
+};
+
 class AgentService {
   constructor({
     workspace,
@@ -257,16 +374,18 @@ class AgentService {
     this.conversations = new Map();
     this.proposals = new Map();
     this.contextByConversation = new Map();
-    this.abortController = null;
+    this.runningControllers = new Map();
     this.agentPolicy = buildAgentPolicy();
     this.agentOptions = {
       maxIterations: DEFAULT_MAX_ITERATIONS,
       stream: true,
       autoApply: false,
       autoBuild: false,
+      allowRunCommand: false,
     };
     this.autoBuildInProgress = false;
     this.pendingSettingsRequests = new Map();
+    this.applyUndoStack = [];
   }
 
   sendStatus(state, message, conversationId) {
@@ -285,11 +404,51 @@ class AgentService {
     this.contextByConversation.delete(conversationId);
   }
 
-  abort() {
-    if (this.abortController) {
-      this.abortController.abort();
-      this.abortController = null;
+  abort(conversationId) {
+    const targetConversationId =
+      typeof conversationId === "string" && conversationId.trim()
+        ? conversationId.trim()
+        : "";
+    if (targetConversationId) {
+      const entry = this.runningControllers.get(targetConversationId);
+      if (entry?.controller) {
+        entry.controller.abort();
+      }
+      this.runningControllers.delete(targetConversationId);
+      return;
     }
+    this.runningControllers.forEach((entry) => {
+      entry?.controller?.abort?.();
+    });
+    this.runningControllers.clear();
+  }
+
+  startConversationRun(conversationId) {
+    const normalizedConversationId =
+      typeof conversationId === "string" && conversationId.trim()
+        ? conversationId.trim()
+        : "default";
+    const existing = this.runningControllers.get(normalizedConversationId);
+    existing?.controller?.abort?.();
+    const token =
+      typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+    const controller = new AbortController();
+    this.runningControllers.set(normalizedConversationId, { controller, token });
+    return { conversationId: normalizedConversationId, controller, token };
+  }
+
+  isRunCurrent(conversationId, token) {
+    const current = this.runningControllers.get(conversationId);
+    return Boolean(current && current.token === token);
+  }
+
+  finishConversationRun(conversationId, token) {
+    if (!this.isRunCurrent(conversationId, token)) {
+      return;
+    }
+    this.runningControllers.delete(conversationId);
   }
 
   resolveAgentPolicy(settings) {
@@ -303,11 +462,12 @@ class AgentService {
       maxIterations: clampNumber(
         settings?.maxIterations,
         DEFAULT_MAX_ITERATIONS,
-        { min: 1, max: 30 }
+        { min: 1, max: 100 }
       ),
       stream: settings?.stream !== false,
       autoApply: settings?.autoApply === true,
       autoBuild: settings?.autoBuild === true,
+      allowRunCommand: settings?.allowRunCommand === true,
     };
     this.agentOptions = options;
     return options;
@@ -408,6 +568,243 @@ class AgentService {
     };
   }
 
+  hashBuffer(buffer) {
+    return crypto.createHash("sha256").update(buffer).digest("hex");
+  }
+
+  hashUtf8(value) {
+    return this.hashBuffer(Buffer.from(value ?? "", "utf8"));
+  }
+
+  hashProposalContent(proposal) {
+    if (!proposal) {
+      return null;
+    }
+    if (proposal.encoding === "base64") {
+      const decoded = decodeBase64Strict(proposal.content);
+      if (!decoded) {
+        return null;
+      }
+      return this.hashBuffer(Buffer.from(decoded.normalized, "base64"));
+    }
+    if (typeof proposal.content !== "string") {
+      return null;
+    }
+    return this.hashUtf8(proposal.content);
+  }
+
+  async readCurrentFileState(relativePath) {
+    const resolved = this.workspace.resolvePath(relativePath);
+    const stat = await fsp.stat(resolved).catch(() => null);
+    if (!stat) {
+      return { exists: false, isFile: false, resolved, buffer: null };
+    }
+    if (!stat.isFile()) {
+      return { exists: true, isFile: false, resolved, buffer: null };
+    }
+    const buffer = await fsp.readFile(resolved);
+    return { exists: true, isFile: true, resolved, buffer };
+  }
+
+  async validateProposalBeforeApply(proposal) {
+    const type = proposal?.type || "write";
+    if (type === "mkdir") {
+      const resolved = this.workspace.resolvePath(proposal.path);
+      const stat = await fsp.stat(resolved).catch(() => null);
+      if (stat && !stat.isDirectory()) {
+        return {
+          ok: false,
+          conflict: true,
+          error: "同名のファイルが存在するためディレクトリを作成できません。",
+        };
+      }
+      return { ok: true, targetState: { exists: Boolean(stat), isDirectory: Boolean(stat?.isDirectory?.()) } };
+    }
+
+    const targetPath = type === "rename" ? proposal.oldPath : proposal.path;
+    if (!targetPath || typeof targetPath !== "string") {
+      return { ok: false, conflict: false, error: "提案の対象パスが不正です。" };
+    }
+
+    const state = await this.readCurrentFileState(targetPath);
+    if (proposal.isNewFile === true && (type === "write" || type === "patch")) {
+      if (state.exists) {
+        return {
+          ok: false,
+          conflict: true,
+          error: "新規作成予定のファイルが既に存在します。再提案してください。",
+        };
+      }
+      return { ok: true, targetState: state };
+    }
+
+    if (!state.exists) {
+      return {
+        ok: false,
+        conflict: true,
+        error: "適用前に対象ファイルが削除または移動されました。再提案してください。",
+      };
+    }
+
+    if (!state.isFile) {
+      return {
+        ok: false,
+        conflict: true,
+        error: "対象パスがファイルではありません。再提案してください。",
+      };
+    }
+
+    const expectedHash =
+      typeof proposal.baseContentHash === "string" ? proposal.baseContentHash.trim() : "";
+    if (expectedHash && state.buffer) {
+      const currentHash = this.hashBuffer(state.buffer);
+      if (currentHash !== expectedHash) {
+        return {
+          ok: false,
+          conflict: true,
+          error: "適用前にファイル内容が変更されました。差分を確認して再提案してください。",
+        };
+      }
+    }
+
+    if (type === "rename") {
+      const newState = await this.readCurrentFileState(proposal.path);
+      if (newState.exists) {
+        return {
+          ok: false,
+          conflict: true,
+          error: "移動先に同名ファイルが存在します。別名で再提案してください。",
+        };
+      }
+    }
+
+    return { ok: true, targetState: state };
+  }
+
+  pushUndoEntry(entry) {
+    if (!entry) {
+      return;
+    }
+    this.applyUndoStack.push(entry);
+    if (this.applyUndoStack.length > MAX_APPLY_UNDO_ENTRIES) {
+      this.applyUndoStack.splice(0, this.applyUndoStack.length - MAX_APPLY_UNDO_ENTRIES);
+    }
+  }
+
+  async undoLastApply(conversationId) {
+    const targetConversationId =
+      typeof conversationId === "string" && conversationId.trim()
+        ? conversationId.trim()
+        : "";
+    let targetIndex = -1;
+    for (let i = this.applyUndoStack.length - 1; i >= 0; i -= 1) {
+      const entry = this.applyUndoStack[i];
+      if (!targetConversationId || entry.conversationId === targetConversationId) {
+        targetIndex = i;
+        break;
+      }
+    }
+    if (targetIndex < 0) {
+      this.sendToRenderer("agent:undoResult", {
+        ok: false,
+        message: "取り消せる操作がありません。",
+        conversationId: targetConversationId || undefined,
+      });
+      return;
+    }
+
+    const entry = this.applyUndoStack.splice(targetIndex, 1)[0];
+    const rootPath = this.workspace.getRootPath();
+    if (!rootPath) {
+      this.applyUndoStack.push(entry);
+      this.sendToRenderer("agent:undoResult", {
+        ok: false,
+        message: "ワークスペースが選択されていません。",
+        conversationId: targetConversationId || entry.conversationId,
+      });
+      return;
+    }
+
+    try {
+      if (entry.type === "write") {
+        const resolved = this.workspace.resolvePath(entry.path);
+        if (entry.existed && Buffer.isBuffer(entry.previousBuffer)) {
+          await fsp.mkdir(path.dirname(resolved), { recursive: true });
+          await fsp.writeFile(resolved, entry.previousBuffer);
+          if (entry.wasBinary !== true) {
+            this.sendToRenderer("agent:applyContent", {
+              path: entry.path,
+              content: entry.previousBuffer.toString("utf8"),
+              updateSaved: true,
+            });
+          }
+        } else {
+          await fsp.unlink(resolved).catch((error) => {
+            if (error?.code !== "ENOENT") {
+              throw error;
+            }
+          });
+        }
+      } else if (entry.type === "delete") {
+        const resolved = this.workspace.resolvePath(entry.path);
+        await fsp.mkdir(path.dirname(resolved), { recursive: true });
+        await fsp.writeFile(resolved, entry.previousBuffer);
+        if (entry.wasBinary !== true) {
+          this.sendToRenderer("agent:applyContent", {
+            path: entry.path,
+            content: entry.previousBuffer.toString("utf8"),
+            updateSaved: true,
+          });
+        }
+      } else if (entry.type === "rename") {
+        const fromResolved = this.workspace.resolvePath(entry.newPath);
+        const toResolved = this.workspace.resolvePath(entry.oldPath);
+        const fromStat = await fsp.stat(fromResolved).catch(() => null);
+        if (!fromStat || !fromStat.isFile()) {
+          throw new Error("移動先ファイルが見つからないため取り消せません。");
+        }
+        const toStat = await fsp.stat(toResolved).catch(() => null);
+        if (toStat) {
+          throw new Error("元のパスに既存ファイルがあるため取り消せません。");
+        }
+        await fsp.mkdir(path.dirname(toResolved), { recursive: true });
+        await fsp.rename(fromResolved, toResolved);
+        this.sendToRenderer("renameResult", {
+          oldPath: entry.newPath,
+          newPath: entry.oldPath,
+          isDirectory: false,
+        });
+      } else if (entry.type === "mkdir") {
+        const resolved = this.workspace.resolvePath(entry.path);
+        const stat = await fsp.stat(resolved).catch(() => null);
+        if (stat && stat.isDirectory()) {
+          const childEntries = await fsp.readdir(resolved).catch(() => []);
+          if (childEntries.length > 0) {
+            throw new Error("ディレクトリ内にファイルがあるため取り消せません。");
+          }
+          await fsp.rmdir(resolved);
+        }
+      } else {
+        throw new Error("未対応の取り消し操作です。");
+      }
+
+      await this.updateWorkspaceIfNeeded(rootPath, true);
+      this.requestIndex(rootPath);
+      this.sendToRenderer("agent:undoResult", {
+        ok: true,
+        path: entry.path,
+        conversationId: targetConversationId || entry.conversationId,
+      });
+    } catch (error) {
+      this.applyUndoStack.push(entry);
+      this.sendToRenderer("agent:undoResult", {
+        ok: false,
+        message: error?.message ?? "取り消しに失敗しました。",
+        conversationId: targetConversationId || entry.conversationId,
+      });
+    }
+  }
+
   async applyProposal(proposalId) {
     const proposal = this.proposals.get(proposalId);
     const rootPath = this.workspace.getRootPath();
@@ -429,13 +826,46 @@ class AgentService {
     }
     try {
       const type = proposal.type || "write";
-      
+      const validation = await this.validateProposalBeforeApply(proposal);
+      if (!validation.ok) {
+        this.sendToRenderer("agent:applyResult", {
+          proposalId,
+          ok: false,
+          conflict: validation.conflict === true,
+          error: validation.error || "適用前チェックに失敗しました。",
+        });
+        return;
+      }
+      let undoEntry = null;
+
       if (type === "delete") {
         const resolved = this.workspace.resolvePath(proposal.path);
-        await fsp.unlink(resolved);
+        const currentState = validation.targetState;
+        if (!currentState?.buffer) {
+          throw new Error("削除前の内容を取得できませんでした。");
+        }
+        undoEntry = {
+          type: "delete",
+          conversationId: proposal.conversationId || "default",
+          path: proposal.path,
+          previousBuffer: currentState.buffer,
+          wasBinary: Boolean(proposal.isBinary),
+        };
+        if (typeof this.workspace.moveToInternalTrash === "function") {
+          await this.workspace.moveToInternalTrash(resolved);
+        } else {
+          await fsp.unlink(resolved);
+        }
       } else if (type === "rename") {
         const oldResolved = this.workspace.resolvePath(proposal.oldPath);
         const newResolved = this.workspace.resolvePath(proposal.path);
+        undoEntry = {
+          type: "rename",
+          conversationId: proposal.conversationId || "default",
+          oldPath: proposal.oldPath,
+          newPath: proposal.path,
+          path: proposal.path,
+        };
         await fsp.mkdir(path.dirname(newResolved), { recursive: true });
         await fsp.rename(oldResolved, newResolved);
         this.sendToRenderer("renameResult", {
@@ -445,13 +875,43 @@ class AgentService {
         });
       } else if (type === "mkdir") {
         const resolved = this.workspace.resolvePath(proposal.path);
+        undoEntry = {
+          type: "mkdir",
+          conversationId: proposal.conversationId || "default",
+          path: proposal.path,
+        };
         await fsp.mkdir(resolved, { recursive: true });
       } else {
         // write or patch
         const resolved = this.workspace.resolvePath(proposal.path);
+        const currentState = validation.targetState;
+        const existedBefore = Boolean(currentState?.exists && currentState?.isFile);
+        const previousBuffer = existedBefore ? currentState.buffer : null;
+        const wasBinary = existedBefore ? Boolean(previousBuffer?.includes?.(0)) : false;
+        const nextHash = this.hashProposalContent(proposal);
+        if (nextHash && typeof proposal.baseContentHash === "string" && nextHash === proposal.baseContentHash) {
+          this.sendToRenderer("agent:applyResult", {
+            proposalId,
+            ok: false,
+            error: "変更内容がありません。",
+          });
+          return;
+        }
+        undoEntry = {
+          type: "write",
+          conversationId: proposal.conversationId || "default",
+          path: proposal.path,
+          existed: existedBefore,
+          previousBuffer,
+          wasBinary,
+        };
         await fsp.mkdir(path.dirname(resolved), { recursive: true });
         if (proposal.encoding === "base64") {
-          const buffer = Buffer.from(proposal.content, "base64");
+          const decoded = decodeBase64Strict(proposal.content);
+          if (!decoded) {
+            throw new Error("base64 の内容が不正です。");
+          }
+          const buffer = Buffer.from(decoded.normalized, "base64");
           await fsp.writeFile(resolved, buffer);
         } else {
           await this.workspace.writeFile(proposal.path, proposal.content);
@@ -462,7 +922,8 @@ class AgentService {
           });
         }
       }
-      
+
+      this.pushUndoEntry(undoEntry);
       await this.updateWorkspaceIfNeeded(rootPath, true);
       this.requestIndex(rootPath);
       this.proposals.delete(proposalId);
@@ -1007,22 +1468,26 @@ class AgentService {
     }
   }
 
-  async run({ message, context, conversationId = "default" }) {
+  async run({ message, parts, context, conversationId = "default" }) {
+    const targetConversationId =
+      typeof conversationId === "string" && conversationId.trim()
+        ? conversationId.trim()
+        : "default";
     const rootPath = this.workspace.getRootPath();
     if (!rootPath) {
       this.sendToRenderer("agent:error", {
         message: "ワークスペースが選択されていません。",
-        conversationId,
+        conversationId: targetConversationId,
       });
-      this.sendStatus("error", "ワークスペースが未選択です。", conversationId);
+      this.sendStatus("error", "ワークスペースが未選択です。", targetConversationId);
       return;
     }
 
-    this.sendStatus("running", this.buildProgressMessage("準備中"), conversationId);
+    this.sendStatus("running", this.buildProgressMessage("準備中"), targetConversationId);
     const settings = await this.ensureUserSettings().getAgentSettings();
     const policy = this.resolveAgentPolicy(settings);
     const options = this.resolveAgentOptions(settings);
-    this.contextByConversation.set(conversationId, context ?? {});
+    this.contextByConversation.set(targetConversationId, context ?? {});
     const proxyUrl = (
       typeof process.env.TEX64_AI_PROXY_URL === "string"
         ? process.env.TEX64_AI_PROXY_URL.trim()
@@ -1030,161 +1495,183 @@ class AgentService {
     ).trim();
     const resolvedProxyUrl = proxyUrl || "https://tex64.vercel.app/api/ai-chat";
 
-    const conversation = this.buildConversation(conversationId);
-    conversation.push({ role: "user", parts: [{ text: message }] });
-
-    const systemPrompt = buildSystemPrompt(context, rootPath, policy);
-    const tools = [{ functionDeclarations: AGENT_TOOL_DECLARATIONS }];
-    const generationConfig = {
-      temperature: settings.temperature ?? 0.2,
-      maxOutputTokens: settings.maxOutputTokens ?? 2048,
-    };
-
-    this.sendStatus("running", this.buildProgressMessage("文脈整理中"), conversationId);
-    this.abort();
-    this.abortController = new AbortController();
-
-    let proposedInThisRun = false;
-
-    for (let i = 0; i < options.maxIterations; i += 1) {
-      try {
-        const thinkingLabel = i === 0 ? "方針検討中" : "追加検討中";
-        this.sendStatus("running", this.buildProgressMessage(thinkingLabel), conversationId);
-        const handleDelta =
-          options.stream === true
-            ? (text) => {
-                if (text) {
-                  this.sendToRenderer("agent:messageDelta", { text, conversationId });
-                }
-              }
-            : null;
-        const response = await requestGemini({
-          proxyUrl: resolvedProxyUrl,
-          contents: conversation,
-          systemInstruction: { parts: [{ text: systemPrompt }] },
-          tools,
-          toolConfig: { functionCallingConfig: { mode: "AUTO" } },
-          generationConfig,
-          signal: this.abortController.signal,
-          onDelta: handleDelta,
-        });
-
-        try {
-          const usage = response?.usageMetadata ?? response?.usage ?? null;
-          if (usage && this.apiUsageService) {
-            const promptTokens =
-              usage.promptTokenCount ??
-              usage.promptTokens ??
-              usage.inputTokenCount ??
-              usage.input_tokens;
-            const outputTokens =
-              usage.candidatesTokenCount ??
-              usage.outputTokenCount ??
-              usage.outputTokens ??
-              usage.output_tokens;
-            const totalTokens =
-              usage.totalTokenCount ??
-              usage.totalTokens ??
-              (Number.isFinite(promptTokens) && Number.isFinite(outputTokens)
-                ? promptTokens + outputTokens
-                : undefined);
-            const snapshot = await this.apiUsageService.recordUsage({
-              model: response?.model,
-              promptTokens,
-              outputTokens,
-              totalTokens,
-              source: "agent",
-            });
-            if (snapshot) {
-              this.sendToRenderer("api:usage", { snapshot });
-            }
-          }
-        } catch {
-          // ignore usage recording failures
-        }
-
-        const candidate = response?.candidates?.[0]?.content ?? null;
-        const parts = candidate?.parts ?? [];
-        const functionCalls = parts.filter((part) => part.functionCall);
-        const textParts = parts
-          .map((part) => part.text)
-          .filter((text) => typeof text === "string" && text.trim().length > 0);
-
-        if (candidate) {
-          conversation.push(candidate);
-        }
-
-        if (functionCalls.length > 0) {
-          for (const part of functionCalls) {
-            const call = part.functionCall;
-            const toolName = call?.name ?? "";
-            const isProposalTool =
-              typeof toolName === "string" && toolName.startsWith("propose_");
-            let result = null;
-            if (isProposalTool && proposedInThisRun) {
-              result = {
-                error:
-                  "このターンでは変更提案（propose_*）は1つだけです。既に提案を作成しました。次はユーザーの適用を待ってください。",
-              };
-            } else {
-              result = await this.executeToolCall(call, conversationId);
-              if (isProposalTool && result?.status === "proposed") {
-                proposedInThisRun = true;
-              }
-            }
-            this.sendToRenderer("agent:tool", {
-              name: toolName,
-              summary: result?.error ?? "ok",
-              conversationId,
-            });
-            conversation.push({
-              role: "tool",
-              parts: [
-                {
-                  functionResponse: {
-                    name: toolName,
-                    response: result,
-                  },
-                },
-              ],
-            });
-          }
-          continue;
-        }
-
-        if (textParts.length > 0) {
-          const text = textParts.join("\n");
-          this.sendStatus("running", this.buildProgressMessage("回答整形中"), conversationId);
-          this.sendToRenderer("agent:message", { text, conversationId });
-          this.sendStatus("idle", "待機中", conversationId);
-          return;
-        }
-
-        this.sendToRenderer("agent:message", {
-          text: "応答が空でした。",
-          conversationId,
-        });
-        this.sendStatus("idle", "待機中", conversationId);
-        return;
-      } catch (error) {
-        if (error?.name === "AbortError") {
-          this.sendStatus("idle", "中断しました。", conversationId);
-          return;
-        }
-        this.sendToRenderer("agent:error", {
-          message: error?.message ?? "AIの呼び出しに失敗しました。",
-          conversationId,
-        });
-        this.sendStatus("error", "AIエラー", conversationId);
-        return;
-      }
+    const userParts = normalizeUserMessageParts(message, parts);
+    if (!userParts) {
+      this.sendToRenderer("agent:error", {
+        message: "入力が空です。",
+        conversationId: targetConversationId,
+      });
+      this.sendStatus("error", "入力が空です。", targetConversationId);
+      return;
     }
 
-    this.sendToRenderer("agent:message", {
-      text: "上限回数に達したため停止しました。",
-      conversationId,
-    });
-    this.sendStatus("idle", "待機中", conversationId);
+    const conversation = this.buildConversation(targetConversationId);
+    conversation.push({ role: "user", parts: userParts });
+
+    const systemPrompt = buildSystemPrompt(context, rootPath, policy, options);
+    const functionDeclarations =
+      options.allowRunCommand === true
+        ? AGENT_TOOL_DECLARATIONS
+        : AGENT_TOOL_DECLARATIONS.filter((entry) => entry?.name !== "run_command");
+    const tools = [{ functionDeclarations }];
+    const generationConfig = {
+      temperature: settings.temperature ?? 0.2,
+    };
+
+    this.sendStatus("running", this.buildProgressMessage("文脈整理中"), targetConversationId);
+    const run = this.startConversationRun(targetConversationId);
+
+    const isCurrentRun = () => this.isRunCurrent(targetConversationId, run.token);
+
+    try {
+      for (let i = 0; i < options.maxIterations; i += 1) {
+        if (!isCurrentRun()) {
+          return;
+        }
+        try {
+          const thinkingLabel = i === 0 ? "方針検討中" : "追加検討中";
+          this.sendStatus("running", this.buildProgressMessage(thinkingLabel), targetConversationId);
+          const handleDelta =
+            options.stream === true
+              ? (text) => {
+                  if (text) {
+                    this.sendToRenderer("agent:messageDelta", {
+                      text,
+                      conversationId: targetConversationId,
+                    });
+                  }
+                }
+              : null;
+          const response = await requestGemini({
+            proxyUrl: resolvedProxyUrl,
+            contents: conversation,
+            systemInstruction: { parts: [{ text: systemPrompt }] },
+            tools,
+            toolConfig: { functionCallingConfig: { mode: "AUTO" } },
+            generationConfig,
+            signal: run.controller.signal,
+            onDelta: handleDelta,
+          });
+
+          try {
+            const usage = response?.usageMetadata ?? response?.usage ?? null;
+            if (usage && this.apiUsageService) {
+              const promptTokens =
+                usage.promptTokenCount ??
+                usage.promptTokens ??
+                usage.inputTokenCount ??
+                usage.input_tokens;
+              const outputTokens =
+                usage.candidatesTokenCount ??
+                usage.outputTokenCount ??
+                usage.outputTokens ??
+                usage.output_tokens;
+              const totalTokens =
+                usage.totalTokenCount ??
+                usage.totalTokens ??
+                (Number.isFinite(promptTokens) && Number.isFinite(outputTokens)
+                  ? promptTokens + outputTokens
+                  : undefined);
+              const snapshot = await this.apiUsageService.recordUsage({
+                model: response?.modelVersion ?? response?.model ?? "gemini-3-flash-preview",
+                promptTokens,
+                outputTokens,
+                totalTokens,
+                source: "agent",
+              });
+              if (snapshot) {
+                this.sendToRenderer("api:usage", { snapshot });
+              }
+            }
+          } catch {
+            // ignore usage recording failures
+          }
+
+          const candidate = response?.candidates?.[0]?.content ?? null;
+          const parts = candidate?.parts ?? [];
+          const functionCalls = parts.filter((part) => part.functionCall);
+          const textParts = parts
+            .map((part) => part.text)
+            .filter((text) => typeof text === "string" && text.trim().length > 0);
+
+          if (candidate) {
+            conversation.push(candidate);
+          }
+
+          if (functionCalls.length > 0) {
+            for (const part of functionCalls) {
+              const call = part.functionCall;
+              const toolName = call?.name ?? "";
+              const result = await this.executeToolCall(call, targetConversationId);
+              if (!isCurrentRun()) {
+                return;
+              }
+              this.sendToRenderer("agent:tool", {
+                name: toolName,
+                summary: result?.error ?? "ok",
+                conversationId: targetConversationId,
+              });
+              conversation.push({
+                role: "tool",
+                parts: [
+                  {
+                    functionResponse: {
+                      name: toolName,
+                      response: result,
+                    },
+                  },
+                ],
+              });
+            }
+            continue;
+          }
+
+          if (textParts.length > 0) {
+            const text = textParts.join("\n");
+            if (!isCurrentRun()) {
+              return;
+            }
+            this.sendStatus("running", this.buildProgressMessage("回答整形中"), targetConversationId);
+            this.sendToRenderer("agent:message", { text, conversationId: targetConversationId });
+            this.sendStatus("idle", "待機中", targetConversationId);
+            return;
+          }
+
+          if (!isCurrentRun()) {
+            return;
+          }
+          this.sendToRenderer("agent:message", {
+            text: "応答が空でした。",
+            conversationId: targetConversationId,
+          });
+          this.sendStatus("idle", "待機中", targetConversationId);
+          return;
+        } catch (error) {
+          if (error?.name === "AbortError") {
+            if (this.isRunCurrent(targetConversationId, run.token)) {
+              this.sendStatus("idle", "中断しました。", targetConversationId);
+            }
+            return;
+          }
+          this.sendToRenderer("agent:error", {
+            message: error?.message ?? "AIの呼び出しに失敗しました。",
+            conversationId: targetConversationId,
+          });
+          this.sendStatus("error", "AIエラー", targetConversationId);
+          return;
+        }
+      }
+
+      if (isCurrentRun()) {
+        this.sendToRenderer("agent:message", {
+          text: "上限回数に達したため停止しました。",
+          conversationId: targetConversationId,
+        });
+        this.sendStatus("idle", "待機中", targetConversationId);
+      }
+    } finally {
+      this.finishConversationRun(targetConversationId, run.token);
+    }
   }
 }
 

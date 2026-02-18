@@ -70,9 +70,11 @@ export const initIssuesUi = (context: AppContext, deps: IssuesUiDeps): IssuesUiA
       message.className = "issue-message";
       message.textContent = detail.message || issue.message;
 
+      const detailBlock = document.createElement("div");
+      detailBlock.className = "issue-extra";
+
       const resolution = document.createElement("div");
       resolution.className = "issue-resolution";
-      resolution.textContent = getIssueResolution(issue) ?? "";
 
       const hint = document.createElement("div");
       hint.className = "issue-hintline";
@@ -80,13 +82,20 @@ export const initIssuesUi = (context: AppContext, deps: IssuesUiDeps): IssuesUiA
         issue.action === "open-runtime" && typeof deps.onOpenRuntimeSettings === "function";
       const hasJumpTarget = Boolean(detail.path || detail.line);
       item.disabled = !isRuntimeAction && !hasJumpTarget;
+      const resolutionText = getIssueResolution(issue) ?? "";
+      const showResolution = Boolean(resolutionText) && (issue.severity === "error" || isRuntimeAction);
+      resolution.textContent = resolutionText;
       hint.textContent = isRuntimeAction
-        ? "クリックで実行環境を開く"
+        ? "クリックでRuntimeを開く"
         : hasJumpTarget
-        ? "クリックで該当行へ移動"
-        : "位置情報がないため移動できません";
+        ? "クリックで移動"
+        : "移動先なし";
 
-      item.append(header, message, resolution, hint);
+      if (showResolution) {
+        detailBlock.append(resolution);
+      }
+      detailBlock.append(hint);
+      item.append(header, message, detailBlock);
       item.addEventListener("click", () => {
         if (isRuntimeAction) {
           deps.onOpenRuntimeSettings?.();

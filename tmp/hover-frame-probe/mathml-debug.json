@@ -1,0 +1,78 @@
+{
+  "hovers": [
+    {
+      "i": 0,
+      "className": "monaco-hover fade-in",
+      "display": "block",
+      "visibility": "visible",
+      "opacity": "1",
+      "w": 2,
+      "h": 0,
+      "text": "",
+      "html": "<div class=\"monaco-scrollable-element  mac\" role=\"presentation\" style=\"position: relative; overflow: hidden; width: 2px; height: 0px; max-width: 750px; max-height: 250px;\"><div class=\"monaco-hover-content\" style=\"overflow: hidden; font-size: 12px; line-height: 1.66667; width: 2px; height: 0px; max-width: 750px; max-height: 250px;\"><div class=\"hover-row\" tabindex=\"0\"><div class=\"hover-row-contents\"><div class=\"markdown-hover\"><div class=\"hover-contents\"><div class=\"rendered-markdown\"><div></div></div></div></div></div></div></div><div role=\"presentation\" aria-hidden=\"true\" class=\"invisible scrollbar horizontal\" style=\"position: absolute; width: 0px; height: 10px; left: 0px; bottom: 0px;\"><div class=\"slider\" style=\"position: absolute; top: 0px; left: 0px; height: 10px; transform: translate3d(0px, 0px, 0px); contain: strict; width: 0px;\"></div></div><div role=\"presentation\" aria-hidden=\"true\" class=\"invisible scrollbar vertical\" style=\"position: absolute; width: 10px; height: 0px; right: 0px; top: 0px;\"><div class=\"slider\" style=\"position: absolute; top: 0px; left: 0px; width: 10px; transform: translate3d(0px, 0px, 0px); contain: strict; height: 0px;\"></div></div><div class=\"shadow\"><"
+    },
+    {
+      "i": 1,
+      "className": "monaco-hover fade-in hidden",
+      "display": "none",
+      "visibility": "visible",
+      "opacity": "1",
+      "w": 0,
+      "h": 0,
+      "text": "",
+      "html": "<div class=\"monaco-scrollable-element  mac\" role=\"presentation\" style=\"position: relative; overflow: hidden;\"><div class=\"monaco-hover-content\" style=\"overflow: hidden;\"></div><div role=\"presentation\" aria-hidden=\"true\" class=\"invisible scrollbar horizontal\" style=\"position: absolute;\"><div class=\"slider\" style=\"position: absolute; top: 0px; left: 0px; height: 10px; transform: translate3d(0px, 0px, 0px); contain: strict;\"></div></div><div role=\"presentation\" aria-hidden=\"true\" class=\"invisible scrollbar vertical\" style=\"position: absolute;\"><div class=\"slider\" style=\"position: absolute; top: 0px; left: 0px; width: 10px; transform: translate3d(0px, 0px, 0px); contain: strict;\"></div></div><div class=\"shadow\"></div><div class=\"shadow\"></div><div class=\"shadow\"></div></div>"
+    }
+  ],
+  "allHoverLike": [
+    {
+      "tag": "DIV",
+      "className": "cdr hoverHighlight",
+      "text": ""
+    },
+    {
+      "tag": "DIV",
+      "className": "monaco-resizable-hover",
+      "text": ""
+    },
+    {
+      "tag": "DIV",
+      "className": "monaco-hover fade-in",
+      "text": ""
+    },
+    {
+      "tag": "DIV",
+      "className": "monaco-hover-content",
+      "text": ""
+    },
+    {
+      "tag": "DIV",
+      "className": "hover-row",
+      "text": ""
+    },
+    {
+      "tag": "DIV",
+      "className": "hover-row-contents",
+      "text": ""
+    },
+    {
+      "tag": "DIV",
+      "className": "markdown-hover",
+      "text": ""
+    },
+    {
+      "tag": "DIV",
+      "className": "hover-contents",
+      "text": ""
+    },
+    {
+      "tag": "DIV",
+      "className": "monaco-hover fade-in hidden",
+      "text": ""
+    },
+    {
+      "tag": "DIV",
+      "className": "monaco-hover-content",
+      "text": ""
+    }
+  ]
+}

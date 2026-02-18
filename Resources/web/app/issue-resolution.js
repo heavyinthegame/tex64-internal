@@ -118,5 +118,5 @@ export const getIssueResolution = (issue) => {
             return rule.resolution;
         }
     }
-    return "該当行を確認し、エラー原因を修正してください。";
+    return "ログと該当行を確認して修正してください。";
 };

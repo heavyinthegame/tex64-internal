@@ -4,6 +4,8 @@ const CONTRAST_FACTOR = 1.5;
 const SHARPNESS_FACTOR = 1.5;
 const NORMALIZE_MEAN = 0.5;
 const NORMALIZE_STD = 0.5;
+const CANDIDATE_EARLY_ACCEPT_SCORE = 90;
+const MAX_PREPROCESS_PAYLOADS = 12;
 const loadImage = (dataUrl) => new Promise((resolve, reject) => {
     const image = new Image();
     image.onload = () => resolve(image);
@@ -17,19 +19,32 @@ const createCanvas = (width, height) => {
     return canvas;
 };
 const clampByte = (value) => Math.max(0, Math.min(255, Math.round(value)));
-const resizeCanvas = (canvas, width, height) => {
-    if (canvas.width === width && canvas.height === height) {
-        return canvas;
-    }
-    const resized = createCanvas(width, height);
-    const ctx = resized.getContext("2d");
+const copyCanvas = (source) => {
+    const clone = createCanvas(source.width, source.height);
+    const ctx = clone.getContext("2d");
     if (!ctx) {
         throw new Error("キャンバスの初期化に失敗しました。");
     }
+    ctx.drawImage(source, 0, 0);
+    return clone;
+};
+const fitCanvasWithPadding = (source, width, height, background = 255) => {
+    const fitted = createCanvas(width, height);
+    const ctx = fitted.getContext("2d");
+    if (!ctx) {
+        throw new Error("キャンバスの初期化に失敗しました。");
+    }
+    ctx.fillStyle = `rgb(${background},${background},${background})`;
+    ctx.fillRect(0, 0, width, height);
+    const scale = Math.min(width / source.width, height / source.height);
+    const drawWidth = Math.max(1, Math.round(source.width * scale));
+    const drawHeight = Math.max(1, Math.round(source.height * scale));
+    const offsetX = Math.floor((width - drawWidth) / 2);
+    const offsetY = Math.floor((height - drawHeight) / 2);
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
-    ctx.drawImage(canvas, 0, 0, width, height);
-    return resized;
+    ctx.drawImage(source, 0, 0, source.width, source.height, offsetX, offsetY, drawWidth, drawHeight);
+    return fitted;
 };
 const enhanceCanvas = (canvas, contrast, sharpness) => {
     const ctx = canvas.getContext("2d");
@@ -110,6 +125,174 @@ const enhanceForOcr = (canvas) => {
     }
     return canvas;
 };
+const computeOtsuThreshold = (gray) => {
+    const histogram = new Uint32Array(256);
+    for (let i = 0; i < gray.length; i += 1) {
+        histogram[gray[i]] += 1;
+    }
+    const total = gray.length || 1;
+    let sum = 0;
+    for (let i = 0; i < histogram.length; i += 1) {
+        sum += i * histogram[i];
+    }
+    let sumBackground = 0;
+    let weightBackground = 0;
+    let maxVariance = -1;
+    let bestThreshold = 128;
+    for (let t = 0; t < histogram.length; t += 1) {
+        weightBackground += histogram[t];
+        if (weightBackground === 0)
+            continue;
+        const weightForeground = total - weightBackground;
+        if (weightForeground === 0)
+            break;
+        sumBackground += t * histogram[t];
+        const meanBackground = sumBackground / weightBackground;
+        const meanForeground = (sum - sumBackground) / weightForeground;
+        const diff = meanBackground - meanForeground;
+        const variance = weightBackground * weightForeground * diff * diff;
+        if (variance > maxVariance) {
+            maxVariance = variance;
+            bestThreshold = t;
+        }
+    }
+    return bestThreshold;
+};
+const scoreMaskRatio = (ratio) => {
+    if (!Number.isFinite(ratio) || ratio <= 0 || ratio >= 1) {
+        return -Infinity;
+    }
+    const target = 0.14;
+    let score = -Math.abs(Math.log((ratio + 1e-6) / (target + 1e-6))) * 40;
+    if (ratio < 0.003)
+        score -= 80;
+    if (ratio > 0.75)
+        score -= 80;
+    return score;
+};
+const buildMaskFromThreshold = (normalized, threshold, foregroundIsDark) => {
+    const mask = new Uint8ClampedArray(normalized.length);
+    let count = 0;
+    for (let i = 0; i < normalized.length; i += 1) {
+        const value = normalized[i];
+        const foreground = foregroundIsDark ? value <= threshold : value >= threshold;
+        if (foreground) {
+            mask[i] = 255;
+            count += 1;
+        }
+    }
+    return { mask, ratio: count / (normalized.length || 1) };
+};
+const denoiseMask = (mask, width, height, passes = 1) => {
+    let current = mask;
+    for (let pass = 0; pass < passes; pass += 1) {
+        const next = new Uint8ClampedArray(current.length);
+        for (let y = 0; y < height; y += 1) {
+            const yMin = Math.max(0, y - 1);
+            const yMax = Math.min(height - 1, y + 1);
+            for (let x = 0; x < width; x += 1) {
+                const xMin = Math.max(0, x - 1);
+                const xMax = Math.min(width - 1, x + 1);
+                let around = 0;
+                for (let yy = yMin; yy <= yMax; yy += 1) {
+                    const row = yy * width;
+                    for (let xx = xMin; xx <= xMax; xx += 1) {
+                        if (current[row + xx] > 0)
+                            around += 1;
+                    }
+                }
+                const idx = y * width + x;
+                if (current[idx] > 0) {
+                    next[idx] = around >= 3 ? 255 : 0;
+                }
+                else {
+                    next[idx] = around >= 7 ? 255 : 0;
+                }
+            }
+        }
+        current = next;
+    }
+    return current;
+};
+const trimBoundingBoxByProjection = (mask, width, height, box) => {
+    if (box.width <= 2 || box.height <= 2) {
+        return box;
+    }
+    const rowCounts = new Uint32Array(box.height);
+    const colCounts = new Uint32Array(box.width);
+    for (let y = box.y; y < box.y + box.height; y += 1) {
+        const row = y * width;
+        for (let x = box.x; x < box.x + box.width; x += 1) {
+            if (mask[row + x] > 0) {
+                rowCounts[y - box.y] += 1;
+                colCounts[x - box.x] += 1;
+            }
+        }
+    }
+    const minRow = Math.max(1, Math.round(box.width * 0.0035));
+    const minCol = Math.max(1, Math.round(box.height * 0.0035));
+    let top = 0;
+    while (top < rowCounts.length && rowCounts[top] < minRow) {
+        top += 1;
+    }
+    let bottom = rowCounts.length - 1;
+    while (bottom >= top && rowCounts[bottom] < minRow) {
+        bottom -= 1;
+    }
+    let left = 0;
+    while (left < colCounts.length && colCounts[left] < minCol) {
+        left += 1;
+    }
+    let right = colCounts.length - 1;
+    while (right >= left && colCounts[right] < minCol) {
+        right -= 1;
+    }
+    if (bottom < top || right < left) {
+        return box;
+    }
+    return {
+        x: box.x + left,
+        y: box.y + top,
+        width: Math.max(1, right - left + 1),
+        height: Math.max(1, bottom - top + 1),
+    };
+};
+const binarizeCanvas = (canvas, options = {}) => {
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+        throw new Error("キャンバスの初期化に失敗しました。");
+    }
+    const { width, height } = canvas;
+    const imageData = ctx.getImageData(0, 0, width, height);
+    const { data } = imageData;
+    const gray = new Uint8ClampedArray(width * height);
+    let mean = 0;
+    for (let i = 0; i < width * height; i += 1) {
+        const idx = i * 4;
+        const value = data[idx];
+        gray[i] = value;
+        mean += value;
+    }
+    mean /= gray.length || 1;
+    const threshold = clampByte(computeOtsuThreshold(gray) + (Number.isFinite(options.thresholdOffset) ? options.thresholdOffset : 0));
+    const backgroundIsBright = mean >= threshold;
+    const invert = options.invert === true;
+    for (let i = 0; i < gray.length; i += 1) {
+        const idx = i * 4;
+        const source = gray[i];
+        let foreground = backgroundIsBright ? source < threshold : source > threshold;
+        if (invert) {
+            foreground = !foreground;
+        }
+        const value = foreground ? 0 : 255;
+        data[idx] = value;
+        data[idx + 1] = value;
+        data[idx + 2] = value;
+        data[idx + 3] = 255;
+    }
+    ctx.putImageData(imageData, 0, 0);
+    return canvas;
+};
 const getImageData = (image) => {
     const canvas = createCanvas(image.naturalWidth || image.width, image.naturalHeight || image.height);
     const ctx = canvas.getContext("2d");
@@ -158,20 +341,23 @@ const computeMaskData = (imageData) => {
         mean += clamped;
     }
     mean /= normalized.length || 1;
-    const threshold = 128;
-    const mask = new Uint8ClampedArray(width * height);
-    if (mean > threshold) {
-        for (let i = 0; i < normalized.length; i += 1) {
-            const value = normalized[i];
-            mask[i] = value < threshold ? 255 : 0;
+    const otsuThreshold = computeOtsuThreshold(normalized);
+    const candidates = [
+        buildMaskFromThreshold(normalized, otsuThreshold, true),
+        buildMaskFromThreshold(normalized, otsuThreshold, false),
+        buildMaskFromThreshold(normalized, 128, mean >= 128),
+        buildMaskFromThreshold(normalized, 128, mean < 128),
+    ];
+    let bestMask = candidates[0];
+    let bestScore = scoreMaskRatio(candidates[0].ratio);
+    for (let i = 1; i < candidates.length; i += 1) {
+        const score = scoreMaskRatio(candidates[i].ratio);
+        if (score > bestScore) {
+            bestMask = candidates[i];
+            bestScore = score;
         }
     }
-    else {
-        for (let i = 0; i < normalized.length; i += 1) {
-            const value = normalized[i];
-            mask[i] = value > threshold ? 255 : 0;
-        }
-    }
+    const mask = denoiseMask(bestMask.mask, width, height, 1);
     return { mask, width, height };
 };
 const computeBoundingBox = (gray, width, height) => {
@@ -204,13 +390,12 @@ const computeBoundingBox = (gray, width, height) => {
         height: maxY - minY + 1,
     };
 };
-const expandBoundingBox = (box, width, height) => {
-    const baseMargin = Math.round(Math.min(box.width, box.height) * 0.06);
-    const margin = Math.min(64, Math.max(12, baseMargin));
-    const x = Math.max(0, box.x - margin);
-    const y = Math.max(0, box.y - margin);
-    const maxX = Math.min(width, box.x + box.width + margin);
-    const maxY = Math.min(height, box.y + box.height + margin);
+const expandBoundingBox = (box, width, height, margin) => {
+    const safeMargin = Math.max(0, Math.round(margin));
+    const x = Math.max(0, box.x - safeMargin);
+    const y = Math.max(0, box.y - safeMargin);
+    const maxX = Math.min(width, box.x + box.width + safeMargin);
+    const maxY = Math.min(height, box.y + box.height + safeMargin);
     return {
         x,
         y,
@@ -218,20 +403,45 @@ const expandBoundingBox = (box, width, height) => {
         height: Math.max(1, maxY - y),
     };
 };
-const preprocessImage = async (dataUrl) => {
-    const image = await loadImage(dataUrl);
-    const imageData = getImageData(image);
-    const { mask, width, height } = computeMaskData(imageData);
-    const rawBox = computeBoundingBox(mask, width, height);
-    const box = expandBoundingBox(rawBox, width, height);
-    let canvas = createCanvas(box.width, box.height);
-    const cropCtx = canvas.getContext("2d");
+const buildCropBoxes = (box, width, height) => {
+    const fullArea = Math.max(1, width * height);
+    const boxArea = box.width * box.height;
+    if (boxArea / fullArea >= 0.94) {
+        return [{ x: 0, y: 0, width, height }];
+    }
+    const minDim = Math.max(1, Math.min(box.width, box.height));
+    const baseMargin = Math.min(96, Math.max(12, Math.round(minDim * 0.06)));
+    const marginCandidates = [
+        Math.round(baseMargin * 0.5),
+        baseMargin,
+        Math.round(baseMargin * 1.8),
+    ];
+    const seen = new Set();
+    const boxes = [];
+    for (const margin of marginCandidates) {
+        const expanded = expandBoundingBox(box, width, height, margin);
+        const key = `${expanded.x}:${expanded.y}:${expanded.width}:${expanded.height}`;
+        if (seen.has(key)) {
+            continue;
+        }
+        seen.add(key);
+        boxes.push(expanded);
+    }
+    if (boxes.length === 0) {
+        boxes.push({ x: 0, y: 0, width, height });
+    }
+    return boxes;
+};
+const extractCropCanvas = (image, box) => {
+    const cropCanvas = createCanvas(box.width, box.height);
+    const cropCtx = cropCanvas.getContext("2d");
     if (!cropCtx) {
         throw new Error("キャンバスの初期化に失敗しました。");
     }
     cropCtx.drawImage(image, box.x, box.y, box.width, box.height, 0, 0, box.width, box.height);
-    canvas = enhanceForOcr(canvas);
-    canvas = resizeCanvas(canvas, TARGET_WIDTH, TARGET_HEIGHT);
+    return cropCanvas;
+};
+const canvasToPayload = (canvas, fallbackImageDataUrl) => {
     const ctx = canvas.getContext("2d");
     if (!ctx) {
         throw new Error("キャンバスの初期化に失敗しました。");
@@ -248,22 +458,163 @@ const preprocessImage = async (dataUrl) => {
         floatData[i + pixelCount] = (g - NORMALIZE_MEAN) / NORMALIZE_STD;
         floatData[i + pixelCount * 2] = (b - NORMALIZE_MEAN) / NORMALIZE_STD;
     }
-    return {
+    const payload = {
         data: floatData.buffer,
         width: canvas.width,
         height: canvas.height,
     };
+    if (fallbackImageDataUrl) {
+        payload.fallbackImageDataUrls = [fallbackImageDataUrl];
+    }
+    return payload;
+};
+const buildVariantCanvas = (source, variant) => {
+    const work = copyCanvas(source);
+    if (variant === "base") {
+        enhanceForOcr(work);
+    }
+    else if (variant === "contrast") {
+        enhanceCanvas(work, CONTRAST_FACTOR + 0.45, SHARPNESS_FACTOR + 0.25);
+    }
+    else if (variant === "binary") {
+        enhanceCanvas(work, CONTRAST_FACTOR + 0.55, SHARPNESS_FACTOR + 0.35);
+        binarizeCanvas(work);
+    }
+    else if (variant === "binary-soft") {
+        enhanceCanvas(work, CONTRAST_FACTOR + 0.35, SHARPNESS_FACTOR + 0.2);
+        binarizeCanvas(work, { thresholdOffset: 10 });
+    }
+    else {
+        enhanceCanvas(work, CONTRAST_FACTOR + 0.55, SHARPNESS_FACTOR + 0.35);
+        binarizeCanvas(work, { invert: true });
+    }
+    return fitCanvasWithPadding(work, TARGET_WIDTH, TARGET_HEIGHT, 255);
+};
+const preprocessImageVariants = async (dataUrl) => {
+    const image = await loadImage(dataUrl);
+    const imageData = getImageData(image);
+    const { mask, width, height } = computeMaskData(imageData);
+    const rawBox = computeBoundingBox(mask, width, height);
+    const tightBox = trimBoundingBoxByProjection(mask, width, height, rawBox);
+    const cropBoxes = buildCropBoxes(tightBox, width, height);
+    const primaryVariants = [
+        "base",
+        "contrast",
+        "binary",
+        "binary-soft",
+        "binary-invert",
+    ];
+    const secondaryVariants = ["base", "binary", "binary-soft"];
+    const payloads = [];
+    for (let i = 0; i < cropBoxes.length; i += 1) {
+        const cropCanvas = extractCropCanvas(image, cropBoxes[i]);
+        const variants = i === 0 ? primaryVariants : secondaryVariants;
+        for (const variant of variants) {
+            const canvas = buildVariantCanvas(cropCanvas, variant);
+            const includeFallback = variant === "contrast" ||
+                variant === "binary" ||
+                variant === "binary-soft" ||
+                variant === "binary-invert";
+            const fallbackImageDataUrl = includeFallback ? canvas.toDataURL("image/png") : undefined;
+            payloads.push(canvasToPayload(canvas, fallbackImageDataUrl));
+            if (payloads.length >= MAX_PREPROCESS_PAYLOADS) {
+                return payloads;
+            }
+        }
+    }
+    if (payloads.length === 0) {
+        const fallbackCanvas = fitCanvasWithPadding(extractCropCanvas(image, { x: 0, y: 0, width, height }), TARGET_WIDTH, TARGET_HEIGHT, 255);
+        payloads.push(canvasToPayload(fallbackCanvas, fallbackCanvas.toDataURL("image/png")));
+    }
+    return payloads;
+};
+const countUnbalanced = (text, openChar, closeChar) => {
+    let balance = 0;
+    let penalty = 0;
+    for (let i = 0; i < text.length; i += 1) {
+        const ch = text[i];
+        if (ch === openChar) {
+            balance += 1;
+        }
+        else if (ch === closeChar) {
+            if (balance > 0) {
+                balance -= 1;
+            }
+            else {
+                penalty += 1;
+            }
+        }
+    }
+    return penalty + balance;
+};
+const scoreLatexCandidate = (value) => {
+    var _a, _b, _c, _d;
+    const trimmed = value.trim();
+    if (!trimmed) {
+        return -1000;
+    }
+    let score = 100;
+    if (trimmed.length < 2)
+        score -= 40;
+    if (trimmed.length > 220)
+        score -= 60;
+    if (((_a = trimmed.match(/[A-Za-z0-9]/g)) !== null && _a !== void 0 ? _a : []).length === 0)
+        score -= 50;
+    if (((_b = trimmed.match(/\\pi/g)) !== null && _b !== void 0 ? _b : []).length > 8)
+        score -= 30;
+    if (trimmed.includes("\\begin{array}"))
+        score -= 30;
+    if (trimmed.includes("<unk>") || trimmed.includes("�"))
+        score -= 50;
+    score -= countUnbalanced(trimmed, "{", "}") * 14;
+    score -= countUnbalanced(trimmed, "(", ")") * 8;
+    const leftCount = ((_c = trimmed.match(/\\left/g)) !== null && _c !== void 0 ? _c : []).length;
+    const rightCount = ((_d = trimmed.match(/\\right/g)) !== null && _d !== void 0 ? _d : []).length;
+    score -= Math.abs(leftCount - rightCount) * 10;
+    if (/[\\](?:frac|sqrt|sum|int|lim|alpha|beta|gamma|theta|sin|cos|tan)\b/.test(trimmed)) {
+        score += 8;
+    }
+    return score;
 };
 export const recognizeMath = async (imageDataUrl) => {
-    const bridge = window.tex64MathOcr;
+    var _a;
+    const bridgeWindow = window;
+    const bridge = (_a = bridgeWindow.__tex64TestMathOcr) !== null && _a !== void 0 ? _a : bridgeWindow.tex64MathOcr;
     if (!(bridge === null || bridge === void 0 ? void 0 : bridge.run)) {
         throw new Error("数式OCRが利用できません。");
     }
-    const payload = await preprocessImage(imageDataUrl);
-    const result = await bridge.run({ ...payload, imageDataUrl });
-    const latex = typeof (result === null || result === void 0 ? void 0 : result.latex) === "string" ? result.latex.trim() : "";
-    if (!latex) {
+    const payloadVariants = await preprocessImageVariants(imageDataUrl);
+    let bestLatex = "";
+    let bestScore = -Infinity;
+    let lastError = null;
+    for (const payload of payloadVariants) {
+        try {
+            const result = await bridge.run({ ...payload, imageDataUrl });
+            const latex = typeof (result === null || result === void 0 ? void 0 : result.latex) === "string" ? result.latex.trim() : "";
+            if (!latex) {
+                continue;
+            }
+            const score = scoreLatexCandidate(latex);
+            if (score > bestScore) {
+                bestLatex = latex;
+                bestScore = score;
+            }
+            if (score >= CANDIDATE_EARLY_ACCEPT_SCORE) {
+                break;
+            }
+        }
+        catch (error) {
+            lastError = error instanceof Error ? error : new Error("OCRに失敗しました。");
+        }
+    }
+    if (bestLatex) {
+        return bestLatex;
+    }
+    if (lastError) {
+        throw lastError;
+    }
+    if (payloadVariants.length === 0) {
         throw new Error("OCR結果が空でした。");
     }
-    return latex;
+    throw new Error("OCR結果が空でした。");
 };

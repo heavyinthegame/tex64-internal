@@ -160,7 +160,8 @@ const AGENT_TOOL_DECLARATIONS = [
   },
   {
     name: "run_command",
-    description: "Run a shell command in the workspace and return stdout/stderr.",
+    description:
+      "Run an allowed verification command in the workspace and return stdout/stderr (only when allowRunCommand=true).",
     parameters: {
       type: "object",
       properties: {
@@ -175,7 +176,6 @@ const AGENT_TOOL_DECLARATIONS = [
         env: {
           type: "object",
           description: "Optional environment variables",
-          additionalProperties: { type: "string" },
         },
         timeoutMs: {
           type: "number",
@@ -198,7 +198,8 @@ const AGENT_TOOL_DECLARATIONS = [
         keys: {
           type: "array",
           items: { type: "string" },
-          description: "Optional keys to filter (compileEngine, autoSynctexOnBuild, pdfViewerMode, alignEnv, formatSettings)",
+          description:
+            "Optional keys to filter (compileEngine, autoSynctexOnBuild, reverseSynctexEnabled, pdfViewerMode, ghostCompletionEnabled, alignEnv, formatSettings)",
         },
       },
       required: [],
@@ -213,7 +214,6 @@ const AGENT_TOOL_DECLARATIONS = [
         settings: {
           type: "object",
           description: "Partial settings to update",
-          additionalProperties: true,
         },
       },
       required: ["settings"],

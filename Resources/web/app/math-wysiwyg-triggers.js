@@ -80,6 +80,11 @@ const MANUAL_TRIGGERS = [
         ],
     },
     {
+        trigger: "tfrac",
+        priority: 115,
+        candidates: [{ latex: "\\tfrac{#?}{#?}", label: "tfrac", displayLatex: "\\tfrac{a}{b}" }],
+    },
+    {
         trigger: "lim",
         priority: 110,
         candidates: [
@@ -340,6 +345,18 @@ const MANUAL_TRIGGERS = [
         ],
     },
     {
+        trigger: "smallmatrix",
+        priority: 98,
+        pack: "math",
+        candidates: [
+            {
+                latex: "\\begin{smallmatrix}#?&#?\\\\#?&#?\\end{smallmatrix}",
+                label: "smallmatrix",
+                displayLatex: "\\begin{smallmatrix}a&b\\\\c&d\\end{smallmatrix}",
+            },
+        ],
+    },
+    {
         trigger: "cases",
         priority: 100,
         candidates: [
@@ -356,10 +373,48 @@ const MANUAL_TRIGGERS = [
         ],
     },
     {
+        trigger: "dcases",
+        priority: 96,
+        pack: "math",
+        candidates: [
+            {
+                latex: "\\begin{dcases}#?&#?\\\\#?&#?\\end{dcases}",
+                label: "dcases",
+                displayLatex: "\\begin{dcases}x&x>0\\\\-x&x\\le 0\\end{dcases}",
+            },
+        ],
+    },
+    {
+        trigger: "rcases",
+        priority: 96,
+        pack: "math",
+        candidates: [
+            {
+                latex: "\\begin{rcases}#?&#?\\\\#?&#?\\end{rcases}",
+                label: "rcases",
+                displayLatex: "\\begin{rcases}x&x>0\\\\-x&x\\le 0\\end{rcases}",
+            },
+        ],
+    },
+    {
         trigger: "binom",
         priority: 90,
         candidates: [
             { latex: "\\binom{#?}{#?}", label: "nCk", displayLatex: "\\binom{n}{k}" },
+        ],
+    },
+    {
+        trigger: "dbinom",
+        priority: 88,
+        candidates: [
+            { latex: "\\dbinom{#?}{#?}", label: "dbinom", displayLatex: "\\dbinom{n}{k}" },
+        ],
+    },
+    {
+        trigger: "tbinom",
+        priority: 88,
+        candidates: [
+            { latex: "\\tbinom{#?}{#?}", label: "tbinom", displayLatex: "\\tbinom{n}{k}" },
         ],
     },
     {
@@ -378,7 +433,7 @@ const MANUAL_TRIGGERS = [
         priority: 90,
         candidates: [
             {
-                latex: "\\left\\lVert#?\\right\\rVert",
+                latex: "\\left\\lVert #?\\right\\rVert",
                 label: "‖x‖",
                 displayLatex: "\\left\\lVert x\\right\\rVert",
             },
@@ -389,7 +444,7 @@ const MANUAL_TRIGGERS = [
         priority: 90,
         candidates: [
             {
-                latex: "\\left\\lceil#?\\right\\rceil",
+                latex: "\\left\\lceil #?\\right\\rceil",
                 label: "⌈x⌉",
                 displayLatex: "\\left\\lceil x\\right\\rceil",
             },
@@ -400,7 +455,7 @@ const MANUAL_TRIGGERS = [
         priority: 90,
         candidates: [
             {
-                latex: "\\left\\lfloor#?\\right\\rfloor",
+                latex: "\\left\\lfloor #?\\right\\rfloor",
                 label: "⌊x⌋",
                 displayLatex: "\\left\\lfloor x\\right\\rfloor",
             },
@@ -1035,10 +1090,28 @@ const MANUAL_TRIGGERS = [
         ],
     },
     {
+        trigger: "xleftrightarrow",
+        priority: 90,
+        candidates: [
+            {
+                latex: "\\xleftrightarrow{#?}",
+                label: "x↔",
+                displayLatex: "\\xleftrightarrow{a}",
+            },
+        ],
+    },
+    {
         trigger: "overset",
         priority: 90,
         candidates: [
             { latex: "\\overset{#?}{#?}", label: "over", displayLatex: "\\overset{a}{b}" },
+        ],
+    },
+    {
+        trigger: "underset",
+        priority: 90,
+        candidates: [
+            { latex: "\\underset{#?}{#?}", label: "under", displayLatex: "\\underset{a}{b}" },
         ],
     },
     {
@@ -1146,6 +1219,18 @@ const MANUAL_TRIGGERS = [
         ],
     },
     {
+        trigger: "middle",
+        priority: 88,
+        pack: "math",
+        candidates: [
+            {
+                latex: "\\left(#?\\middle|#?\\right)",
+                label: "middle|",
+                displayLatex: "\\left(a\\middle|b\\right)",
+            },
+        ],
+    },
+    {
         trigger: "anglebr",
         priority: 90,
         candidates: [
@@ -1194,6 +1279,18 @@ const MANUAL_TRIGGERS = [
                 displayLatex: "\\stackrel{def}{=}",
             },
         ],
+    },
+    {
+        trigger: "coloneqq",
+        priority: 90,
+        pack: "math",
+        candidates: [{ latex: "\\coloneqq", label: ":=", displayLatex: "\\coloneqq" }],
+    },
+    {
+        trigger: "eqqcolon",
+        priority: 90,
+        pack: "math",
+        candidates: [{ latex: "\\eqqcolon", label: "=:", displayLatex: "\\eqqcolon" }],
     },
     {
         trigger: "and",
@@ -1333,13 +1430,25 @@ const MANUAL_TRIGGERS = [
         trigger: "mathbb",
         priority: 80,
         pack: "math",
-        candidates: [{ latex: "\\mathbb{#?}", label: "bb", displayLatex: "\\mathbb{A}" }],
+        candidates: [
+            { latex: "\\mathbb{R}", label: "ℝ", displayLatex: "\\mathbb{R}" },
+            { latex: "\\mathbb{C}", label: "ℂ", displayLatex: "\\mathbb{C}" },
+            { latex: "\\mathbb{Z}", label: "ℤ", displayLatex: "\\mathbb{Z}" },
+            { latex: "\\mathbb{Q}", label: "ℚ", displayLatex: "\\mathbb{Q}" },
+            { latex: "\\mathbb{N}", label: "ℕ", displayLatex: "\\mathbb{N}" },
+        ],
     },
     {
         trigger: "bb",
         priority: 80,
         pack: "math",
-        candidates: [{ latex: "\\mathbb{#?}", label: "bb", displayLatex: "\\mathbb{A}" }],
+        candidates: [
+            { latex: "\\mathbb{R}", label: "ℝ", displayLatex: "\\mathbb{R}" },
+            { latex: "\\mathbb{C}", label: "ℂ", displayLatex: "\\mathbb{C}" },
+            { latex: "\\mathbb{Z}", label: "ℤ", displayLatex: "\\mathbb{Z}" },
+            { latex: "\\mathbb{Q}", label: "ℚ", displayLatex: "\\mathbb{Q}" },
+            { latex: "\\mathbb{N}", label: "ℕ", displayLatex: "\\mathbb{N}" },
+        ],
     },
     {
         trigger: "mathfrak",
@@ -1436,6 +1545,56 @@ const MANUAL_TRIGGERS = [
         ],
     },
     {
+        trigger: "smashoperator",
+        priority: 74,
+        pack: "personal",
+        candidates: [
+            {
+                latex: "\\smashoperator{#?}",
+                label: "smashop",
+                displayLatex: "\\smashoperator{\\sum_{i=1}^{n}}",
+            },
+        ],
+    },
+    {
+        trigger: "prescript",
+        priority: 74,
+        pack: "personal",
+        candidates: [
+            {
+                latex: "\\prescript{#?}{#?}{#?}",
+                label: "prescript",
+                displayLatex: "\\prescript{a}{b}{X}",
+            },
+        ],
+    },
+    {
+        trigger: "symbf",
+        priority: 74,
+        pack: "personal",
+        candidates: [{ latex: "\\symbf{#?}", label: "symbf", displayLatex: "\\symbf{x}" }],
+    },
+    {
+        trigger: "mathchoice",
+        priority: 72,
+        pack: "personal",
+        candidates: [
+            {
+                latex: "\\mathchoice{#?}{#?}{#?}{#?}",
+                label: "mathchoice",
+                displayLatex: "\\mathchoice{A}{B}{C}{D}",
+            },
+        ],
+    },
+    {
+        trigger: "unicode",
+        priority: 70,
+        pack: "personal",
+        candidates: [
+            { latex: "\\unicode{x#?}", label: "unicode", displayLatex: "\\unicode{x03B1}" },
+        ],
+    },
+    {
         trigger: "aligned",
         priority: 80,
         candidates: [
@@ -1443,6 +1602,77 @@ const MANUAL_TRIGGERS = [
                 latex: "\\begin{aligned}#? &= #?\\\\#? &= #?\\end{aligned}",
                 label: "aligned",
                 displayLatex: "\\begin{aligned}a &= b\\\\c &= d\\end{aligned}",
+            },
+        ],
+    },
+    {
+        trigger: "align",
+        priority: 82,
+        candidates: [
+            {
+                latex: "\\begin{align*}#? &= #?\\\\#? &= #?\\end{align*}",
+                label: "align*",
+                displayLatex: "\\begin{align*}a &= b\\\\c &= d\\end{align*}",
+            },
+        ],
+    },
+    {
+        trigger: "alignat",
+        priority: 80,
+        pack: "math",
+        candidates: [
+            {
+                latex: "\\begin{alignat*}{2}#?&=#?\\quad&#?&=#?\\end{alignat*}",
+                label: "alignat*",
+                displayLatex: "\\begin{alignat*}{2}a&=b\\quad&c&=d\\end{alignat*}",
+            },
+        ],
+    },
+    {
+        trigger: "flalign",
+        priority: 80,
+        pack: "math",
+        candidates: [
+            {
+                latex: "\\begin{flalign*}#?&&=#?\\end{flalign*}",
+                label: "flalign*",
+                displayLatex: "\\begin{flalign*}a&&=b\\end{flalign*}",
+            },
+        ],
+    },
+    {
+        trigger: "multline",
+        priority: 80,
+        pack: "math",
+        candidates: [
+            {
+                latex: "\\begin{multline*}#?\\\\#?\\end{multline*}",
+                label: "multline*",
+                displayLatex: "\\begin{multline*}a+b\\\\=c\\end{multline*}",
+            },
+        ],
+    },
+    {
+        trigger: "split",
+        priority: 78,
+        pack: "math",
+        candidates: [
+            {
+                latex: "\\begin{split}#? &= #?\\\\#? &= #?\\end{split}",
+                label: "split",
+                displayLatex: "\\begin{split}a &= b\\\\c &= d\\end{split}",
+            },
+        ],
+    },
+    {
+        trigger: "subequations",
+        priority: 78,
+        pack: "math",
+        candidates: [
+            {
+                latex: "\\begin{subequations}\\begin{align}#? &= #?\\\\#? &= #?\\end{align}\\end{subequations}",
+                label: "subequations",
+                displayLatex: "\\begin{subequations}\\begin{align}a &= b\\\\c &= d\\end{align}\\end{subequations}",
             },
         ],
     },

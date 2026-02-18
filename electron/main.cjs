@@ -11,7 +11,6 @@ const fsp = require("fs/promises");
 const path = require("path");
 const { spawn } = require("child_process");
 const { BuildService } = require("./services/build.cjs");
-const { LintService } = require("./services/lint.cjs");
 const FormatterService = require("./services/formatter.cjs");
 
 const { IndexerService } = require("./services/indexer.cjs");
@@ -31,6 +30,14 @@ const { createBuildHandlers } = require("./handlers/build.cjs");
 const { createMiscHandlers } = require("./handlers/misc.cjs");
 const { createAgentHandlers } = require("./handlers/agent.cjs");
 
+const e2eUserDataPath =
+  typeof process.env.TEX64_E2E_USERDATA === "string"
+    ? process.env.TEX64_E2E_USERDATA.trim()
+    : "";
+if (e2eUserDataPath) {
+  app.setPath("userData", path.resolve(e2eUserDataPath));
+}
+
 const state = {
   mainWindow: null,
   currentWorkspacePath: null,
@@ -43,7 +50,6 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const workspace = new WorkspaceManager();
 const buildService = new BuildService();
-const lintService = new LintService();
 const formatterService = new FormatterService();
 const indexerService = new IndexerService();
 const searchService = new SearchService();
@@ -75,7 +81,7 @@ const createMainWindow = () => {
     minWidth: 960,
     minHeight: 600,
     backgroundColor: "#1c2129",
-    title: "tex64",
+    title: "TeX64",
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -173,7 +179,6 @@ const buildHandlers = createBuildHandlers({
   fs,
   path,
   buildService,
-  lintService,
   formatterService,
   workspace,
   pdfWindowManager,
@@ -234,6 +239,26 @@ ipcMain.handle("tex64:capture:getSources", async (_event, options) => {
     return desktopCapturer.getSources(params);
   };
 
+  const fetchWindowSources = async () => {
+    let windowSources = [];
+    let windowError = null;
+    try {
+      windowSources = await fetchSources(["window"], true);
+    } catch (error) {
+      windowError = error;
+    }
+    if (windowSources.length === 0) {
+      try {
+        windowSources = await fetchSources(["window"], false);
+      } catch (error) {
+        if (!windowError) {
+          windowError = error;
+        }
+      }
+    }
+    return { windowSources, windowError };
+  };
+
   const mapSource = (source) => {
     const thumbnail = source.thumbnail;
     const thumbSize = thumbnail.getSize();
@@ -253,36 +278,39 @@ ipcMain.handle("tex64:capture:getSources", async (_event, options) => {
     };
   };
 
-  let sources = [];
-  let lastError = null;
+  const { windowSources, windowError } = await fetchWindowSources();
+  let screenSources = [];
+  let screenError = null;
 
   try {
-    sources = await fetchSources(["window"], true);
+    screenSources = await fetchSources(["screen"], false);
   } catch (error) {
-    lastError = error;
+    screenError = error;
   }
 
-  if (sources.length === 0) {
-    try {
-      sources = await fetchSources(["window"], false);
-    } catch (error) {
-      lastError = error;
+  const mergedSources = [...windowSources, ...screenSources];
+
+  if (mergedSources.length === 0) {
+    if (windowError) {
+      throw windowError;
     }
-  }
-
-  if (sources.length === 0) {
-    try {
-      sources = await fetchSources(["screen"], false);
-    } catch (error) {
-      lastError = error;
+    if (screenError) {
+      throw screenError;
     }
+    return [];
   }
 
-  if (sources.length === 0 && lastError) {
-    throw lastError;
+  const seen = new Set();
+  const deduped = [];
+  for (const source of mergedSources) {
+    if (!source?.id || seen.has(source.id)) {
+      continue;
+    }
+    seen.add(source.id);
+    deduped.push(source);
   }
 
-  return sources.map(mapSource);
+  return deduped.map(mapSource);
 });
 
 ipcMain.handle("tex64:math-ocr:run", async (_event, payload) => {
@@ -357,11 +385,10 @@ ipcMain.on("tex64", (_event, message) => {
     return;
   }
   if (type === "build:clean") {
-    buildHandlers.handleClean(message.mainFile, { deep: message.deep === true });
-    return;
-  }
-  if (type === "lint:run") {
-    buildHandlers.handleLint(message.mainFile);
+    buildHandlers.handleClean(message.mainFile, {
+      deep: message.deep === true,
+      buildProfile: message.buildProfile,
+    });
     return;
   }
   if (type === "openFile") {
@@ -451,7 +478,7 @@ ipcMain.on("tex64", (_event, message) => {
     return;
   }
   if (type === "search") {
-    workspaceHandlers.handleSearch(message.query);
+    workspaceHandlers.handleSearch(message.query, message.requestId);
     return;
   }
   if (type === "search:renameSymbol") {
@@ -491,15 +518,24 @@ ipcMain.on("tex64", (_event, message) => {
     return;
   }
   if (type === "agent:run") {
-    agentHandlers.handleAgentRun(message.message, message.context, message.conversationId);
+    agentHandlers.handleAgentRun(
+      message.message,
+      message.context,
+      message.conversationId,
+      message.parts
+    );
     return;
   }
   if (type === "agent:abort") {
-    agentHandlers.handleAgentAbort();
+    agentHandlers.handleAgentAbort(message.conversationId);
     return;
   }
   if (type === "agent:apply") {
     agentHandlers.handleAgentApply(message.proposalId);
+    return;
+  }
+  if (type === "agent:undoLastApply") {
+    agentHandlers.handleAgentUndoLastApply(message.conversationId);
     return;
   }
   if (type === "agent:clear") {

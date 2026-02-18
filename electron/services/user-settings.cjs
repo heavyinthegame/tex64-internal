@@ -6,11 +6,11 @@ const MAX_RECENT_PROJECTS = 10;
 const DEFAULT_SETTINGS = {
   agent: {
     temperature: 0.2,
-    maxOutputTokens: 2048,
-    maxIterations: 12,
+    maxIterations: 30,
     stream: true,
     autoApply: false,
     autoBuild: false,
+    allowRunCommand: false,
     maxFileBytes: 0,
     maxReadFiles: 0,
     openFileMaxBytes: 0,

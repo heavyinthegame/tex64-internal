@@ -1,5 +1,5 @@
 import { registerCompletionProvider } from "./monaco-completion.js";
-import { registerHoverProvider } from "./monaco-hover.js";
+import { registerHoverProvider, } from "./monaco-hover.js";
 import { createInlineCompletionController } from "./monaco-inline.js";
 import { applyMonacoTheme } from "./monaco-theme.js";
 export const initMonacoSetup = (context, deps) => {
@@ -95,12 +95,22 @@ export const initMonacoSetup = (context, deps) => {
             suggestOnTriggerCharacters: true,
             tabCompletion: "off",
             acceptSuggestionOnEnter: "on",
+            // Render hover/suggest widgets in a fixed layer to avoid clipping
+            // at the Monaco viewport edge (especially near the first lines).
+            fixedOverflowWidgets: true,
+            hover: {
+                enabled: true,
+                delay: 180,
+                sticky: true,
+                // Prefer above by default (Monaco may fallback below if space is insufficient).
+                above: true,
+            },
             occurrencesHighlight: false,
             selectionHighlight: false,
             inlineSuggest: { enabled: deps.getGhostCompletionEnabled() },
         };
         const createEditorForGroup = (group, host) => {
-            var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
+            var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o;
             const editor = (_b = (_a = monacoWindow.monaco) === null || _a === void 0 ? void 0 : _a.editor) === null || _b === void 0 ? void 0 : _b.create(host, editorOptions);
             const editorAny = editor;
             group.editor = editor;
@@ -123,6 +133,8 @@ export const initMonacoSetup = (context, deps) => {
             ghostCaretNode.setAttribute("aria-hidden", "true");
             let ghostCaretPosition = null;
             let ghostCaretVisible = false;
+            let inlineAutoTriggerTimers = [];
+            let hoverAnchorRafId = null;
             const ghostCaretPreference = (_f = (_e = (_d = (_c = monacoWindow.monaco) === null || _c === void 0 ? void 0 : _c.editor) === null || _d === void 0 ? void 0 : _d.ContentWidgetPositionPreference) === null || _e === void 0 ? void 0 : _e.EXACT) !== null && _f !== void 0 ? _f : 0;
             const ghostCaretWidget = {
                 getId: () => `tex64-ghost-caret-${group.key}`,
@@ -158,6 +170,71 @@ export const initMonacoSetup = (context, deps) => {
                 }
                 ghostCaretVisible = false;
                 (_a = editorAny.layoutContentWidget) === null || _a === void 0 ? void 0 : _a.call(editorAny, ghostCaretWidget);
+            };
+            const clearInlineAutoTrigger = () => {
+                inlineAutoTriggerTimers.forEach((timerId) => {
+                    window.clearTimeout(timerId);
+                });
+                inlineAutoTriggerTimers = [];
+            };
+            const updateHoverFixedAnchor = () => {
+                var _a;
+                const editorForHover = editor;
+                const editorDomNode = (_a = editorForHover.getDomNode) === null || _a === void 0 ? void 0 : _a.call(editorForHover);
+                if (!editorDomNode) {
+                    return;
+                }
+                const hostRect = editorDomNode.getBoundingClientRect();
+                const top = Math.max(8, Math.round(hostRect.top + 10));
+                const right = Math.max(8, Math.round(window.innerWidth - hostRect.right + 14));
+                document.documentElement.style.setProperty("--tex64-hover-fixed-top", `${top}px`);
+                document.documentElement.style.setProperty("--tex64-hover-fixed-right", `${right}px`);
+            };
+            const scheduleHoverFixedAnchor = () => {
+                if (hoverAnchorRafId !== null) {
+                    window.cancelAnimationFrame(hoverAnchorRafId);
+                }
+                hoverAnchorRafId = window.requestAnimationFrame(() => {
+                    hoverAnchorRafId = null;
+                    updateHoverFixedAnchor();
+                });
+            };
+            window.addEventListener("resize", scheduleHoverFixedAnchor);
+            updateHoverFixedAnchor();
+            const scheduleInlineAutoTrigger = () => {
+                clearInlineAutoTrigger();
+                const config = deps.getGhostCompletionConfig();
+                const baseDelay = Number.isFinite(config.debounceMs) && config.debounceMs >= 0
+                    ? Math.round(config.debounceMs)
+                    : 120;
+                const delays = [baseDelay, Math.max(baseDelay + 120, 620)];
+                delays.forEach((delay) => {
+                    const timerId = window.setTimeout(() => {
+                        var _a, _b, _c;
+                        inlineAutoTriggerTimers = inlineAutoTriggerTimers.filter((id) => id !== timerId);
+                        if (!deps.getGhostCompletionEnabled()) {
+                            return;
+                        }
+                        if (!deps.editorSession.isActiveGroup(group)) {
+                            return;
+                        }
+                        if (!group.currentFilePath || !group.currentFilePath.endsWith(".tex")) {
+                            return;
+                        }
+                        if (group.isComposing || deps.editorSession.isAnyGroupComposing()) {
+                            return;
+                        }
+                        if (document.querySelector(".suggest-widget.visible")) {
+                            return;
+                        }
+                        const hasTextFocus = (_b = (_a = editorAny).hasTextFocus) === null || _b === void 0 ? void 0 : _b.call(_a);
+                        if (!hasTextFocus) {
+                            return;
+                        }
+                        (_c = editorAny.trigger) === null || _c === void 0 ? void 0 : _c.call(editorAny, "tex64", "editor.action.inlineSuggest.trigger", {});
+                    }, delay);
+                    inlineAutoTriggerTimers.push(timerId);
+                });
             };
             const showGhostCaret = () => {
                 var _a, _b, _c;
@@ -215,22 +292,39 @@ export const initMonacoSetup = (context, deps) => {
             });
             (_j = editorAny.onDidBlurEditorWidget) === null || _j === void 0 ? void 0 : _j.call(editorAny, () => {
                 var _a, _b;
+                clearInlineAutoTrigger();
+                if (hoverAnchorRafId !== null) {
+                    window.cancelAnimationFrame(hoverAnchorRafId);
+                    hoverAnchorRafId = null;
+                }
                 updateGhostCaretPosition((_b = (_a = editorAny.getPosition) === null || _a === void 0 ? void 0 : _a.call(editorAny)) !== null && _b !== void 0 ? _b : null);
                 showGhostCaret();
             });
-            (_k = editorAny.onDidScrollChange) === null || _k === void 0 ? void 0 : _k.call(editorAny, () => {
+            (_k = editor.onDidFocusEditorWidget) === null || _k === void 0 ? void 0 : _k.call(editor, () => {
+                scheduleHoverFixedAnchor();
+            });
+            (_l = editorAny.onDidScrollChange) === null || _l === void 0 ? void 0 : _l.call(editorAny, () => {
                 var _a;
                 if (ghostCaretVisible) {
                     (_a = editorAny.layoutContentWidget) === null || _a === void 0 ? void 0 : _a.call(editorAny, ghostCaretWidget);
                 }
+                scheduleHoverFixedAnchor();
             });
             editor.onDidChangeModelContent(() => {
                 inlineController.recordInlineEdit();
                 if (group.isApplyingFile) {
+                    clearInlineAutoTrigger();
                     return;
                 }
                 if (!group.currentFilePath) {
+                    clearInlineAutoTrigger();
                     return;
+                }
+                if (deps.editorSession.isActiveGroup(group) && group.currentFilePath.endsWith(".tex")) {
+                    scheduleInlineAutoTrigger();
+                }
+                else {
+                    clearInlineAutoTrigger();
                 }
                 const currentValue = editor.getValue();
                 deps.editorSession.updateDirtyState(group.currentFilePath, currentValue);
@@ -242,7 +336,7 @@ export const initMonacoSetup = (context, deps) => {
                     deps.editorSession.scheduleAutoSave();
                 }
             });
-            (_l = editor.onDidChangeCursorPosition) === null || _l === void 0 ? void 0 : _l.call(editor, (e) => {
+            (_m = editor.onDidChangeCursorPosition) === null || _m === void 0 ? void 0 : _m.call(editor, (e) => {
                 updateGhostCaretPosition(e.position);
                 if (group.currentFilePath &&
                     group.currentFilePath.endsWith(".tex") &&
@@ -250,7 +344,7 @@ export const initMonacoSetup = (context, deps) => {
                     deps.onCursorPositionChange(e.position);
                 }
             });
-            (_m = editor.onDidChangeCursorSelection) === null || _m === void 0 ? void 0 : _m.call(editor, (e) => {
+            (_o = editor.onDidChangeCursorSelection) === null || _o === void 0 ? void 0 : _o.call(editor, (e) => {
                 var _a;
                 updateGhostCaretPosition({
                     lineNumber: e.selection.positionLineNumber,

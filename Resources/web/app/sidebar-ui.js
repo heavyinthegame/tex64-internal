@@ -3,6 +3,7 @@ export const initSidebarVisibility = (context, deps) => {
     const { tabs, sidebarPanels, sidebar } = context.dom;
     const primarySidebarTabs = [
         "files",
+        "search",
         "outline",
         "blocks",
         "ai",
@@ -94,7 +95,13 @@ export const initSidebarVisibility = (context, deps) => {
                         }
                     }
                 });
-                const normalizedOrder = normalizePrimaryTabOrder(nextOrder);
+                let normalizedOrder = normalizePrimaryTabOrder(nextOrder);
+                if (!nextOrder.includes("search")) {
+                    const withoutSearch = normalizedOrder.filter((key) => key !== "search");
+                    const filesIndex = withoutSearch.indexOf("files");
+                    withoutSearch.splice(filesIndex >= 0 ? filesIndex + 1 : 0, 0, "search");
+                    normalizedOrder = withoutSearch;
+                }
                 if (normalizedOrder.length > 0) {
                     primaryTabOrder = normalizedOrder;
                 }

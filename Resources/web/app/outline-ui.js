@@ -1,4 +1,4 @@
-import { dedupeByKey, dedupeSections, pickCitationEntries } from "./index-utils.js";
+import { dedupeByKey, dedupeByKeyAndLocation, dedupeSections, pickCitationEntries, } from "./index-utils.js";
 export const initOutlineUi = (context, deps) => {
     const { outlineEmpty, outlineModeCurrent, outlineModeProject, outlineSections, outlineTodos, outlineLabels, outlineCitations, } = context.dom;
     const outlineModeKey = "tex64.outline.mode";
@@ -70,21 +70,76 @@ export const initOutlineUi = (context, deps) => {
             return;
         }
         const showNumbering = options.showNumbering !== false;
-        const baseLevel = showNumbering ? Math.min(...entries.map((entry) => entry.level)) : 0;
-        const counters = showNumbering ? new Array(8).fill(0) : [];
         const sectionLabels = ["章", "節", "小節", "項", "小項", "段落", "小段落"];
-        entries.forEach((entry) => {
-            var _a;
-            const depth = Math.max(entry.level - baseLevel, 0);
-            let prefix = "";
-            if (showNumbering) {
-                counters[depth] += 1;
-                for (let i = depth + 1; i < counters.length; i += 1) {
-                    counters[i] = 0;
+        const baseLevelsByPath = new Map();
+        if (showNumbering) {
+            entries.forEach((entry) => {
+                var _a;
+                const state = (_a = baseLevelsByPath.get(entry.path)) !== null && _a !== void 0 ? _a : {
+                    hasChapter: false,
+                    minSectionOrLowerLevel: Number.POSITIVE_INFINITY,
+                    hasNonPart: false,
+                };
+                if (entry.level === 2) {
+                    state.hasChapter = true;
                 }
-                const numberParts = counters.slice(0, depth + 1).filter((value) => value > 0);
-                const label = (_a = sectionLabels[depth]) !== null && _a !== void 0 ? _a : "節";
-                prefix = `${numberParts.join(".")}${label} `;
+                if (entry.level >= 3 && entry.level < state.minSectionOrLowerLevel) {
+                    state.minSectionOrLowerLevel = entry.level;
+                }
+                if (entry.level !== 1) {
+                    state.hasNonPart = true;
+                }
+                baseLevelsByPath.set(entry.path, state);
+            });
+        }
+        const stateByPath = new Map();
+        const getStateForPath = (path) => {
+            var _a, _b, _c;
+            const existing = stateByPath.get(path);
+            if (existing) {
+                return existing;
+            }
+            const baseInfo = baseLevelsByPath.get(path);
+            const hasChapter = (_a = baseInfo === null || baseInfo === void 0 ? void 0 : baseInfo.hasChapter) !== null && _a !== void 0 ? _a : false;
+            const minSectionOrLowerLevel = (_b = baseInfo === null || baseInfo === void 0 ? void 0 : baseInfo.minSectionOrLowerLevel) !== null && _b !== void 0 ? _b : Number.POSITIVE_INFINITY;
+            const hasNonPart = (_c = baseInfo === null || baseInfo === void 0 ? void 0 : baseInfo.hasNonPart) !== null && _c !== void 0 ? _c : false;
+            const baseLevel = hasChapter
+                ? 2
+                : Number.isFinite(minSectionOrLowerLevel)
+                    ? minSectionOrLowerLevel
+                    : 2;
+            const countPart = !hasNonPart;
+            const state = {
+                baseLevel,
+                labelOffset: Math.max(baseLevel - 2, 0),
+                countPart,
+                counters: new Array(8).fill(0),
+            };
+            stateByPath.set(path, state);
+            return state;
+        };
+        entries.forEach((entry) => {
+            var _a, _b, _c;
+            let prefix = "";
+            const state = showNumbering ? getStateForPath(entry.path) : null;
+            const depth = showNumbering
+                ? Math.max(entry.level - ((_a = state === null || state === void 0 ? void 0 : state.baseLevel) !== null && _a !== void 0 ? _a : 0), 0)
+                : entry.level;
+            if (showNumbering) {
+                const shouldCount = state.countPart || entry.level >= state.baseLevel;
+                if (shouldCount) {
+                    state.counters[depth] = ((_b = state.counters[depth]) !== null && _b !== void 0 ? _b : 0) + 1;
+                    for (let i = depth + 1; i < state.counters.length; i += 1) {
+                        state.counters[i] = 0;
+                    }
+                }
+                const numberParts = state.counters
+                    .slice(0, depth + 1)
+                    .filter((value) => value > 0);
+                if (numberParts.length > 0) {
+                    const label = (_c = sectionLabels[Math.max(depth + state.labelOffset, 0)]) !== null && _c !== void 0 ? _c : "節";
+                    prefix = `${numberParts.join(".")}${label} `;
+                }
             }
             const item = document.createElement("button");
             item.type = "button";
@@ -114,7 +169,7 @@ export const initOutlineUi = (context, deps) => {
             return;
         }
         const sectionEntries = dedupeSections(filterEntries(deps.getIndexSections()));
-        const todoEntries = dedupeByKey(filterEntries(deps.getIndexTodos()));
+        const todoEntries = dedupeByKeyAndLocation(filterEntries(deps.getIndexTodos()));
         const labelEntries = dedupeByKey(filterEntries(deps.getIndexLabels()));
         const citationEntries = pickCitationEntries(filterEntries(deps.getIndexCitations()));
         const showLocation = outlineMode === "project";

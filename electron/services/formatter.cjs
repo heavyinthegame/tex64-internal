@@ -14,6 +14,29 @@ const safeUnlink = async (filePath) => {
   await fsp.unlink(filePath).catch(() => null);
 };
 
+const safeRm = async (targetPath) => {
+  if (!targetPath) {
+    return;
+  }
+  await fsp.rm(targetPath, { recursive: true, force: true }).catch(() => null);
+};
+
+const shouldForceMissingTool = (toolName) => {
+  const raw = process.env.TEX64_E2E_FORCE_MISSING_TOOLS;
+  if (!raw || typeof raw !== "string") {
+    return false;
+  }
+  const needle = String(toolName ?? "").trim().toLowerCase();
+  if (!needle) {
+    return false;
+  }
+  return raw
+    .split(",")
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean)
+    .includes(needle);
+};
+
 const LATEXINDENT_SETTINGS_NAME = "latexindent.yaml";
 const LATEXINDENT_OVERRIDE_NAME = "latexindent.override.yaml";
 const LATEXINDENT_TEMPLATE_PATH = path.join(
@@ -610,6 +633,9 @@ class FormatterService {
   }
 
   findLatexindent() {
+    if (shouldForceMissingTool("latexindent")) {
+      return null;
+    }
     const candidates = [];
     if (process.platform === "darwin") {
       candidates.push(
@@ -700,16 +726,22 @@ class FormatterService {
     }
     const tempDir = path.join(rootPath, ".tex64", ".format");
     await ensureDirectory(tempDir);
-    const settingsPaths = await this.prepareLatexindentSettings(
+    const runDir = path.join(
       tempDir,
+      `run-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    );
+    await ensureDirectory(runDir);
+    const settingsPaths = await this.prepareLatexindentSettings(
+      runDir,
       normalizedSettings
     );
     if (!settingsPaths) {
+      await safeRm(runDir);
       return fallbackWithWarning("latexindent設定が読み込めません。簡易整形を使用しました。");
     }
     const baseName = path.basename(relativePath, path.extname(relativePath)) || "document";
-    const tempName = `${baseName}-${Date.now()}-${Math.random().toString(16).slice(2)}.tex`;
-    const tempPath = path.join(tempDir, tempName);
+    const tempName = `${baseName}.tex`;
+    const tempPath = path.join(runDir, tempName);
     await fsp.writeFile(tempPath, rawContent, "utf8");
     const env = { ...process.env };
     env.PATH = this.extendPath(env.PATH);
@@ -719,23 +751,18 @@ class FormatterService {
         "-m",
         "-w",
         "-c",
-        tempDir,
+        runDir,
         `-l=${settingsPaths.basePath},${settingsPaths.overridePath}`,
         tempPath,
       ],
-      rootPath,
+      runDir,
       env
     ).catch((error) => ({ output: error?.message ?? String(error), status: 1 }));
     let formatted = null;
     if (result.status === 0) {
       formatted = await fsp.readFile(tempPath, "utf8").catch(() => null);
     }
-    const backupBase = path.join(tempDir, path.basename(tempPath, path.extname(tempPath)));
-    await safeUnlink(tempPath);
-    await safeUnlink(`${backupBase}.bak`);
-    await safeUnlink(`${backupBase}.bak0`);
-    await safeUnlink(settingsPaths.overridePath);
-    await safeUnlink(path.join(tempDir, "indent.log"));
+    await safeRm(runDir);
     await safeUnlink(path.join(rootPath, "indent.log"));
     if (result.status === 0 && formatted !== null) {
       const cleaned = stripBlankLinesInMathEnv(formatted, normalizedSettings);

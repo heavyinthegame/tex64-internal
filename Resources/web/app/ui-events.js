@@ -1,10 +1,5 @@
 export const initUiEvents = (context, deps) => {
-    const { tabs, editorHost, editorHostSecondary, diffModalSubmit, diffModalCancel, saveFileButton, } = context.dom;
-    const handleSave = () => {
-        deps.saveCurrentFile().catch((message) => {
-            deps.updateIssues(1, message, "error", [{ severity: "error", message }]);
-        });
-    };
+    const { tabs, editorHost, editorHostSecondary, diffModalSubmit, diffModalCancel, } = context.dom;
     const setup = () => {
         tabs.forEach((tab) => {
             tab.addEventListener("click", () => {
@@ -42,21 +37,12 @@ export const initUiEvents = (context, deps) => {
                 (_b = deps.aiOps) === null || _b === void 0 ? void 0 : _b.clearPending();
             });
         }
-        if (saveFileButton instanceof HTMLButtonElement) {
-            saveFileButton.addEventListener("click", () => {
-                handleSave();
-            });
-        }
         deps.buildOps.setupActionButtons();
         deps.rootSelectorUi.setupActions();
         window.addEventListener("keydown", (event) => {
-            if (event.metaKey && event.key.toLowerCase() === "s") {
-                event.preventDefault();
-                handleSave();
-            }
             if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "b") {
                 event.preventDefault();
-                deps.buildOps.startBuildWithSave();
+                deps.buildOps.startBuild();
             }
         });
     };

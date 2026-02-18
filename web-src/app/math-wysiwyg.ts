@@ -54,13 +54,13 @@ type MathWysiwygConfig = {
 type TokenIndexMatch = {
   token: string;
   range: { start: number; end: number };
-  kind: "word" | "operator";
+  kind: "word" | "operator" | "command";
 };
 
 type TokenMatch = {
   token: string;
   range: { start: number; end: number };
-  kind: "word" | "operator";
+  kind: "word" | "operator" | "command";
 };
 
 type SuggestOptions = {
@@ -75,9 +75,39 @@ type CustomCandidate = {
   apply: (mathfield: any) => void;
 };
 
-const isWordToken = (value: string) => /^[A-Za-z]+$/.test(value);
+const isWordToken = (value: string) => /^(?=.*[A-Za-z])[A-Za-z0-9]+$/.test(value);
+const isCommandToken = (value: string) => /^[A-Za-z]+$/.test(value);
 const AUTO_WORD_MIN_LENGTH = 3;
-const AUTO_WORD_ALLOWLIST = new Set(["pi", "mu", "nu", "xi"]);
+const AUTO_COMMAND_MIN_LENGTH = 2;
+const AUTO_WORD_ALLOWLIST = new Set([
+  "bb",
+  "bf",
+  "bm",
+  "ds",
+  "ge",
+  "gg",
+  "in",
+  "ip",
+  "it",
+  "le",
+  "ll",
+  "ln",
+  "mp",
+  "mu",
+  "ne",
+  "ni",
+  "nu",
+  "op",
+  "or",
+  "pi",
+  "pm",
+  "rm",
+  "sf",
+  "to",
+  "tr",
+  "tt",
+  "xi",
+]);
 const AUTO_CONTAINS_MIN_LENGTH = 4;
 const EXPLICIT_WORD_MIN_LENGTH = 1;
 const EXPLICIT_SUFFIX_MIN_LENGTH = 6;
@@ -98,6 +128,12 @@ const AUTO_REPLACE_OPERATORS = new Set([
   "d/dx",
   "∂/∂x",
 ]);
+const AUTO_REPLACE_OPERATOR_CORRECTIONS: Array<{ token: string; suffix: string }> = [
+  { token: "<=>", suffix: "\\leq>" },
+  { token: "<->", suffix: "\\leftarrow>" },
+];
+const STYLE_WRAPPER_TEMPLATE_RE =
+  /^\\(?:mathbb|mathcal|mathfrak|mathsf|mathrm|mathbf|mathit|mathtt|operatorname)\{#\?\}$/;
 
 type MruEntry = {
   count: number;
@@ -124,11 +160,25 @@ const findOperatorToken = (text: string, cursorIndex: number): TokenIndexMatch |
   return null;
 };
 
+const findAutoReplaceCorrection = (text: string, cursorIndex: number): TokenIndexMatch | null => {
+  for (const correction of AUTO_REPLACE_OPERATOR_CORRECTIONS) {
+    const { suffix, token } = correction;
+    if (cursorIndex < suffix.length) {
+      continue;
+    }
+    const start = cursorIndex - suffix.length;
+    if (text.slice(start, cursorIndex) === suffix) {
+      return { token, range: { start, end: cursorIndex }, kind: "operator" };
+    }
+  }
+  return null;
+};
+
 const findWordToken = (text: string, cursorIndex: number): TokenIndexMatch | null => {
   let start = cursorIndex;
   while (start > 0) {
     const char = text[start - 1];
-    if (!/[A-Za-z]/.test(char)) {
+    if (!/[A-Za-z0-9]/.test(char)) {
       break;
     }
     start -= 1;
@@ -140,11 +190,30 @@ const findWordToken = (text: string, cursorIndex: number): TokenIndexMatch | nul
   if (!isWordToken(token)) {
     return null;
   }
-  const prev = start > 0 ? text[start - 1] : "";
-  if (prev === "\\") {
-    return null;
+  let backslashCount = 0;
+  for (let i = start - 1; i >= 0 && text[i] === "\\"; i -= 1) {
+    backslashCount += 1;
+  }
+  if (backslashCount % 2 === 1 && isCommandToken(token)) {
+    return {
+      token,
+      range: { start: start - 1, end: cursorIndex },
+      kind: "command",
+    };
   }
   return { token, range: { start, end: cursorIndex }, kind: "word" };
+};
+
+const buildRawCommandCandidate = (token: string, priority: number): Candidate => {
+  const normalized = token.trim();
+  const latex = `\\${normalized}`;
+  return {
+    id: `raw-command:${normalized.toLowerCase()}`,
+    key: getKeyByLatex(latex, latex, latex),
+    label: latex,
+    hint: "入力コマンド",
+    priority,
+  };
 };
 
 export const initMathWysiwyg = (deps: MathWysiwygDeps): MathWysiwygApi => {
@@ -390,16 +459,28 @@ export const initMathWysiwyg = (deps: MathWysiwygDeps): MathWysiwygApi => {
     return results;
   };
 
+  const readMathfieldLatex = (
+    mathfieldApi: any,
+    ...args: [number, number, "latex"] | ["latex"]
+  ): string | null => {
+    if (typeof mathfieldApi?.getValue !== "function") {
+      return null;
+    }
+    try {
+      const value = mathfieldApi.getValue(...args);
+      return typeof value === "string" ? value : null;
+    } catch {
+      return null;
+    }
+  };
+
   const buildMatrixOpCandidates = () => {
     if (!mathfield) {
       return [] as Candidate[];
     }
     const mf = mathfield as any;
-    if (typeof mf.getValue !== "function") {
-      return [] as Candidate[];
-    }
-    const latex = mf.getValue("latex");
-    if (typeof latex !== "string" || !latex) {
+    const latex = readMathfieldLatex(mf, "latex");
+    if (!latex) {
       return [] as Candidate[];
     }
     const selection = getMathFieldSelectionRange(mf);
@@ -716,10 +797,12 @@ export const initMathWysiwyg = (deps: MathWysiwygDeps): MathWysiwygApi => {
       return;
     }
     const allowedPacks = explicit ? undefined : enabledPacks.size > 0 ? enabledPacks : undefined;
-    if (tokenMatch.kind === "word") {
+    if (tokenMatch.kind === "word" || tokenMatch.kind === "command") {
       const normalized = tokenMatch.token.toLowerCase();
       const minLength = explicit
         ? EXPLICIT_WORD_MIN_LENGTH
+        : tokenMatch.kind === "command"
+        ? AUTO_COMMAND_MIN_LENGTH
         : AUTO_WORD_ALLOWLIST.has(normalized)
         ? 2
         : AUTO_WORD_MIN_LENGTH;
@@ -742,7 +825,9 @@ export const initMathWysiwyg = (deps: MathWysiwygDeps): MathWysiwygApi => {
           });
 
     const allowSuffixRescue =
-      explicit && tokenMatch.kind === "word" && tokenMatch.token.length >= EXPLICIT_SUFFIX_MIN_LENGTH;
+      explicit &&
+      tokenMatch.kind === "word" &&
+      tokenMatch.token.length >= EXPLICIT_SUFFIX_MIN_LENGTH;
     if (allowSuffixRescue && nextCandidates.length === 0) {
       const minSuffixLength = 2;
       for (
@@ -768,6 +853,16 @@ export const initMathWysiwyg = (deps: MathWysiwygDeps): MathWysiwygApi => {
         };
         nextCandidates = suffixCandidates;
         break;
+      }
+    }
+
+    const canUseRawCommandFallback =
+      (tokenMatch.kind === "word" || tokenMatch.kind === "command") &&
+      isCommandToken(tokenMatch.token);
+    if (nextCandidates.length === 0 && canUseRawCommandFallback) {
+      const minLength = explicit ? 2 : 4;
+      if (tokenMatch.token.length >= minLength) {
+        nextCandidates = [buildRawCommandCandidate(tokenMatch.token, explicit ? 60 : 12)];
       }
     }
 
@@ -961,11 +1056,8 @@ export const initMathWysiwyg = (deps: MathWysiwygDeps): MathWysiwygApi => {
     if (modeAtCursor === "text") {
       return true;
     }
-    if (typeof mathfieldApi?.getValue !== "function") {
-      return false;
-    }
-    const latex = mathfieldApi.getValue("latex");
-    if (typeof latex !== "string" || !latex) {
+    const latex = readMathfieldLatex(mathfieldApi, "latex");
+    if (!latex) {
       return false;
     }
     const cursorIndex = offsetToIndexInRange(mathfieldApi, 0, cursorOffset);
@@ -1022,88 +1114,93 @@ export const initMathWysiwyg = (deps: MathWysiwygDeps): MathWysiwygApi => {
   };
 
   const refresh = (options: SuggestOptions = {}) => {
-    if (!mathfield || composing) {
-      return;
-    }
-    if (suppressNextUpdate) {
-      suppressNextUpdate = false;
-      if (!options.explicit) {
+    try {
+      if (!mathfield || composing) {
         return;
       }
-    }
-    const mathfieldApi = mathfield as any;
-    if (typeof mathfieldApi.getValue !== "function") {
-      updateCandidates(null, options);
-      return;
-    }
-    const selection = getMathFieldSelectionRange(mathfieldApi);
-    const selectionRanges =
-      selection.start !== selection.end ? getInternalSelectionRanges(mathfieldApi) : [];
-    const cursorOffset =
-      typeof mathfieldApi.position === "number" ? mathfieldApi.position : selection.end;
-    const mode =
-      typeof mathfieldApi.mode === "string"
-        ? (mathfieldApi.mode as "math" | "text" | "latex")
-        : null;
-    if (mode === "text" && !options.explicit) {
-      // Avoid noisy suggestions while typing inside \\text{...} and similar text-mode segments.
-      updateCandidates(null, options);
-      return;
-    }
-    const isPlaceholderSelection =
-      selection.start !== selection.end &&
-      selectionRanges.some(
-        (range) => cursorOffset >= range.start && cursorOffset <= range.end
-      );
-    if (selection.start !== selection.end && !isPlaceholderSelection) {
-      const selectionLength = Math.abs(selection.end - selection.start);
-      const now =
-        typeof performance !== "undefined" && typeof performance.now === "function"
-          ? performance.now()
-          : Date.now();
-      if (selectionLength > 1 && now - lastInputTime > 120) {
+      if (suppressNextUpdate) {
+        suppressNextUpdate = false;
+        if (!options.explicit) {
+          return;
+        }
+      }
+      const mathfieldApi = mathfield as any;
+      if (typeof mathfieldApi.getValue !== "function") {
         updateCandidates(null, options);
         return;
       }
-    }
-    const scopeRange = resolveScopeRange(mathfieldApi, cursorOffset);
-    const rawValue = mathfieldApi.getValue(scopeRange.start, scopeRange.end, "latex");
-    if (typeof rawValue !== "string") {
-      updateCandidates(null, options);
-      return;
-    }
-    const cursorIndex = offsetToIndexInRange(mathfieldApi, scopeRange.start, cursorOffset);
-    const toOffsetMatch = (match: TokenIndexMatch | null): TokenMatch | null => {
-      if (!match) {
-        return null;
+      const selection = getMathFieldSelectionRange(mathfieldApi);
+      const selectionRanges =
+        selection.start !== selection.end ? getInternalSelectionRanges(mathfieldApi) : [];
+      const cursorOffset =
+        typeof mathfieldApi.position === "number" ? mathfieldApi.position : selection.end;
+      const mode =
+        typeof mathfieldApi.mode === "string"
+          ? (mathfieldApi.mode as "math" | "text" | "latex")
+          : null;
+      if (mode === "text" && !options.explicit) {
+        // Avoid noisy suggestions while typing inside \\text{...} and similar text-mode segments.
+        updateCandidates(null, options);
+        return;
       }
-      const startOffset = indexToOffsetInRange(
-        mathfieldApi,
-        scopeRange.start,
-        scopeRange.end,
-        match.range.start
-      );
-      const endOffset = indexToOffsetInRange(
-        mathfieldApi,
-        scopeRange.start,
-        scopeRange.end,
-        match.range.end
-      );
-      return { token: match.token, range: { start: startOffset, end: endOffset }, kind: match.kind };
-    };
-    const operatorMatch = toOffsetMatch(findOperatorToken(rawValue, cursorIndex));
-    if (operatorMatch) {
-      if (!options.explicit && autoSuggest && AUTO_REPLACE_OPERATORS.has(operatorMatch.token)) {
-        if (isInSuppressedTextContext(mathfieldApi, cursorOffset)) {
+      const isPlaceholderSelection =
+        selection.start !== selection.end &&
+        selectionRanges.some(
+          (range) => cursorOffset >= range.start && cursorOffset <= range.end
+        );
+      if (selection.start !== selection.end && !isPlaceholderSelection) {
+        const selectionLength = Math.abs(selection.end - selection.start);
+        const now =
+          typeof performance !== "undefined" && typeof performance.now === "function"
+            ? performance.now()
+            : Date.now();
+        if (selectionLength > 1 && now - lastInputTime > 120) {
           updateCandidates(null, options);
           return;
         }
-        const candidates = buildOperatorCandidates(operatorMatch.token);
+      }
+      const scopeRange = resolveScopeRange(mathfieldApi, cursorOffset);
+      const rawValue = readMathfieldLatex(mathfieldApi, scopeRange.start, scopeRange.end, "latex");
+      if (typeof rawValue !== "string") {
+        updateCandidates(null, options);
+        return;
+      }
+      const cursorIndex = offsetToIndexInRange(mathfieldApi, scopeRange.start, cursorOffset);
+      const toOffsetMatch = (match: TokenIndexMatch | null): TokenMatch | null => {
+        if (!match) {
+          return null;
+        }
+        const startOffset = indexToOffsetInRange(
+          mathfieldApi,
+          scopeRange.start,
+          scopeRange.end,
+          match.range.start
+        );
+        const endOffset = indexToOffsetInRange(
+          mathfieldApi,
+          scopeRange.start,
+          scopeRange.end,
+          match.range.end
+        );
+        return { token: match.token, range: { start: startOffset, end: endOffset }, kind: match.kind };
+      };
+      const operatorCorrectionMatch = toOffsetMatch(findAutoReplaceCorrection(rawValue, cursorIndex));
+      if (
+        operatorCorrectionMatch &&
+        !options.explicit &&
+        autoSuggest &&
+        AUTO_REPLACE_OPERATORS.has(operatorCorrectionMatch.token)
+      ) {
+        const candidates = buildOperatorCandidates(operatorCorrectionMatch.token);
         const candidate = candidates[0];
         if (candidate) {
           suppressNextUpdate = true;
           setPanelVisible(false);
-          setSelectionRange(mathfieldApi, operatorMatch.range.start, operatorMatch.range.end);
+          setSelectionRange(
+            mathfieldApi,
+            operatorCorrectionMatch.range.start,
+            operatorCorrectionMatch.range.end
+          );
           deps.insertKey(candidate.key);
           window.setTimeout(() => {
             suppressNextUpdate = false;
@@ -1117,24 +1214,59 @@ export const initMathWysiwyg = (deps: MathWysiwygDeps): MathWysiwygApi => {
           return;
         }
       }
-      // Only show operator suggestions on explicit/manual trigger.
-      if (options.explicit) {
-        updateCandidates(operatorMatch, options);
-      } else {
-        updateCandidates(null, options);
-      }
-      return;
-    }
-    const wordMatch = toOffsetMatch(findWordToken(rawValue, cursorIndex));
-    if (!options.explicit && wordMatch) {
-      const normalized = wordMatch.token.toLowerCase();
-      const minLength = AUTO_WORD_ALLOWLIST.has(normalized) ? 2 : AUTO_WORD_MIN_LENGTH;
-      if (wordMatch.token.length >= minLength && isInSuppressedTextContext(mathfieldApi, cursorOffset)) {
-        updateCandidates(null, options);
+
+      const operatorMatch = toOffsetMatch(findOperatorToken(rawValue, cursorIndex));
+      if (operatorMatch) {
+        if (!options.explicit && autoSuggest && AUTO_REPLACE_OPERATORS.has(operatorMatch.token)) {
+          if (isInSuppressedTextContext(mathfieldApi, cursorOffset)) {
+            updateCandidates(null, options);
+            return;
+          }
+          const candidates = buildOperatorCandidates(operatorMatch.token);
+          const candidate = candidates[0];
+          if (candidate) {
+            suppressNextUpdate = true;
+            setPanelVisible(false);
+            setSelectionRange(mathfieldApi, operatorMatch.range.start, operatorMatch.range.end);
+            deps.insertKey(candidate.key);
+            window.setTimeout(() => {
+              suppressNextUpdate = false;
+              currentCandidates = [];
+              currentRange = null;
+              selectedIndex = 0;
+              if (autoSuggest) {
+                refresh();
+              }
+            }, 0);
+            return;
+          }
+        }
+        // Only show operator suggestions on explicit/manual trigger.
+        if (options.explicit) {
+          updateCandidates(operatorMatch, options);
+        } else {
+          updateCandidates(null, options);
+        }
         return;
       }
+      const wordMatch = toOffsetMatch(findWordToken(rawValue, cursorIndex));
+      if (!options.explicit && wordMatch) {
+        const normalized = wordMatch.token.toLowerCase();
+        const minLength =
+          wordMatch.kind === "command"
+            ? AUTO_COMMAND_MIN_LENGTH
+            : AUTO_WORD_ALLOWLIST.has(normalized)
+            ? 2
+            : AUTO_WORD_MIN_LENGTH;
+        if (wordMatch.token.length >= minLength && isInSuppressedTextContext(mathfieldApi, cursorOffset)) {
+          updateCandidates(null, options);
+          return;
+        }
+      }
+      updateCandidates(wordMatch, options);
+    } catch {
+      updateCandidates(null, options);
     }
-    updateCandidates(wordMatch, options);
   };
 
   const close = () => {
@@ -1177,6 +1309,21 @@ export const initMathWysiwyg = (deps: MathWysiwygDeps): MathWysiwygApi => {
     if (typeof mathfieldApi.focus === "function") {
       mathfieldApi.focus();
     }
+    const clearTriggerRange = () => {
+      if (!currentRange) {
+        return;
+      }
+      setSelectionRange(mathfieldApi, currentRange.start, currentRange.end);
+      if (typeof mathfieldApi.executeCommand !== "function") {
+        return;
+      }
+      try {
+        // Keep template candidates from wrapping the typed trigger token (e.g. sqrt -> \sqrt{sqrt}).
+        mathfieldApi.executeCommand("deleteBackward");
+      } catch {
+        // ignore range clear failures
+      }
+    };
     const insertedLatex =
       typeof candidate.key.latex === "string" ? normalizeLatexKey(candidate.key.latex) : "";
 
@@ -1186,17 +1333,7 @@ export const initMathWysiwyg = (deps: MathWysiwygDeps): MathWysiwygApi => {
     if (insertedLatex === "\\text{#?}") {
       suppressNextUpdate = true;
       setPanelVisible(false);
-      if (currentRange) {
-        setSelectionRange(mathfieldApi, currentRange.start, currentRange.end);
-      }
-      try {
-        // If there's a selection (e.g. the trigger token), remove it first.
-        if (currentRange && typeof mathfieldApi.executeCommand === "function") {
-          mathfieldApi.executeCommand("deleteBackward");
-        }
-      } catch {
-        // ignore
-      }
+      clearTriggerRange();
       try {
         const internalModel = (mathfieldApi as { _mathfield?: any })?._mathfield?.model;
         if (internalModel) {
@@ -1247,17 +1384,24 @@ export const initMathWysiwyg = (deps: MathWysiwygDeps): MathWysiwygApi => {
       }, 0);
       return;
     }
-    if (!currentRange) {
-      return;
-    }
+    const selection = getMathFieldSelectionRange(mathfieldApi);
+    const insertionAnchorStart = currentRange
+      ? currentRange.start
+      : typeof mathfieldApi.position === "number"
+      ? mathfieldApi.position
+      : selection.end;
     suppressNextUpdate = true;
     setPanelVisible(false);
-    setSelectionRange(mathfieldApi, currentRange.start, currentRange.end);
+    clearTriggerRange();
     deps.insertKey(candidate.key);
-    if (typeof candidate.key.latex === "string" && candidate.key.latex.includes("#?")) {
+    const hasPlaceholderTemplate =
+      typeof candidate.key.latex === "string" && candidate.key.latex.includes("#?");
+    const isStyleWrapperTemplate = STYLE_WRAPPER_TEMPLATE_RE.test(insertedLatex);
+    if (hasPlaceholderTemplate && !isStyleWrapperTemplate) {
       try {
         const ranges = getInternalSelectionRanges(mathfieldApi);
-        const target = ranges.find((range) => range.start >= currentRange.start) ?? null;
+        const target =
+          ranges.find((range) => range.start >= insertionAnchorStart) ?? ranges[0] ?? null;
         if (target) {
           setSelectionRange(mathfieldApi, target.start, target.end);
           const inserted = normalizeLatexKey(candidate.key.latex);
@@ -1278,6 +1422,12 @@ export const initMathWysiwyg = (deps: MathWysiwygDeps): MathWysiwygApi => {
             }
           } else {
             syncMathfieldMode(mathfieldApi, target.end);
+          }
+        } else {
+          // Fallback: collapse any residual selection to avoid replacing the entire inserted snippet.
+          const range = getMathFieldSelectionRange(mathfieldApi);
+          if (range.start !== range.end) {
+            setSelectionRange(mathfieldApi, range.end, range.end);
           }
         }
       } catch {
@@ -1334,7 +1484,7 @@ export const initMathWysiwyg = (deps: MathWysiwygDeps): MathWysiwygApi => {
         return false;
       }
       event.preventDefault();
-      updateCandidates(null);
+      refresh(explicitSession ? { explicit: true } : undefined);
       return true;
     }
     if (event.key === "Escape") {

@@ -148,11 +148,12 @@ const createMiscHandlers = (deps) => {
           parts: [
             {
               text: [
-                "You are an inline completion engine for LaTeX.",
+                "You are a high-precision LaTeX inline copilot.",
                 "Return ONLY the continuation text to insert at <CURSOR>.",
-                "Do not repeat the prefix.",
-                "Keep it short and stay on the same line.",
-                "If unsure, return empty.",
+                "Do not repeat the prefix already typed by the user.",
+                "Prefer useful, immediately actionable continuation over generic phrases.",
+                "Keep LaTeX syntax coherent and compile-safe.",
+                "Stay concise (typically one line). If confidence is low, return empty.",
               ].join(" "),
             },
           ],

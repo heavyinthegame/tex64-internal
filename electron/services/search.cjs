@@ -9,34 +9,11 @@ const IGNORED_DIRECTORIES = new Set([
   "node_modules",
   "DerivedData",
   "build",
-  "Resources",
   "tex64.xcodeproj",
 ]);
-const TEXT_FILE_EXTENSIONS = new Set([
-  "tex",
-  "bib",
-  "sty",
-  "cls",
-  "bst",
-  "bbx",
-  "cbx",
-  "cfg",
-  "def",
-  "lbx",
-  "ins",
-  "dtx",
-  "ltx",
-  "aux",
-  "bbl",
-  "blg",
-  "log",
-  "out",
-  "toc",
-  "lof",
-  "lot",
-  "fdb_latexmk",
-  "fls",
-]);
+const MAX_SEARCH_RESULTS = 200;
+const PREVIEW_CONTEXT_BEFORE = 48;
+const PREVIEW_CONTEXT_AFTER = 96;
 
 const getFileExtension = (name) => {
   const ext = path.extname(name).toLowerCase();
@@ -44,6 +21,19 @@ const getFileExtension = (name) => {
 };
 
 const isSearchableFile = (name) => getFileExtension(name) === "tex";
+
+const buildPreview = (line, matchIndex, matchLength) => {
+  const start = Math.max(0, matchIndex - PREVIEW_CONTEXT_BEFORE);
+  const end = Math.min(line.length, matchIndex + matchLength + PREVIEW_CONTEXT_AFTER);
+  const prefix = start > 0 ? "..." : "";
+  const suffix = end < line.length ? "..." : "";
+  const snippet = line.slice(start, end);
+  return {
+    preview: `${prefix}${snippet}${suffix}`,
+    matchStart: prefix.length + (matchIndex - start),
+    matchLength,
+  };
+};
 
 class SearchService {
   async search(rootPath, query) {
@@ -53,12 +43,11 @@ class SearchService {
     }
     const lowerQuery = trimmed.toLowerCase();
     const results = [];
-    const maxResults = 200;
 
     const walk = async (dirPath) => {
-      const entries = await fsp.readdir(dirPath, { withFileTypes: true });
+      const entries = await fsp.readdir(dirPath, { withFileTypes: true }).catch(() => []);
       for (const entry of entries) {
-        if (results.length >= maxResults) {
+        if (results.length >= MAX_SEARCH_RESULTS) {
           return;
         }
         if (entry.name.startsWith(".")) {
@@ -82,20 +71,29 @@ class SearchService {
         if (content === null) {
           continue;
         }
+        if (!content.toLowerCase().includes(lowerQuery)) {
+          continue;
+        }
         const relPath = normalizeRelativePath(path.relative(rootPath, absPath));
         const lines = content.split(/\r?\n/);
-        lines.forEach((line, index) => {
-          if (results.length >= maxResults) {
+        for (let index = 0; index < lines.length; index += 1) {
+          if (results.length >= MAX_SEARCH_RESULTS) {
             return;
           }
-          if (line.toLowerCase().includes(lowerQuery)) {
-            results.push({
-              path: relPath,
-              line: index + 1,
-              preview: line.trim(),
-            });
+          const line = lines[index];
+          const matchIndex = line.toLowerCase().indexOf(lowerQuery);
+          if (matchIndex < 0) {
+            continue;
           }
-        });
+          const match = buildPreview(line, matchIndex, lowerQuery.length);
+          results.push({
+            path: relPath,
+            line: index + 1,
+            preview: match.preview,
+            matchStart: match.matchStart,
+            matchLength: match.matchLength,
+          });
+        }
       }
     };
 

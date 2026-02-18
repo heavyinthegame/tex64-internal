@@ -10,7 +10,7 @@ export const createInlineCompletionController = (deps) => {
     const apiNegativeCache = new Map();
     const inlineConfig = {
         debounceMs: 120,
-        minPrefix: 2,
+        minPrefix: 1,
         maxChars: 140,
         cacheTtlMs: 30000,
         maxCacheEntries: 200,
@@ -25,10 +25,12 @@ export const createInlineCompletionController = (deps) => {
         cacheTtlMs: 120000,
         negativeCacheTtlMs: 10000,
         maxCacheEntries: 120,
-        maxOutputTokens: 40,
+        maxOutputTokens: 80,
         temperature: 0.2,
         topP: 0.9,
         topK: 40,
+        contextBeforeLines: 16,
+        contextAfterLines: 6,
     };
     const clampInlineNumber = (value, min, max, fallback) => {
         if (!Number.isFinite(value)) {
@@ -50,9 +52,19 @@ export const createInlineCompletionController = (deps) => {
         { name: "label", suffix: "{}" },
         { name: "ref", suffix: "{}" },
         { name: "eqref", suffix: "{}" },
+        { name: "pageref", suffix: "{}" },
+        { name: "autoref", suffix: "{}" },
+        { name: "cref", suffix: "{}" },
+        { name: "namecref", suffix: "{}" },
         { name: "cite", suffix: "{}" },
         { name: "citep", suffix: "{}" },
         { name: "citet", suffix: "{}" },
+        { name: "autocite", suffix: "{}" },
+        { name: "parencite", suffix: "{}" },
+        { name: "input", suffix: "{}" },
+        { name: "include", suffix: "{}" },
+        { name: "includegraphics", suffix: "{}" },
+        { name: "begin", suffix: "{}" },
         { name: "emph", suffix: "{}" },
         { name: "textbf", suffix: "{}" },
         { name: "textit", suffix: "{}" },
@@ -93,6 +105,15 @@ export const createInlineCompletionController = (deps) => {
         }
         return false;
     };
+    const normalizeSlashLikeCommands = (value) => value.replace(/[¥＼]/g, "\\");
+    const toPlainSuggestion = (text) => ({
+        text,
+        insertText: text,
+    });
+    const toSnippetSuggestion = (text, snippet) => ({
+        text,
+        insertText: { snippet },
+    });
     const getInlineCacheKey = (prefix, suffix, line, column) => `${line}:${column}:${prefix}||${suffix}`;
     const getInlineCache = (key) => {
         const hit = inlineCache.get(key);
@@ -103,11 +124,11 @@ export const createInlineCompletionController = (deps) => {
             inlineCache.delete(key);
             return null;
         }
-        return hit.text;
+        return hit.suggestion;
     };
-    const setInlineCache = (key, text) => {
+    const setInlineCache = (key, suggestion) => {
         inlineCache.delete(key);
-        inlineCache.set(key, { text, ts: Date.now() });
+        inlineCache.set(key, { suggestion, ts: Date.now() });
         if (inlineCache.size <= inlineConfig.maxCacheEntries) {
             return;
         }
@@ -158,6 +179,13 @@ export const createInlineCompletionController = (deps) => {
             apiRequestTimestamps.shift();
         }
     };
+    const isTypingCommandToken = (normalizedPrefix) => /\\[A-Za-z]+$/.test(normalizedPrefix);
+    const isSafeSuffixForInlineInsert = (suffix) => {
+        if (!suffix.trim()) {
+            return true;
+        }
+        return /^[\s)\]}>,.;:!?'"`~-]*$/.test(suffix);
+    };
     const canRequestApiCompletion = (prefix, suffix) => {
         if (!apiConfig.enabled) {
             return false;
@@ -168,8 +196,9 @@ export const createInlineCompletionController = (deps) => {
         if (!deps.getGhostCompletionEnabled()) {
             return false;
         }
-        const trimmedPrefix = prefix.trim();
-        if (trimmedPrefix.startsWith("\\")) {
+        const normalizedPrefix = normalizeSlashLikeCommands(prefix);
+        const trimmedPrefix = normalizedPrefix.trim();
+        if (isTypingCommandToken(normalizedPrefix)) {
             return false;
         }
         if (hasUnescapedPercent(prefix)) {
@@ -178,7 +207,7 @@ export const createInlineCompletionController = (deps) => {
         if (trimmedPrefix.length < apiConfig.minPrefix) {
             return false;
         }
-        if (suffix.trim().length > 0) {
+        if (!isSafeSuffixForInlineInsert(suffix)) {
             return false;
         }
         if (Date.now() - lastInlineEditAt < apiConfig.idleMs) {
@@ -194,20 +223,38 @@ export const createInlineCompletionController = (deps) => {
         return true;
     };
     const buildApiPrompt = (model, position) => {
+        var _a;
         const lineNumber = position.lineNumber;
         const columnIndex = Math.max(position.column - 1, 0);
-        const startLine = Math.max(1, lineNumber - 3);
-        const lines = [];
-        for (let i = startLine; i <= lineNumber; i += 1) {
+        const line = model.getLineContent(lineNumber);
+        const linePrefix = line.slice(0, columnIndex);
+        const lineSuffix = line.slice(columnIndex);
+        const totalLinesRaw = (_a = model.getLineCount) === null || _a === void 0 ? void 0 : _a.call(model);
+        const totalLines = typeof totalLinesRaw === "number" && Number.isFinite(totalLinesRaw) && totalLinesRaw > 0
+            ? Math.round(totalLinesRaw)
+            : lineNumber;
+        const startLine = Math.max(1, lineNumber - apiConfig.contextBeforeLines);
+        const endLine = Math.min(totalLines, lineNumber + apiConfig.contextAfterLines);
+        const contextLines = [];
+        for (let i = startLine; i <= endLine; i += 1) {
             const line = model.getLineContent(i);
-            if (i === lineNumber) {
-                lines.push(`${line.slice(0, columnIndex)}<CURSOR>`);
-            }
-            else {
-                lines.push(line);
-            }
+            contextLines.push(`${i}: ${line}`);
         }
-        return lines.join("\n");
+        return [
+            "You are assisting with in-editor LaTeX continuation.",
+            "Continue text at <CURSOR> so the user can keep writing immediately.",
+            "Return ONLY inserted text. No markdown. No explanation.",
+            "Keep style, terminology, and notation consistent.",
+            "Prefer valid, compile-safe LaTeX (balanced braces, coherent command usage).",
+            "When possible, complete the current thought before starting a new one.",
+            "If confidence is low, return empty.",
+            "",
+            "[Context]",
+            ...contextLines,
+            "",
+            "[Cursor]",
+            `${linePrefix}<CURSOR>${lineSuffix}`,
+        ].join("\n");
     };
     const extractApiText = (raw, linePrefix) => {
         if (typeof raw !== "string") {
@@ -272,40 +319,45 @@ export const createInlineCompletionController = (deps) => {
         const line = model.getLineContent(position.lineNumber);
         const columnIndex = Math.max(position.column - 1, 0);
         const linePrefix = line.slice(0, columnIndex);
+        const normalizedLinePrefix = normalizeSlashLikeCommands(linePrefix);
         const lineSuffix = line.slice(columnIndex);
-        const allowAutoClosedBraceSuffix = lineSuffix === "}" && /\\begin\{[A-Za-z*]*$/.test(linePrefix);
+        const allowAutoClosedBraceSuffix = lineSuffix === "}" && /\\begin\{[A-Za-z*]*$/.test(normalizedLinePrefix);
         if (lineSuffix.trim().length > 0 && !allowAutoClosedBraceSuffix) {
             return null;
         }
         if (hasUnescapedPercent(linePrefix)) {
             return null;
         }
-        const beginClosedMatch = linePrefix.match(/\\begin\{([A-Za-z*]+)\}\s*$/);
+        const beginClosedMatch = normalizedLinePrefix.match(/\\begin\{([A-Za-z*]+)\}\s*$/);
         if (beginClosedMatch) {
             const env = beginClosedMatch[1];
-            const indent = (_b = (_a = linePrefix.match(/^\s*/)) === null || _a === void 0 ? void 0 : _a[0]) !== null && _b !== void 0 ? _b : "";
-            return `\n${indent}\\end{${env}}`;
+            const indent = (_b = (_a = normalizedLinePrefix.match(/^\s*/)) === null || _a === void 0 ? void 0 : _a[0]) !== null && _b !== void 0 ? _b : "";
+            return toSnippetSuggestion(`\n${indent}\\end{${env}}`, `\n${indent}$0\n${indent}\\end{${env}}`);
         }
-        const beginPartialMatch = linePrefix.match(/\\begin\{([A-Za-z*]*)$/);
+        const beginPartialMatch = normalizedLinePrefix.match(/\\begin\{([A-Za-z*]*)$/);
         if (beginPartialMatch) {
             const partial = (_c = beginPartialMatch[1]) !== null && _c !== void 0 ? _c : "";
             if (partial.length >= 1) {
                 const env = pickEnvironment(partial);
                 if (env && env.length > partial.length) {
-                    return `${env.slice(partial.length)}}`;
+                    return toPlainSuggestion(`${env.slice(partial.length)}}`);
                 }
             }
         }
-        const braceMatch = linePrefix.match(/\\(section|subsection|subsubsection|paragraph|subparagraph|caption|label|ref|eqref|cite|citep|citet)\{[^}]*$/);
+        const braceMatch = normalizedLinePrefix.match(/\\(section|subsection|subsubsection|paragraph|subparagraph|caption|label|ref|eqref|cite|citep|citet)\{[^}]*$/);
         if (braceMatch) {
-            return "}";
+            return toPlainSuggestion("}");
         }
-        const commandMatch = linePrefix.match(/\\([A-Za-z]{2,})$/);
+        const commandMatch = normalizedLinePrefix.match(/\\([A-Za-z]{1,})$/);
         if (commandMatch) {
             const partial = (_d = commandMatch[1]) !== null && _d !== void 0 ? _d : "";
             const template = pickCommandTemplate(partial);
-            if (template && template.name.length > partial.length) {
-                return `${template.name.slice(partial.length)}${template.suffix}`;
+            if (template && template.name.length >= partial.length) {
+                const rest = template.name.slice(partial.length);
+                if (template.suffix === "{}") {
+                    return toSnippetSuggestion(`${rest}{}`, `${rest}{$0}`);
+                }
+                return toPlainSuggestion(`${rest}${template.suffix}`);
             }
         }
         return null;
@@ -375,7 +427,7 @@ export const createInlineCompletionController = (deps) => {
                     }
                     const apiCached = getApiCache(cacheKey);
                     if (apiCached) {
-                        suggestion = apiCached;
+                        suggestion = toPlainSuggestion(apiCached);
                     }
                     else if (canRequestApiCompletion(prefix, suffix)) {
                         const prompt = buildApiPrompt(model, position);
@@ -396,13 +448,13 @@ export const createInlineCompletionController = (deps) => {
                                     return null;
                                 }
                                 setApiCache(requestKey, result);
-                                return result;
+                                return toPlainSuggestion(result);
                             })();
                             suggestion = await apiInFlightPromise;
                         }
                     }
                 }
-                if (!suggestion || suggestion.length > inlineConfig.maxChars) {
+                if (!suggestion || suggestion.text.length > inlineConfig.maxChars) {
                     return { items: [] };
                 }
                 const currentLine = model.getLineContent(position.lineNumber);
@@ -413,7 +465,7 @@ export const createInlineCompletionController = (deps) => {
                 const range = monaco.Range
                     ? new monaco.Range(position.lineNumber, position.column, position.lineNumber, position.column)
                     : undefined;
-                return { items: [{ insertText: suggestion, range }] };
+                return { items: [{ insertText: suggestion.insertText, range }] };
             },
             freeInlineCompletions: () => { },
         });

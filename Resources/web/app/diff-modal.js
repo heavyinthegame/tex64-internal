@@ -44,7 +44,8 @@ export const initDiffModal = (context, deps) => {
     const renderDiffHeader = () => {
         var _a;
         if (diffTitle instanceof HTMLElement) {
-            diffTitle.textContent = "変更内容の確認";
+            diffTitle.textContent =
+                (diffContext === null || diffContext === void 0 ? void 0 : diffContext.type) === "block" ? "変更内容の確認（確定後に整形）" : "変更内容の確認";
         }
         if (diffFileName instanceof HTMLElement) {
             const activePath = deps.getActiveFilePath();
@@ -53,15 +54,11 @@ export const initDiffModal = (context, deps) => {
         }
     };
     const setDiffHeader = (options) => {
-        var _a;
-        if (diffTitle instanceof HTMLElement && options.title) {
+        if (diffTitle instanceof HTMLElement && typeof options.title === "string") {
             diffTitle.textContent = options.title;
         }
-        if (diffFileName instanceof HTMLElement) {
-            diffFileName.textContent = (_a = options.fileName) !== null && _a !== void 0 ? _a : "";
-        }
-        if (diffModalSubmit instanceof HTMLButtonElement && options.submitLabel) {
-            diffModalSubmit.textContent = options.submitLabel;
+        if (diffFileName instanceof HTMLElement && typeof options.fileName === "string") {
+            diffFileName.textContent = options.fileName;
         }
     };
     const countLines = (text) => {
@@ -182,11 +179,15 @@ export const initDiffModal = (context, deps) => {
             (_e = diffEditorAny.layout) === null || _e === void 0 ? void 0 : _e.call(diffEditorAny);
         }
         renderDiffHeader();
+        if (diffModalSubmit instanceof HTMLButtonElement) {
+            const submitLabel = options === null || options === void 0 ? void 0 : options.submitLabel;
+            diffModalSubmit.textContent =
+                typeof submitLabel === "string" && submitLabel.trim().length > 0
+                    ? submitLabel
+                    : defaultDiffSubmitLabel;
+        }
         if (options) {
             setDiffHeader(options);
-        }
-        if (diffModalSubmit instanceof HTMLButtonElement) {
-            diffModalSubmit.textContent = defaultDiffSubmitLabel;
         }
         renderDiffSummary(original, modified);
         const diffEditorAny = diffEditor;

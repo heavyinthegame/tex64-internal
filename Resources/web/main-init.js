@@ -100,6 +100,7 @@ export const initMain = () => {
             },
         });
         const bridgeWindow = window;
+        bridgeWindow.__tex64TestRecognizeMath = (imageDataUrl) => recognizeMath(imageDataUrl);
         const appState = createAppState();
         const appActions = createAppActions(appState);
         const appContext = createAppContext({
@@ -327,6 +328,7 @@ export const initMain = () => {
             postToNative: (payload, silent) => postToNative(payload, silent),
             getActiveFilePath: () => editorSession.getActiveFilePath(),
             getActiveFileSnapshot: () => editorSession.getActiveFileSnapshot(),
+            getActiveSelectionSnapshot: () => editorSession.getActiveSelectionSnapshot(),
             getOpenFileSnapshots: (options) => editorSession.getOpenFileSnapshots(options),
             getRecentIssuesSnapshot: () => lastIssueSnapshot,
             showDiffModal: diffModalApi.showDiffModal,
@@ -401,7 +403,6 @@ export const initMain = () => {
             requestFormatCurrentFile: (source) => {
                 buildOps.requestFormatCurrentFile(source);
             },
-            requestFormatPreview: (payload) => buildOps.requestFormatPreview(payload),
             postToNative: (payload, silent) => postToNative(payload, silent),
             getBlockMode: () => { var _a; return (_a = blockEditSession === null || blockEditSession === void 0 ? void 0 : blockEditSession.getMode()) !== null && _a !== void 0 ? _a : "insert"; },
             resetBlockSession: (options) => resetBlockSession(options),
@@ -518,7 +519,6 @@ export const initMain = () => {
             getStoredCursorPosition: (path) => editorSession.getStoredCursorPosition(path),
             cacheCurrentBuffer: editorSession.cacheCurrentBuffer,
             saveCurrentFile: () => editorSession.saveCurrentFile(),
-            saveDirtyFiles: () => editorSession.saveDirtyFiles(),
             postToNative: (payload, silent) => postToNative(payload, silent),
             updateIssues: updateIssuesProxy,
             setPendingBuildIssuesFocus: (value) => setPendingBuildIssuesFocus(value),
@@ -656,8 +656,6 @@ export const initMain = () => {
             setActiveTab,
             normalizeTabKey: tabController.normalizeTabKey,
             getCurrentIssues,
-            saveCurrentFile: () => editorSession.saveCurrentFile(),
-            updateIssues,
             fileTree: {
                 setTreeFocus: (value) => fileTreeUi.setTreeFocus(value),
             },
@@ -670,7 +668,6 @@ export const initMain = () => {
             buildOps: {
                 setupActionButtons: () => buildOps.setupActionButtons(),
                 startBuild: () => buildOps.startBuild(),
-                startBuildWithSave: () => buildOps.startBuildWithSave(),
             },
             rootSelectorUi: {
                 setupActions: () => rootSelectorUi.setupActions(),
@@ -685,13 +682,13 @@ export const initMain = () => {
             event.returnValue = "";
         });
         document.addEventListener("click", (event) => {
-            var _a, _b, _c, _d, _e, _f;
+            var _a, _b, _c, _d, _e;
             const target = event.target;
             if (!(target instanceof HTMLElement)) {
                 return;
             }
             const actionable = target.closest("[data-tex64-href], a[href]");
-            const href = (_c = (_b = (_a = actionable === null || actionable === void 0 ? void 0 : actionable.getAttribute("data-tex64-href")) !== null && _a !== void 0 ? _a : actionable === null || actionable === void 0 ? void 0 : actionable.getAttribute("href")) !== null && _b !== void 0 ? _b : "") !== null && _c !== void 0 ? _c : "";
+            const href = (_b = (_a = actionable === null || actionable === void 0 ? void 0 : actionable.getAttribute("data-tex64-href")) !== null && _a !== void 0 ? _a : actionable === null || actionable === void 0 ? void 0 : actionable.getAttribute("href")) !== null && _b !== void 0 ? _b : "";
             if (!href.startsWith("tex64://")) {
                 return;
             }
@@ -706,17 +703,22 @@ export const initMain = () => {
                 return;
             }
             const action = url.hostname || url.pathname.replace(/^\/+/, "");
-            if (action !== "view-on-pdf") {
+            if (action !== "view-on-pdf" && action !== "open-source") {
                 return;
             }
-            const path = (_d = url.searchParams.get("path")) !== null && _d !== void 0 ? _d : "";
-            const line = Number.parseInt((_e = url.searchParams.get("line")) !== null && _e !== void 0 ? _e : "", 10);
-            const column = Number.parseInt((_f = url.searchParams.get("column")) !== null && _f !== void 0 ? _f : "1", 10);
+            const path = (_c = url.searchParams.get("path")) !== null && _c !== void 0 ? _c : "";
+            const line = Number.parseInt((_d = url.searchParams.get("line")) !== null && _d !== void 0 ? _d : "", 10);
+            const column = Number.parseInt((_e = url.searchParams.get("column")) !== null && _e !== void 0 ? _e : "1", 10);
             if (!path || !Number.isFinite(line) || line < 1) {
                 return;
             }
             event.preventDefault();
             event.stopPropagation();
+            if (action === "open-source") {
+                const groupKey = editorSession.getActiveEditorGroupKey();
+                editorSession.jumpToFileLine(path, line, groupKey, { force: true, focus: true });
+                return;
+            }
             postToNative({
                 type: "synctex:forward",
                 path,
@@ -749,6 +751,7 @@ export const initMain = () => {
             handleRecentProjects: (projects) => launcherUi.updateRecentProjects(projects),
             search: {
                 handleSearchUpdate: (payload) => searchUi.handleSearchUpdate(payload),
+                handleRenameResult: (payload) => searchUi.handleRenameResult(payload),
             },
             build: {
                 setBuildState: (state, message) => buildOps.setBuildState(state, message),
@@ -784,6 +787,7 @@ export const initMain = () => {
                 handleTool: (payload) => aiChatUi === null || aiChatUi === void 0 ? void 0 : aiChatUi.handleTool(payload),
                 handleProposal: (proposal) => aiChatUi === null || aiChatUi === void 0 ? void 0 : aiChatUi.handleProposal(proposal),
                 handleApplyResult: (payload) => aiChatUi === null || aiChatUi === void 0 ? void 0 : aiChatUi.handleApplyResult(payload),
+                handleUndoResult: (payload) => aiChatUi === null || aiChatUi === void 0 ? void 0 : aiChatUi.handleUndoResult(payload),
                 handleError: (message, conversationId) => aiChatUi === null || aiChatUi === void 0 ? void 0 : aiChatUi.handleError(message, conversationId),
             },
             api: {
@@ -798,7 +802,9 @@ export const initMain = () => {
             },
             editorSession: {
                 handleOpenFileResult: (payload) => editorSession.handleOpenFileResult(payload),
-                handleSaveResult: (payload) => editorSession.handleSaveResult(payload),
+                handleSaveResult: (payload) => {
+                    editorSession.handleSaveResult(payload);
+                },
                 handleRenameResult: (payload) => editorSession.handleRenameResult(payload),
                 applyContentToOpenFile: (path, content, options) => editorSession.applyContentToOpenFile(path, content, options),
             },

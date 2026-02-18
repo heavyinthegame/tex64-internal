@@ -1,0 +1,28 @@
+{
+  "samples": [
+    { "id": "s01", "latex": "x^2+1" },
+    { "id": "s02", "latex": "y=x^3-2x" },
+    { "id": "s03", "latex": "\\frac{a}{b}" },
+    { "id": "s04", "latex": "\\frac{x+1}{x-1}" },
+    { "id": "s05", "latex": "\\sqrt{x}" },
+    { "id": "s06", "latex": "\\sqrt{x^2+y^2}" },
+    { "id": "s07", "latex": "\\alpha+\\beta=\\gamma" },
+    { "id": "s08", "latex": "\\theta=\\frac{\\pi}{4}" },
+    { "id": "s09", "latex": "\\sum_{i=1}^{n} i" },
+    { "id": "s10", "latex": "\\prod_{k=1}^{m} k" },
+    { "id": "s11", "latex": "\\int_0^1 x^2\\,dx" },
+    { "id": "s12", "latex": "e^{i\\pi}+1=0" },
+    { "id": "s13", "latex": "\\lim_{x\\to0}\\frac{\\sin x}{x}" },
+    { "id": "s14", "latex": "\\binom{n}{k}" },
+    { "id": "s15", "latex": "\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}" },
+    { "id": "s16", "latex": "\\vec{v}=(v_1,v_2,v_3)" },
+    { "id": "s17", "latex": "\\log(xy)=\\log x+\\log y" },
+    { "id": "s18", "latex": "\\nabla\\cdot\\vec{E}=\\frac{\\rho}{\\varepsilon_0}" },
+    { "id": "s19", "latex": "\\forall x\\in\\mathbb{R},\\ x^2\\ge0" },
+    { "id": "s20", "latex": "a_n=\\frac{1}{n^2}" },
+    { "id": "s21", "latex": "\\left(\\frac{a+b}{c}\\right)^2" },
+    { "id": "s22", "latex": "f(x)=\\sum_{n=0}^{\\infty}\\frac{x^n}{n!}" },
+    { "id": "s23", "latex": "P(A\\mid B)=\\frac{P(B\\mid A)P(A)}{P(B)}" },
+    { "id": "s24", "latex": "\\det\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}=ad-bc" }
+  ]
+}

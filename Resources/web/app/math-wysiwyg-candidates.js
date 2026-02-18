@@ -123,6 +123,7 @@ const buildNgramIndex = (items, n) => {
 };
 const CONTAINS_INDEX_2 = buildNgramIndex(TRIGGER_KEYS, 2);
 const CONTAINS_INDEX_3 = buildNgramIndex(TRIGGER_KEYS, 3);
+const WORD_CANDIDATE_LIMIT = 16;
 const getContainsCandidates = (query) => {
     if (!query) {
         return [];
@@ -231,13 +232,13 @@ export const buildWordCandidates = (token, options = {}) => {
             }
             seen.add(keyId);
             results.push(candidate);
-            if (results.length >= 10) {
+            if (results.length >= WORD_CANDIDATE_LIMIT) {
                 break;
             }
         }
     };
     pushMatches(prefixMatches);
-    if (results.length < 10) {
+    if (results.length < WORD_CANDIDATE_LIMIT) {
         pushMatches(containsMatches);
     }
     return results;

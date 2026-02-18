@@ -1,4 +1,4 @@
-# tex64
+# TeX64
 
 Electron ベースの LaTeX エディタ（開発中）。
 
@@ -22,6 +22,27 @@ E2E:
 - `npm run e2e`
 - `TEX180_E2E=1` で E2E モード（contextIsolation を無効化 / `?e2e=1` を付与）。
 - `TEX180_E2E_WORKSPACE` / `TEX180_E2E_USERDATA` でワークスペース/ユーザーデータを指定。
+
+Unit / Nightly:
+
+- `npm run test:unit` (fast: pure + contract + IME-focused unit tests)
+- `npm run test:unit:with-build` (rebuild web bundle then unit tests)
+- `npm run test:nightly` (unit + fuzz + perf gates)
+- `npm run test:nightly:with-build` (rebuild web bundle then nightly tests)
+
+CI:
+
+- PR / `main` push: `.github/workflows/unit.yml` で `test:unit:with-build` を実行
+- Nightly: `.github/workflows/nightly.yml` を毎日 `10:00 UTC`（`02:00 PST` / `03:00 PDT`）に実行
+- Nightly は実行ログ/メタ情報を artifact (`nightly-test-log-<run_id>`) として14日保存
+- Nightly 失敗時は GitHub Issue (`Nightly Input Tests failing`) を自動作成/追記し、復旧時に自動クローズ
+- Nightly 通知のラベル/担当者は repository variables で調整可能: `NIGHTLY_ALERT_LABEL`, `NIGHTLY_ALERT_ASSIGNEE`
+
+SyncTeX forward ベンチ:
+
+- `npm run bench:synctex:forward`
+- `npm run bench:synctex:forward:gate`
+- 詳細: `docs/synctex-forward-benchmark.md`
 
 ## 編集ルール（重要）
 

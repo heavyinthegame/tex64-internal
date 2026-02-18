@@ -12,19 +12,48 @@ const {
 } = require("./agent-policy.cjs");
 
 const DEFAULT_MAX_COMMAND_OUTPUT_BYTES = 2 * 1024 * 1024;
+const MAX_COMMAND_TIMEOUT_MS = 60 * 1000;
+const BASE64_DATA_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+const SHELL_OPERATOR_PATTERN = /[;&|><`]/;
+const SUBSHELL_PATTERN = /\$\(/;
+const ALLOWED_RUN_COMMANDS = new Set([
+  "biber",
+  "bibtex",
+  "cat",
+  "echo",
+  "find",
+  "grep",
+  "head",
+  "kpsewhich",
+  "latexmk",
+  "ls",
+  "lualatex",
+  "pdflatex",
+  "printf",
+  "pwd",
+  "rg",
+  "tail",
+  "texcount",
+  "uplatex",
+  "wc",
+  "which",
+  "xelatex",
+]);
 
 const readFileFromDisk = async (resolvedPath, { forceBase64 = false } = {}) => {
   const buffer = await fsp.readFile(resolvedPath);
+  const contentHash = crypto.createHash("sha256").update(buffer).digest("hex");
   if (forceBase64) {
     return {
       content: buffer.toString("base64"),
       encoding: "base64",
       binary: true,
       size: buffer.length,
+      contentHash,
     };
   }
   if (buffer.length === 0) {
-    return { content: "", encoding: "utf8", binary: false, size: 0 };
+    return { content: "", encoding: "utf8", binary: false, size: 0, contentHash };
   }
   const hasNullByte = buffer.includes(0);
   if (hasNullByte) {
@@ -33,6 +62,7 @@ const readFileFromDisk = async (resolvedPath, { forceBase64 = false } = {}) => {
       encoding: "base64",
       binary: true,
       size: buffer.length,
+      contentHash,
     };
   }
   return {
@@ -40,11 +70,95 @@ const readFileFromDisk = async (resolvedPath, { forceBase64 = false } = {}) => {
     encoding: "utf8",
     binary: false,
     size: buffer.length,
+    contentHash,
+  };
+};
+
+const hashUtf8Text = (value) =>
+  crypto.createHash("sha256").update(Buffer.from(value ?? "", "utf8")).digest("hex");
+
+const normalizeBase64Data = (value) => (typeof value === "string" ? value.replace(/\s+/g, "") : "");
+
+const decodeBase64Strict = (value) => {
+  const normalized = normalizeBase64Data(value);
+  if (normalized.length % 4 !== 0) {
+    return null;
+  }
+  if (!BASE64_DATA_PATTERN.test(normalized)) {
+    return null;
+  }
+  const buffer = Buffer.from(normalized, "base64");
+  const noPadNormalized = normalized.replace(/=+$/g, "");
+  const noPadEncoded = buffer.toString("base64").replace(/=+$/g, "");
+  if (noPadNormalized !== noPadEncoded) {
+    return null;
+  }
+  return { normalized, buffer };
+};
+
+const parseCommandLine = (command) => {
+  if (SHELL_OPERATOR_PATTERN.test(command) || SUBSHELL_PATTERN.test(command)) {
+    return { error: "シェル演算子（`|`, `;`, `>`, `&` など）は使用できません。" };
+  }
+  if (/[\r\n]/.test(command)) {
+    return { error: "改行を含む command は使用できません。" };
+  }
+  const tokens = [];
+  let current = "";
+  let quote = null;
+  let escaped = false;
+  for (const char of command) {
+    if (escaped) {
+      current += char;
+      escaped = false;
+      continue;
+    }
+    if (char === "\\" && quote !== "'") {
+      escaped = true;
+      continue;
+    }
+    if (quote) {
+      if (char === quote) {
+        quote = null;
+      } else {
+        current += char;
+      }
+      continue;
+    }
+    if (char === "'" || char === "\"") {
+      quote = char;
+      continue;
+    }
+    if (/\s/.test(char)) {
+      if (current) {
+        tokens.push(current);
+        current = "";
+      }
+      continue;
+    }
+    current += char;
+  }
+  if (escaped) {
+    return { error: "command の末尾エスケープが不正です。" };
+  }
+  if (quote) {
+    return { error: "command の引用符が閉じていません。" };
+  }
+  if (current) {
+    tokens.push(current);
+  }
+  if (tokens.length === 0) {
+    return { error: "command が空です。" };
+  }
+  return {
+    executable: tokens[0],
+    args: tokens.slice(1),
   };
 };
 
 const runShellCommand = (
-  command,
+  executable,
+  args,
   { cwd, env, timeoutMs, maxOutputBytes = DEFAULT_MAX_COMMAND_OUTPUT_BYTES } = {}
 ) =>
   new Promise((resolve) => {
@@ -60,10 +174,10 @@ const runShellCommand = (
         }
       });
     }
-    const proc = spawn(command, {
+    const proc = spawn(executable, Array.isArray(args) ? args : [], {
       cwd,
       env: { ...process.env, ...sanitizedEnv },
-      shell: true,
+      shell: false,
     });
     let stdout = "";
     let stderr = "";
@@ -336,9 +450,28 @@ const handleReadFiles = async (service, args, policy, conversationId) => {
 };
 
 const handleRunCommand = async (service, args) => {
+  if (service?.agentOptions?.allowRunCommand !== true) {
+    return {
+      error:
+        "run_command は現在無効です。必要な場合は agent settings の allowRunCommand を有効にしてください。",
+    };
+  }
   const command = typeof args.command === "string" ? args.command.trim() : "";
   if (!command) {
     return { error: "command が空です。" };
+  }
+  const parsed = parseCommandLine(command);
+  if (parsed.error) {
+    return { error: parsed.error };
+  }
+  const executable = parsed.executable;
+  const executableName = path.basename(executable).toLowerCase();
+  if (!ALLOWED_RUN_COMMANDS.has(executableName)) {
+    return {
+      error:
+        `許可されていないコマンドです: ${executableName}。` +
+        "run_command は読み取り/検証系コマンドのみ実行できます。",
+    };
   }
   const rootPath = service.workspace.getRootPath();
   if (!rootPath) {
@@ -352,11 +485,14 @@ const handleRunCommand = async (service, args) => {
       return { error: "cwd が不正です。" };
     }
   }
-  const timeoutMs = Number.isFinite(args.timeoutMs) ? args.timeoutMs : null;
+  const timeoutMs =
+    Number.isFinite(args.timeoutMs) && args.timeoutMs > 0
+      ? Math.min(args.timeoutMs, MAX_COMMAND_TIMEOUT_MS)
+      : null;
   const maxOutputBytes = Number.isFinite(args.maxOutputBytes)
     ? args.maxOutputBytes
     : DEFAULT_MAX_COMMAND_OUTPUT_BYTES;
-  const result = await runShellCommand(command, {
+  const result = await runShellCommand(executable, parsed.args, {
     cwd,
     env: args.env,
     timeoutMs,
@@ -392,11 +528,11 @@ const handleProposeWrite = async (service, args, policy, conversationId) => {
   }
   let contentBytes = Buffer.byteLength(content, "utf8");
   if (binaryWrite) {
-    try {
-      contentBytes = Buffer.from(content, "base64").length;
-    } catch {
+    const decoded = decodeBase64Strict(content);
+    if (!decoded) {
       return { error: "base64 の内容が不正です。" };
     }
+    contentBytes = decoded.buffer.length;
   }
   if (contentBytes > policy.maxFileBytes) {
     return { error: "内容が大きすぎます。" };
@@ -404,6 +540,8 @@ const handleProposeWrite = async (service, args, policy, conversationId) => {
   let originalContent = "";
   let isNewFile = true;
   let isBinary = binaryWrite;
+  let baseContentHash = null;
+  let baseSource = null;
   const snapshot = service.getContextSnapshot(conversationId, targetPath);
   if (snapshot && snapshot.content) {
     if (snapshot.contentLength > policy.maxFileBytes) {
@@ -413,6 +551,10 @@ const handleProposeWrite = async (service, args, policy, conversationId) => {
       ? Buffer.from(snapshot.content, "utf8").toString("base64")
       : snapshot.content;
     isNewFile = false;
+    if (!snapshot.isDirty && !snapshot.truncated) {
+      baseContentHash = hashUtf8Text(snapshot.content);
+      baseSource = "snapshot";
+    }
   } else {
     try {
       const resolved = service.workspace.resolvePath(targetPath);
@@ -420,6 +562,8 @@ const handleProposeWrite = async (service, args, policy, conversationId) => {
       originalContent = result.content;
       isBinary = isBinary || result.binary;
       isNewFile = false;
+      baseContentHash = result.contentHash;
+      baseSource = "disk";
     } catch {
       originalContent = "";
       isNewFile = true;
@@ -440,6 +584,10 @@ const handleProposeWrite = async (service, args, policy, conversationId) => {
     summary,
     isNewFile,
     conversationId,
+    baseContentHash: typeof baseContentHash === "string" ? baseContentHash : undefined,
+    baseExists: !isNewFile,
+    baseSource: baseSource || undefined,
+    createdAt: Date.now(),
   };
   service.proposals.set(id, proposal);
   service.sendToRenderer("agent:proposal", { proposal });
@@ -517,12 +665,18 @@ const handleProposePatch = async (service, args, policy, conversationId) => {
 
   for (const [targetPath, edits] of editsByPath.entries()) {
     let originalContent = "";
+    let baseContentHash = null;
+    let baseSource = null;
     const snapshot = service.getContextSnapshot(conversationId, targetPath);
     if (snapshot && snapshot.content) {
       if (snapshot.contentLength > policy.maxFileBytes) {
         return { error: "ファイルが大きすぎます。" };
       }
       originalContent = snapshot.content;
+      if (!snapshot.isDirty && !snapshot.truncated) {
+        baseContentHash = hashUtf8Text(snapshot.content);
+        baseSource = "snapshot";
+      }
     } else {
       try {
         const resolved = service.workspace.resolvePath(targetPath);
@@ -531,6 +685,8 @@ const handleProposePatch = async (service, args, policy, conversationId) => {
           return { error: "バイナリファイルのため部分編集できません。" };
         }
         originalContent = result.content;
+        baseContentHash = result.contentHash;
+        baseSource = "disk";
       } catch {
         return { error: "ファイルが見つかりません。" };
       }
@@ -559,6 +715,8 @@ const handleProposePatch = async (service, args, policy, conversationId) => {
       originalContent,
       updatedContent,
       appliedCount,
+      baseContentHash,
+      baseSource,
     });
   }
 
@@ -577,6 +735,11 @@ const handleProposePatch = async (service, args, policy, conversationId) => {
       summary: buildSummary(prepared.path, prepared.edits, prepared.appliedCount),
       isNewFile: false,
       conversationId,
+      baseContentHash:
+        typeof prepared.baseContentHash === "string" ? prepared.baseContentHash : undefined,
+      baseExists: true,
+      baseSource: prepared.baseSource || undefined,
+      createdAt: Date.now(),
     };
     service.proposals.set(id, proposal);
     service.sendToRenderer("agent:proposal", { proposal });
@@ -616,17 +779,25 @@ const handleProposeDelete = async (service, args, policy, conversationId) => {
   }
   let originalContent = "";
   let isBinary = false;
+  let baseContentHash = null;
+  let baseSource = null;
   const snapshot = service.getContextSnapshot(conversationId, targetPath);
   if (snapshot && snapshot.content) {
     if (snapshot.contentLength > policy.maxFileBytes) {
       return { error: "ファイルが大きすぎます。" };
     }
     originalContent = snapshot.content;
+    if (!snapshot.isDirty && !snapshot.truncated) {
+      baseContentHash = hashUtf8Text(snapshot.content);
+      baseSource = "snapshot";
+    }
   } else {
     try {
       const result = await readFileFromDisk(resolved);
       originalContent = result.content;
       isBinary = result.binary;
+      baseContentHash = result.contentHash;
+      baseSource = "disk";
     } catch {
       originalContent = "";
     }
@@ -645,6 +816,10 @@ const handleProposeDelete = async (service, args, policy, conversationId) => {
     summary,
     isNewFile: false,
     conversationId,
+    baseContentHash: typeof baseContentHash === "string" ? baseContentHash : undefined,
+    baseExists: true,
+    baseSource: baseSource || undefined,
+    createdAt: Date.now(),
   };
   service.proposals.set(id, proposal);
   service.sendToRenderer("agent:proposal", { proposal });
@@ -668,17 +843,25 @@ const handleProposeRename = async (service, args, policy, conversationId) => {
   }
   let originalContent = "";
   let isBinary = false;
+  let baseContentHash = null;
+  let baseSource = null;
   const snapshot = service.getContextSnapshot(conversationId, oldPath);
   if (snapshot && snapshot.content) {
     if (snapshot.contentLength > policy.maxFileBytes) {
       return { error: "ファイルが大きすぎます。" };
     }
     originalContent = snapshot.content;
+    if (!snapshot.isDirty && !snapshot.truncated) {
+      baseContentHash = hashUtf8Text(snapshot.content);
+      baseSource = "snapshot";
+    }
   } else {
     try {
       const result = await readFileFromDisk(resolved);
       originalContent = result.content;
       isBinary = result.binary;
+      baseContentHash = result.contentHash;
+      baseSource = "disk";
     } catch {
       originalContent = "";
     }
@@ -698,6 +881,10 @@ const handleProposeRename = async (service, args, policy, conversationId) => {
     summary,
     isNewFile: false,
     conversationId,
+    baseContentHash: typeof baseContentHash === "string" ? baseContentHash : undefined,
+    baseExists: true,
+    baseSource: baseSource || undefined,
+    createdAt: Date.now(),
   };
   service.proposals.set(id, proposal);
   service.sendToRenderer("agent:proposal", { proposal });
@@ -726,6 +913,8 @@ const handleProposeCreateDirectory = async (service, args, policy, conversationI
     summary,
     isNewFile: true,
     conversationId,
+    baseExists: false,
+    createdAt: Date.now(),
   };
   service.proposals.set(id, proposal);
   service.sendToRenderer("agent:proposal", { proposal });
@@ -736,6 +925,9 @@ const handleProposeCreateDirectory = async (service, args, policy, conversationI
 };
 
 module.exports = {
+  ALLOWED_RUN_COMMANDS,
+  MAX_COMMAND_TIMEOUT_MS,
+  decodeBase64Strict,
   DEFAULT_MAX_COMMAND_OUTPUT_BYTES,
   handleListFiles,
   handleProposeCreateDirectory,
@@ -750,4 +942,5 @@ module.exports = {
   replaceAllWithCount,
   replaceOnceWithCount,
   runShellCommand,
+  parseCommandLine,
 };

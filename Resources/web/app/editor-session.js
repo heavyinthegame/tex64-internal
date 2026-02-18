@@ -59,9 +59,15 @@ export const initEditorSession = (context, deps) => {
         autoSavePending: false,
     };
     let issueDecorations = [];
+    let issueDecorationGroup = null;
+    const issueHighlightClassNames = new Set(["issue-line-warning", "issue-line-highlight"]);
     const jumpDecorations = {
         primary: [],
         secondary: [],
+    };
+    const jumpDecorationClassNames = {
+        primary: null,
+        secondary: null,
     };
     let pendingAutoOpenPath = null;
     const lastCursorPositions = new Map();
@@ -86,6 +92,46 @@ export const initEditorSession = (context, deps) => {
             return null;
         }
         return { path: group.currentFilePath, content, isDirty: group.isDirty };
+    };
+    const getActiveSelectionSnapshot = () => {
+        var _a, _b, _c, _d, _e, _f, _g, _h;
+        const group = getActiveGroup();
+        if (!group.currentFilePath || !isTextFilePath(group.currentFilePath) || !group.editor) {
+            return null;
+        }
+        const editorAny = group.editor;
+        const selection = (typeof editorAny.getSelection === "function" ? editorAny.getSelection() : null);
+        if (!selection || typeof selection !== "object") {
+            return null;
+        }
+        const startLine = (_b = (_a = selection.startLineNumber) !== null && _a !== void 0 ? _a : selection.selectionStartLineNumber) !== null && _b !== void 0 ? _b : selection.positionLineNumber;
+        const startColumn = (_d = (_c = selection.startColumn) !== null && _c !== void 0 ? _c : selection.selectionStartColumn) !== null && _d !== void 0 ? _d : selection.positionColumn;
+        const endLine = (_f = (_e = selection.endLineNumber) !== null && _e !== void 0 ? _e : selection.selectionEndLineNumber) !== null && _f !== void 0 ? _f : selection.positionLineNumber;
+        const endColumn = (_h = (_g = selection.endColumn) !== null && _g !== void 0 ? _g : selection.selectionEndColumn) !== null && _h !== void 0 ? _h : selection.positionColumn;
+        if (typeof startLine !== "number" ||
+            typeof startColumn !== "number" ||
+            typeof endLine !== "number" ||
+            typeof endColumn !== "number") {
+            return null;
+        }
+        if (startLine === endLine && startColumn === endColumn) {
+            return null;
+        }
+        const model = typeof editorAny.getModel === "function" ? editorAny.getModel() : null;
+        const getValueInRange = model && typeof model.getValueInRange === "function" ? model.getValueInRange.bind(model) : null;
+        if (!getValueInRange) {
+            return null;
+        }
+        const text = getValueInRange(selection).replace(/\r\n/g, "\n");
+        return {
+            path: group.currentFilePath,
+            text,
+            isDirty: group.isDirty,
+            startLine,
+            startColumn,
+            endLine,
+            endColumn,
+        };
     };
     const getOpenFileSnapshots = (options) => {
         var _a, _b;
@@ -283,13 +329,28 @@ export const initEditorSession = (context, deps) => {
     };
     const isAnyGroupComposing = () => Object.values(editorGroups).some((group) => group.isComposing);
     const clearIssueHighlight = () => {
-        const activeGroup = getActiveGroup();
         const monacoApi = deps.getMonacoApi();
-        if (!activeGroup.editor || !monacoApi || issueDecorations.length === 0) {
+        if (!monacoApi) {
             return;
         }
-        const editor = activeGroup.editor;
-        issueDecorations = editor.deltaDecorations(issueDecorations, []);
+        if (issueDecorations.length > 0 && issueDecorationGroup) {
+            const issueGroup = getEditorGroup(issueDecorationGroup);
+            if (issueGroup.editor) {
+                const editor = issueGroup.editor;
+                issueDecorations = editor.deltaDecorations(issueDecorations, []);
+            }
+            else {
+                issueDecorations = [];
+            }
+            issueDecorationGroup = null;
+        }
+        Object.keys(editorGroups).forEach((key) => {
+            const className = jumpDecorationClassNames[key];
+            if (!className || !issueHighlightClassNames.has(className)) {
+                return;
+            }
+            clearJumpHighlight(editorGroups[key]);
+        });
     };
     const parseIssueDetail = (issue) => {
         var _a, _b, _c, _d, _e, _f, _g;
@@ -374,11 +435,17 @@ export const initEditorSession = (context, deps) => {
             return;
         }
         const detail = parseIssueDetail(issue);
+        const className = issue.severity === "warning" ? "issue-line-warning" : "issue-line-highlight";
         if (detail.path && detail.line) {
-            jumpToFileLine(detail.path, detail.line, activeEditorGroup);
+            clearIssueHighlight();
+            jumpToFileLine(detail.path, detail.line, activeEditorGroup, {
+                className,
+                force: true,
+            });
             return;
         }
         if (detail.path && !detail.line) {
+            clearIssueHighlight();
             requestOpenFile(detail.path, activeEditorGroup, true);
             return;
         }
@@ -387,7 +454,9 @@ export const initEditorSession = (context, deps) => {
         }
         const monacoApiAny = monacoApi;
         const editor = activeGroup.editor;
-        const className = issue.severity === "warning" ? "issue-line-warning" : "issue-line-highlight";
+        clearIssueHighlight();
+        clearJumpHighlight(activeGroup);
+        issueDecorationGroup = activeGroup.key;
         issueDecorations = editor.deltaDecorations(issueDecorations, [
             {
                 range: new monacoApiAny.Range(detail.line, 1, detail.line, 1),
@@ -404,12 +473,15 @@ export const initEditorSession = (context, deps) => {
     const clearJumpHighlight = (group) => {
         const decorations = jumpDecorations[group.key];
         if (!group.editor || decorations.length === 0) {
+            jumpDecorationClassNames[group.key] = null;
             return;
         }
         const editor = group.editor;
         jumpDecorations[group.key] = editor.deltaDecorations(decorations, []);
+        jumpDecorationClassNames[group.key] = null;
     };
     const revealLine = (group, line, options = {}) => {
+        var _a;
         const monacoApi = deps.getMonacoApi();
         if (!group.editor || !monacoApi) {
             return;
@@ -417,15 +489,17 @@ export const initEditorSession = (context, deps) => {
         clearJumpHighlight(group);
         const monacoApiAny = monacoApi;
         const editor = group.editor;
+        const className = (_a = options.className) !== null && _a !== void 0 ? _a : "jump-line-highlight";
         jumpDecorations[group.key] = editor.deltaDecorations(jumpDecorations[group.key], [
             {
                 range: new monacoApiAny.Range(line, 1, line, 1),
                 options: {
                     isWholeLine: true,
-                    className: "jump-line-highlight",
+                    className,
                 },
             },
         ]);
+        jumpDecorationClassNames[group.key] = className;
         editor.revealLineInCenter(line);
         editor.setPosition({ lineNumber: line, column: 1 });
         if (options.focus !== false) {
@@ -841,17 +915,18 @@ export const initEditorSession = (context, deps) => {
     const jumpToFileLine = (path, line, groupKey, options = {}) => {
         const forceOpen = options.force === true;
         const focus = options.focus;
+        const className = options.className;
         const targetGroupKey = forceOpen
             ? groupKey
             : resolveOpenTargetGroupKey(path, groupKey);
         const targetGroup = getEditorGroup(targetGroupKey);
         if (targetGroup.currentFilePath === path) {
-            revealLine(targetGroup, line, { focus });
+            revealLine(targetGroup, line, { focus, className });
             return;
         }
         const requested = requestOpenFile(path, targetGroupKey, forceOpen);
         if (requested) {
-            fileOpsState.pendingReveal = { path, line, group: targetGroupKey, focus };
+            fileOpsState.pendingReveal = { path, line, group: targetGroupKey, focus, className };
         }
     };
     const jumpToLocation = (entry) => {
@@ -1008,6 +1083,7 @@ export const initEditorSession = (context, deps) => {
         getActiveEditorGroupKey,
         getActiveFilePath,
         getActiveFileSnapshot,
+        getActiveSelectionSnapshot,
         getOpenFileSnapshots,
         isActiveGroup,
         forEachEditorGroup,

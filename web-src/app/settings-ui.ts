@@ -116,9 +116,8 @@ export const initSettingsUi = (
     "latexmk",
     "latexindent",
     "synctex",
-    "chktex",
   ];
-  const envDisplayTargets = ["lualatex", "latexmk", "latexindent", "synctex", "chktex"];
+  const envDisplayTargets = ["lualatex", "latexmk", "latexindent", "synctex"];
   const envManager = createEnvStatusManager({
     postToNative: deps.postToNative,
     envCheckTargets,

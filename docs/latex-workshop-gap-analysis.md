@@ -18,14 +18,9 @@
 
 - word count（`texcount`）: 執筆フローの必須要件ではないため対象外
 - 自動ビルド: tex64 は自動保存が前提で、ビルドは明示操作で十分（勝手に走る方が不快になりやすい）
+- Lint（ChkTeX/LaCheck 等）: 流儀依存の警告がノイズになりやすく、tex64 では提供しない方針
 
 ## 未実装/不足（移行障壁になりうるもの）
-
-### Lint（LaTeX Workshop の既定体験との差）
-
-- 自動 lint（`onType` / `onSave` 相当）: いまは手動実行中心のため、常時 Diagnostics を期待するユーザーには差が出る
-- LaCheck サポート: ChkTeX 以外の linter を使っているユーザーの移行障壁になりうる
-- ChkTeX 設定の露出: args/有効無効/プロジェクト別の振る舞いを UI から調整できない（`.chktexrc` に寄せる運用が必要）
 
 ### Snippets / Editing（書く速度）
 
