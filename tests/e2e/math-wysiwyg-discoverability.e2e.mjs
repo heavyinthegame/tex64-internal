@@ -297,6 +297,7 @@ const runCase = async (label, test) => {
       env: {
         ...process.env,
         TEX64_E2E: "1",
+        TEX64_E2E_HEADLESS: "1",
         TEX64_E2E_USERDATA: userDataPath,
       },
     });

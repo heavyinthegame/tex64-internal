@@ -1,6 +1,16 @@
 export const applyMonacoTheme = (monaco) => {
     var _a, _b, _c, _d;
     const themeName = "tex64-deep-slate";
+    const tokenRules = [
+        { token: "comment", foreground: "6A9955" },
+        { token: "keyword", foreground: "569CD6" },
+        { token: "type", foreground: "4EC9B0" },
+        { token: "variable", foreground: "9CDCFE" },
+        { token: "string", foreground: "DCDCAA" },
+        { token: "number", foreground: "B5CEA8" },
+        { token: "operator", foreground: "D4D4D4" },
+        { token: "delimiter", foreground: "C8CCD4" },
+    ];
     const themeColors = {
         "editor.background": "#1A1D23",
         "editor.foreground": "#CDD1D9",
@@ -51,7 +61,7 @@ export const applyMonacoTheme = (monaco) => {
     (_b = (_a = monaco.editor) === null || _a === void 0 ? void 0 : _a.defineTheme) === null || _b === void 0 ? void 0 : _b.call(_a, themeName, {
         base: "vs-dark",
         inherit: true,
-        rules: [],
+        rules: tokenRules,
         colors: themeColors,
     });
     (_d = (_c = monaco.editor) === null || _c === void 0 ? void 0 : _c.setTheme) === null || _d === void 0 ? void 0 : _d.call(_c, themeName);

@@ -4,10 +4,18 @@ const assertFetch = () => {
   }
 };
 
-const FIXED_GEMINI_MODEL = "gemini-3-flash-preview";
+const DEFAULT_GEMINI_MODEL = "gemini-3-flash-preview";
+
+const normalizeModelName = (value) => {
+  if (typeof value !== "string") {
+    return "";
+  }
+  return value.trim();
+};
 
 const requestGemini = async ({
   proxyUrl,
+  model,
   contents,
   systemInstruction,
   tools,
@@ -20,8 +28,12 @@ const requestGemini = async ({
     throw new Error("AI proxy URL is missing.");
   }
   assertFetch();
+  const resolvedModel =
+    normalizeModelName(model) ||
+    normalizeModelName(process.env.GEMINI_MODEL) ||
+    DEFAULT_GEMINI_MODEL;
   const body = {
-    model: FIXED_GEMINI_MODEL,
+    model: resolvedModel,
     contents,
     systemInstruction,
     tools,
@@ -39,6 +51,7 @@ const requestGemini = async ({
     signal,
   });
   const contentType = response.headers.get("content-type") || "";
+  const resolvedModelHeader = response.headers.get("x-tex64-resolved-model") || "";
   const isSse = contentType.includes("text/event-stream");
   if (onDelta && isSse && response.body) {
     if (!response.ok) {
@@ -138,6 +151,9 @@ const requestGemini = async ({
     if (usageMetadata) {
       payload.usageMetadata = usageMetadata;
     }
+    if (resolvedModelHeader) {
+      payload.resolvedModel = resolvedModelHeader;
+    }
     return payload;
   }
 
@@ -157,10 +173,15 @@ const requestGemini = async ({
   if (!json) {
     throw new Error("Empty response from AI proxy.");
   }
+  if (resolvedModelHeader && typeof json === "object" && json !== null) {
+    if (typeof json.resolvedModel !== "string" || !json.resolvedModel.trim()) {
+      json.resolvedModel = resolvedModelHeader;
+    }
+  }
   return json;
 };
 
 module.exports = {
-  FIXED_GEMINI_MODEL,
+  DEFAULT_GEMINI_MODEL,
   requestGemini,
 };

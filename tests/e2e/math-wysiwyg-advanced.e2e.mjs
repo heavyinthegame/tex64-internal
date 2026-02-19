@@ -309,6 +309,7 @@ const runCase = async (label, test) => {
       env: {
         ...process.env,
         TEX64_E2E: "1",
+        TEX64_E2E_HEADLESS: "1",
         TEX64_E2E_USERDATA: userDataPath,
       },
     });
@@ -509,7 +510,7 @@ const run = async () => {
   await runCase("[11/11] text template keeps text mode", async (page) => {
     await applySuggestionByTyping(page, "text", { pickIndex: 0 });
     await page.keyboard.type("km", { delay: typeDelayMs });
-    await waitForExactLatex(page, "\\text{km}", "text");
+    await waitForExactLatex(page, "km", "text");
     await assertRenderedOutput(page, {
       label: "text",
       mustContain: ["km"],

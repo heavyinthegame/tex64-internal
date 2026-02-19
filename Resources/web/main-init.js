@@ -604,7 +604,16 @@ export const initMain = () => {
         });
         updateIssues = workspaceController.updateIssues;
         setPendingBuildIssuesFocus = workspaceController.setPendingBuildIssuesFocus;
-        const initialTab = tabController.normalizeTabKey((_a = tabs.find((tab) => tab.classList.contains("is-active"))) === null || _a === void 0 ? void 0 : _a.dataset.tab);
+        const storedActiveTab = (() => {
+            var _a;
+            try {
+                return (_a = localStorage.getItem("tex64.activeTab")) !== null && _a !== void 0 ? _a : undefined;
+            }
+            catch {
+                return undefined;
+            }
+        })();
+        const initialTab = tabController.normalizeTabKey(storedActiveTab !== null && storedActiveTab !== void 0 ? storedActiveTab : (_a = tabs.find((tab) => tab.classList.contains("is-active"))) === null || _a === void 0 ? void 0 : _a.dataset.tab);
         setActiveTab(initialTab);
         sidebarUi.loadVisibility();
         sidebarUi.applyVisibility();
@@ -716,7 +725,11 @@ export const initMain = () => {
             event.stopPropagation();
             if (action === "open-source") {
                 const groupKey = editorSession.getActiveEditorGroupKey();
-                editorSession.jumpToFileLine(path, line, groupKey, { force: true, focus: true });
+                editorSession.jumpToFileLine(path, line, groupKey, {
+                    force: true,
+                    focus: true,
+                    column: Number.isFinite(column) && column > 0 ? column : 1,
+                });
                 return;
             }
             postToNative({
@@ -793,6 +806,16 @@ export const initMain = () => {
             api: {
                 handleCompletionResult: (payload) => apiCompletionBroker.handleCompletionResult(payload),
                 handleUsage: (payload) => apiCompletionBroker.handleUsage(payload),
+            },
+            platform: {
+                handleAuth: (payload) => aiChatUi === null || aiChatUi === void 0 ? void 0 : aiChatUi.handlePlatformAuth(payload),
+                handleAiAccess: (payload) => aiChatUi === null || aiChatUi === void 0 ? void 0 : aiChatUi.handlePlatformAiAccess(payload),
+                handleUsage: (payload) => aiChatUi === null || aiChatUi === void 0 ? void 0 : aiChatUi.handlePlatformUsage(payload),
+                handleUpdate: (payload) => {
+                    settingsUi.handlePlatformUpdate(payload);
+                },
+                handleUpdateStatus: (payload) => settingsUi.handlePlatformUpdateStatus(payload),
+                handleFeedback: (payload) => settingsUi.handlePlatformFeedback(payload),
             },
             filePreview: {
                 handlePreviewResult: (payload) => filePreviewBroker.handlePreviewResult(payload),

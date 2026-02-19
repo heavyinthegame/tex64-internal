@@ -5,6 +5,16 @@ export const applyMonacoTheme = (monaco: {
   };
 }) => {
   const themeName = "tex64-deep-slate";
+  const tokenRules = [
+    { token: "comment", foreground: "6A9955" },
+    { token: "keyword", foreground: "569CD6" },
+    { token: "type", foreground: "4EC9B0" },
+    { token: "variable", foreground: "9CDCFE" },
+    { token: "string", foreground: "DCDCAA" },
+    { token: "number", foreground: "B5CEA8" },
+    { token: "operator", foreground: "D4D4D4" },
+    { token: "delimiter", foreground: "C8CCD4" },
+  ];
   const themeColors: Record<string, string> = {
     "editor.background": "#1A1D23",
     "editor.foreground": "#CDD1D9",
@@ -55,7 +65,7 @@ export const applyMonacoTheme = (monaco: {
   monaco.editor?.defineTheme?.(themeName, {
     base: "vs-dark",
     inherit: true,
-    rules: [],
+    rules: tokenRules,
     colors: themeColors,
   });
   monaco.editor?.setTheme?.(themeName);

@@ -232,6 +232,7 @@ export const initBuildProfilesUi = (context, deps) => {
         scheduleBuildProfilesSave();
     };
     const requestBuildClean = (deep) => {
+        var _a, _b, _c;
         if (!isWorkspaceReady()) {
             return;
         }
@@ -244,15 +245,15 @@ export const initBuildProfilesUi = (context, deps) => {
         commitBuildProfilesUpdate(true);
         const activeId = getSelectedBuildProfileId();
         const activeProfile = activeId && activeId !== ""
-            ? buildProfiles.find((profile) => profile.id === activeId) || null
+            ? (_a = buildProfiles.find((profile) => profile.id === activeId)) !== null && _a !== void 0 ? _a : null
             : null;
         deps.postToNative({
             type: "build:clean",
             deep: deep === true,
             buildProfile: activeProfile
                 ? {
-                    outDir: (activeProfile.outDir !== null && activeProfile.outDir !== void 0 ? activeProfile.outDir : null),
-                    extraArgs: (activeProfile.extraArgs !== null && activeProfile.extraArgs !== void 0 ? activeProfile.extraArgs : null),
+                    outDir: (_b = activeProfile.outDir) !== null && _b !== void 0 ? _b : null,
+                    extraArgs: (_c = activeProfile.extraArgs) !== null && _c !== void 0 ? _c : null,
                 }
                 : null,
         }, false);

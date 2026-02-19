@@ -2,16 +2,21 @@ import { getIssueResolution } from "./issue-resolution.js";
 import { createChat as createChatState, ensureChat as ensureChatState, getChat as getChatState, } from "./ai-chat-state.js";
 import { createMessageElement, updateMessageElement } from "./ai-chat-message.js";
 import { createProposalCard } from "./ai-chat-proposal.js";
-const MAX_ACTIVE_FILE_CONTEXT_CHARS = 12000;
-const MAX_OPEN_FILE_CONTEXT_CHARS = 12000;
-const MAX_SELECTION_CONTEXT_CHARS = 6000;
-const MAX_OPEN_FILE_SNAPSHOTS = Number.POSITIVE_INFINITY;
+import { TEX64_LINKS } from "./platform-links.js";
+const MAX_ACTIVE_FILE_CONTEXT_CHARS = 10000;
+const MAX_OPEN_FILE_CONTEXT_CHARS = 8000;
+const MAX_SELECTION_CONTEXT_CHARS = 4000;
+const MAX_OPEN_FILE_SNAPSHOTS = 4;
+const MAX_OPEN_FILES_METADATA = 12;
 const MAX_RECENT_ISSUES = 5;
 const AUTONOMOUS_LOOP_LIMIT = 8;
 const AUTONOMOUS_CONTINUE_DELAY_MS = 120;
 const MAX_IMAGE_ATTACHMENTS = 4;
 const MAX_IMAGE_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 const MAX_IMAGE_ATTACHMENT_TOTAL_BYTES = 8 * 1024 * 1024;
+const AI_ACCESS_STALE_MS = 60000;
+const USAGE_REFRESH_DELAY_MS = 300;
+const LOCAL_FALLBACK_NOTE = "AIが利用できない間も、編集・ビルド・保存などローカル機能は利用できます。";
 export const initAiChatUi = (context, deps) => {
     const { aiChatLog, aiChat, aiProposals, aiAttachments, aiAttach, aiAttachInput, aiInput, aiSend, aiStatus, aiChatNew, aiTopbarTitle, aiHistoryToggle, aiHistory, aiHistoryList, aiContextBar, aiStop, } = context.dom;
     const chats = [];
@@ -23,8 +28,176 @@ export const initAiChatUi = (context, deps) => {
     const continueAfterApply = new Set();
     const streamingMessages = new Map();
     const thinkingMessages = new Map();
+    const pendingAgentRequests = new Map();
     let pendingAttachments = [];
+    let platformAuth = null;
+    let platformAiAccess = null;
+    let platformUsage = null;
+    let platformError = null;
+    let usageRefreshTimer = null;
+    let requestedInitialUsage = false;
     const makeChatId = () => `chat-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`;
+    const numberFormat = new Intl.NumberFormat("en-US");
+    const PLAN_LABELS = {
+        free: "Free",
+        basic: "Basic",
+        pro: "Pro",
+    };
+    const requestPlatformState = () => {
+        deps.postToNative({ type: "platform:state:get" }, true);
+    };
+    const requestAiAccessCheck = (force = false) => {
+        deps.postToNative({ type: "feature:check", names: ["ai"], force }, true);
+    };
+    const requestPlatformUsage = (force = false) => {
+        deps.postToNative({ type: "platform:usage:get", force }, true);
+    };
+    const openPricingPage = () => {
+        var _a, _b;
+        const url = (_b = (_a = platformAiAccess === null || platformAiAccess === void 0 ? void 0 : platformAiAccess.pricingUrl) !== null && _a !== void 0 ? _a : platformAuth === null || platformAuth === void 0 ? void 0 : platformAuth.pricingUrl) !== null && _b !== void 0 ? _b : TEX64_LINKS.pricing;
+        deps.postToNative({ type: "shell:openExternal", url }, true);
+    };
+    const formatTokens = (value) => Number.isFinite(value) ? numberFormat.format(Math.max(0, Math.round(value))) : "0";
+    const formatDate = (iso) => {
+        if (!iso)
+            return "";
+        const timestamp = Date.parse(iso);
+        if (!Number.isFinite(timestamp))
+            return "";
+        const date = new Date(timestamp);
+        const year = date.getFullYear();
+        const month = `${date.getMonth() + 1}`.padStart(2, "0");
+        const day = `${date.getDate()}`.padStart(2, "0");
+        return `${year}-${month}-${day}`;
+    };
+    const formatPlan = (plan) => {
+        var _a;
+        if (!plan || typeof plan !== "string") {
+            return "未設定";
+        }
+        return (_a = PLAN_LABELS[plan]) !== null && _a !== void 0 ? _a : plan;
+    };
+    const parseCounter = (value, fallback = Number.NaN) => {
+        if (typeof value === "number" && Number.isFinite(value)) {
+            return value;
+        }
+        if (typeof value === "string" && value.trim()) {
+            const parsed = Number.parseFloat(value);
+            if (Number.isFinite(parsed)) {
+                return parsed;
+            }
+        }
+        return fallback;
+    };
+    const normalizeQuotaSummary = (quota) => {
+        if (!quota || typeof quota !== "object") {
+            return null;
+        }
+        const limitTokens = Math.max(0, Math.round(parseCounter(quota.limitTokens, 0)));
+        const usedTokens = Math.max(0, Math.round(parseCounter(quota.usedTokens, 0)));
+        const maxRemainingTokens = Math.max(0, limitTokens - usedTokens);
+        const rawRemainingTokens = parseCounter(quota.remainingTokens, Number.NaN);
+        const normalizedRemainingTokens = Number.isFinite(rawRemainingTokens)
+            ? Math.max(0, Math.round(rawRemainingTokens))
+            : maxRemainingTokens;
+        return {
+            limitTokens,
+            usedTokens,
+            remainingTokens: Math.min(normalizedRemainingTokens, maxRemainingTokens),
+            usedRequests: Math.max(0, Math.round(parseCounter(quota.usedRequests, 0))),
+            remainingRequests: Math.max(0, Math.round(parseCounter(quota.remainingRequests, 0))),
+            periodStart: typeof quota.periodStart === "string" ? quota.periodStart : null,
+            periodEnd: typeof quota.periodEnd === "string" ? quota.periodEnd : null,
+        };
+    };
+    const normalizeUsageSnapshot = (usage) => {
+        if (!usage || typeof usage !== "object") {
+            return null;
+        }
+        return {
+            ...usage,
+            summary: normalizeQuotaSummary(usage.summary),
+            fetchedAt: typeof usage.fetchedAt === "number" && Number.isFinite(usage.fetchedAt)
+                ? usage.fetchedAt
+                : Date.now(),
+        };
+    };
+    const scheduleUsageRefresh = (force = true) => {
+        if (usageRefreshTimer !== null) {
+            window.clearTimeout(usageRefreshTimer);
+            usageRefreshTimer = null;
+        }
+        usageRefreshTimer = window.setTimeout(() => {
+            usageRefreshTimer = null;
+            requestPlatformUsage(force);
+        }, USAGE_REFRESH_DELAY_MS);
+    };
+    const isAccessFresh = () => {
+        const fetchedAt = platformAiAccess === null || platformAiAccess === void 0 ? void 0 : platformAiAccess.fetchedAt;
+        if (!Number.isFinite(fetchedAt)) {
+            return false;
+        }
+        return Date.now() - fetchedAt <= AI_ACCESS_STALE_MS;
+    };
+    const isAiBlocked = () => Boolean(platformAiAccess && platformAiAccess.allowed === false && isAccessFresh());
+    const needsLogin = () => Boolean((platformAiAccess &&
+        platformAiAccess.allowed === false &&
+        (!platformAiAccess.authenticated ||
+            platformAiAccess.reason === "AUTH_REQUIRED" ||
+            platformAiAccess.reason === "TOKEN_EXPIRED") &&
+        isAccessFresh()));
+    const withUtilityActions = (actions) => {
+        return Array.isArray(actions) ? [...actions] : [];
+    };
+    const mergeDetailWithUpdate = (detail) => {
+        return detail !== null && detail !== void 0 ? detail : "";
+    };
+    const withLocalFallbackDetail = (detail) => {
+        if (!detail) {
+            return LOCAL_FALLBACK_NOTE;
+        }
+        if (detail.includes(LOCAL_FALLBACK_NOTE)) {
+            return detail;
+        }
+        return `${detail} · ${LOCAL_FALLBACK_NOTE}`;
+    };
+    const renderStatus = (headline, detail, actions) => {
+        if (!(aiStatus instanceof HTMLElement)) {
+            return;
+        }
+        aiStatus.replaceChildren();
+        aiStatus.classList.remove("ai-status--error");
+        aiStatus.classList.remove("ai-status--warn");
+        aiStatus.classList.remove("ai-status--ok");
+        if (!headline && !detail) {
+            aiStatus.style.display = "none";
+            return;
+        }
+        aiStatus.style.display = "block";
+        const head = document.createElement("div");
+        head.className = "ai-status-line";
+        head.textContent = headline;
+        aiStatus.appendChild(head);
+        if (detail) {
+            const body = document.createElement("div");
+            body.className = "ai-status-detail";
+            body.textContent = detail;
+            aiStatus.appendChild(body);
+        }
+        if (Array.isArray(actions) && actions.length > 0) {
+            const actionWrap = document.createElement("div");
+            actionWrap.className = "ai-status-actions";
+            actions.forEach((item) => {
+                const button = document.createElement("button");
+                button.type = "button";
+                button.className = "ai-status-action";
+                button.dataset.aiStatusAction = item.action;
+                button.textContent = item.label;
+                actionWrap.appendChild(button);
+            });
+            aiStatus.appendChild(actionWrap);
+        }
+    };
     // ── Helpers ───────────────────────────────────────────
     const getChat = (chatId) => getChatState(chatIndex, activeChatId, chatId);
     const resolveChatTitle = (chatId) => {
@@ -322,9 +495,65 @@ export const initAiChatUi = (context, deps) => {
         }
     };
     const updateStatusDisplay = () => {
-        if (!(aiStatus instanceof HTMLElement))
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
+        const active = getChat(activeChatId);
+        const isRunning = Boolean(active && runningConversations.has(active.id));
+        if (isRunning) {
+            renderStatus("AI実行中...", mergeDetailWithUpdate("処理が終わるまでお待ちください。"), withUtilityActions());
             return;
-        aiStatus.textContent = "";
+        }
+        const actions = [];
+        if (platformAuth === null || platformAuth === void 0 ? void 0 : platformAuth.authenticated) {
+            actions.push({ action: "refresh", label: "使用量を更新" });
+            actions.push({ action: "signout", label: "ログアウト" });
+        }
+        if (isAiBlocked()) {
+            const reason = (_a = platformAiAccess === null || platformAiAccess === void 0 ? void 0 : platformAiAccess.reason) !== null && _a !== void 0 ? _a : "";
+            if (needsLogin()) {
+                renderStatus("AI機能を使うにはログインが必要です。", mergeDetailWithUpdate(withLocalFallbackDetail("Google OAuthで認証してください。")), withUtilityActions([{ action: "login", label: "Googleでログイン" }]));
+                return;
+            }
+            if (reason === "QUOTA_EXCEEDED") {
+                const quota = (_b = platformAiAccess === null || platformAiAccess === void 0 ? void 0 : platformAiAccess.quota) !== null && _b !== void 0 ? _b : null;
+                const periodEnd = formatDate((_c = platformAiAccess === null || platformAiAccess === void 0 ? void 0 : platformAiAccess.periodEnd) !== null && _c !== void 0 ? _c : quota === null || quota === void 0 ? void 0 : quota.periodEnd);
+                const detail = quota
+                    ? `使用済み ${formatTokens(quota.usedTokens)} / ${formatTokens(quota.limitTokens)} tokens${periodEnd ? ` · 期間終了 ${periodEnd}` : ""}`
+                    : "今月のトークン上限に達しました。";
+                renderStatus("今月のAIトークン上限に達しました。", mergeDetailWithUpdate(withLocalFallbackDetail(detail)), withUtilityActions([
+                    { action: "pricing", label: "プランを見る" },
+                    { action: "refresh", label: "再確認" },
+                ]));
+                return;
+            }
+            renderStatus("現在の契約状態ではAI機能を利用できません。", mergeDetailWithUpdate(withLocalFallbackDetail((_d = platformAiAccess === null || platformAiAccess === void 0 ? void 0 : platformAiAccess.message) !== null && _d !== void 0 ? _d : "契約状態を確認してください。")), withUtilityActions([
+                { action: "pricing", label: "プランを見る" },
+                { action: "refresh", label: "再確認" },
+            ]));
+            return;
+        }
+        if (platformError === null || platformError === void 0 ? void 0 : platformError.message) {
+            const isOffline = typeof navigator !== "undefined" && navigator.onLine === false;
+            renderStatus(isOffline ? "オフラインです。ネットワーク接続を確認してください。" : platformError.message, mergeDetailWithUpdate(withLocalFallbackDetail(isOffline ? platformError.message : "")), withUtilityActions([{ action: "refresh", label: "再試行" }]));
+            return;
+        }
+        const usageSummary = normalizeQuotaSummary((_f = (_e = platformUsage === null || platformUsage === void 0 ? void 0 : platformUsage.summary) !== null && _e !== void 0 ? _e : platformAiAccess === null || platformAiAccess === void 0 ? void 0 : platformAiAccess.quota) !== null && _f !== void 0 ? _f : null);
+        if (usageSummary) {
+            const plan = formatPlan((_h = (_g = platformUsage === null || platformUsage === void 0 ? void 0 : platformUsage.plan) !== null && _g !== void 0 ? _g : platformAiAccess === null || platformAiAccess === void 0 ? void 0 : platformAiAccess.plan) !== null && _h !== void 0 ? _h : platformAuth === null || platformAuth === void 0 ? void 0 : platformAuth.plan);
+            const periodEnd = formatDate((_k = (_j = usageSummary.periodEnd) !== null && _j !== void 0 ? _j : platformAiAccess === null || platformAiAccess === void 0 ? void 0 : platformAiAccess.periodEnd) !== null && _k !== void 0 ? _k : null);
+            const headline = `Plan ${plan} · ${formatTokens(usageSummary.usedTokens)} / ${formatTokens(usageSummary.limitTokens)} tokens`;
+            const detail = `残り ${formatTokens(usageSummary.remainingTokens)} tokens${periodEnd ? ` · 期間終了 ${periodEnd}` : ""}`;
+            renderStatus(headline, mergeDetailWithUpdate(detail), withUtilityActions(actions));
+            return;
+        }
+        if (platformAuth === null || platformAuth === void 0 ? void 0 : platformAuth.pending) {
+            renderStatus("Googleログイン待ちです。", mergeDetailWithUpdate("ブラウザ認証後にこのアプリへ戻ってください。"), withUtilityActions());
+            return;
+        }
+        if (platformAuth && !platformAuth.authenticated) {
+            renderStatus("AI機能はログイン後に利用できます。", mergeDetailWithUpdate(withLocalFallbackDetail()), withUtilityActions([{ action: "login", label: "Googleでログイン" }]));
+            return;
+        }
+        renderStatus("", mergeDetailWithUpdate(""), withUtilityActions());
     };
     // ── Context Builders ──────────────────────────────────
     const resolveMaxChars = (value, fallback) => {
@@ -379,7 +608,13 @@ export const initAiChatUi = (context, deps) => {
         var _a;
         const maxChars = resolveMaxChars(agentSettings === null || agentSettings === void 0 ? void 0 : agentSettings.openFileMaxChars, MAX_OPEN_FILE_CONTEXT_CHARS);
         const s = (_a = deps.getOpenFileSnapshots) === null || _a === void 0 ? void 0 : _a.call(deps, { maxFiles: MAX_OPEN_FILE_SNAPSHOTS, maxChars });
-        return s ? { openFiles: s.files, openFileSnapshots: s.snapshots } : {};
+        if (!s) {
+            return {};
+        }
+        const files = s.files.length > MAX_OPEN_FILES_METADATA
+            ? s.files.slice(0, MAX_OPEN_FILES_METADATA)
+            : s.files;
+        return { openFiles: files, openFileSnapshots: s.snapshots };
     };
     const buildIssuesContext = () => {
         var _a;
@@ -585,8 +820,38 @@ export const initAiChatUi = (context, deps) => {
         }
         scrollToBottom();
     };
+    const restoreDraftFromPending = (chatId, request) => {
+        var _a;
+        if (!request || chatId !== activeChatId) {
+            return;
+        }
+        if (!(aiInput instanceof HTMLTextAreaElement)) {
+            return;
+        }
+        if (((_a = aiInput.value) !== null && _a !== void 0 ? _a : "").trim().length > 0) {
+            return;
+        }
+        const restored = typeof request.message === "string" ? request.message : "";
+        if (!restored.trim()) {
+            return;
+        }
+        aiInput.value = restored;
+        autoGrow();
+        aiInput.focus();
+        appendMessage({
+            role: "system",
+            text: "送信できなかった入力を復元しました。内容を確認して再送信してください。",
+        }, chatId);
+    };
     // ── Agent Communication ───────────────────────────────
     const requestAgentRun = (chatId, message, parts, contextPayload) => {
+        var _a;
+        if (isAiBlocked() || needsLogin()) {
+            requestAiAccessCheck(true);
+            requestPlatformUsage(true);
+            updateStatusDisplay();
+            return false;
+        }
         const hasText = typeof message === "string" && message.trim().length > 0;
         const hasParts = Array.isArray(parts) && parts.length > 0;
         if (!hasText && !hasParts)
@@ -596,22 +861,41 @@ export const initAiChatUi = (context, deps) => {
             return false;
         if (runningConversations.has(chat.id))
             return false;
+        const contextToSend = contextPayload !== null && contextPayload !== void 0 ? contextPayload : buildContextPayload();
+        pendingAgentRequests.set(chat.id, {
+            message,
+            parts: Array.isArray(parts) ? parts : undefined,
+            contextPayload: contextToSend,
+        });
         chat.statusMessage = "思考中...";
         runningConversations.add(chat.id);
         upsertThinkingMessage(chat.id, chat.statusMessage);
         renderHistoryList();
         updateSendState();
         updateStatusDisplay();
-        deps.postToNative({
+        const posted = deps.postToNative({
             type: "agent:run", message, parts, conversationId: chat.id,
-            context: contextPayload !== null && contextPayload !== void 0 ? contextPayload : buildContextPayload(),
+            context: contextToSend,
         });
+        if (!posted) {
+            runningConversations.delete(chat.id);
+            chat.statusMessage = "";
+            clearThinkingMessage(chat.id);
+            const pending = (_a = pendingAgentRequests.get(chat.id)) !== null && _a !== void 0 ? _a : null;
+            pendingAgentRequests.delete(chat.id);
+            restoreDraftFromPending(chat.id, pending);
+            renderHistoryList();
+            updateSendState();
+            updateStatusDisplay();
+            return false;
+        }
         return true;
     };
     const buildAutonomousContinueMessage = () => [
-        "執筆を自律的に継続してください。",
-        "前進に必要なまとまった変更を自分で判断し、必要なら検証も実行してください。",
-        "変更提案は必要に応じて複数箇所をまとめて提示してください。",
+        "直前のユーザー指示と会話の目的を最優先して、自律的に継続してください。",
+        "まず run_build で検証してください。",
+        "ビルドが失敗した場合: 失敗理由を特定し、必要最小限の修正提案だけを出してください（軽微な気になる点は無理に直さない）。",
+        "ビルドが成功した場合: 次に進むための提案を1つだけ出してください（闇雲な大規模変更はしない）。",
     ].join("\n");
     const maybeContinueAutonomous = (chatId, forceOnce = false) => {
         if (!forceOnce)
@@ -633,6 +917,12 @@ export const initAiChatUi = (context, deps) => {
         const hasAttachments = pendingAttachments.length > 0;
         if (!text && !hasAttachments)
             return;
+        if (isAiBlocked() || needsLogin()) {
+            requestAiAccessCheck(true);
+            requestPlatformUsage(true);
+            updateStatusDisplay();
+            return;
+        }
         if (!activeChatId) {
             const c = createChat();
             activeChatId = c.id;
@@ -700,6 +990,33 @@ export const initAiChatUi = (context, deps) => {
             void addImageFiles(aiAttachInput.files);
         });
     }
+    if (aiStatus instanceof HTMLElement) {
+        aiStatus.addEventListener("click", (event) => {
+            const target = event.target;
+            const button = target === null || target === void 0 ? void 0 : target.closest("[data-ai-status-action]");
+            if (!button) {
+                return;
+            }
+            const action = button.dataset.aiStatusAction;
+            if (action === "login") {
+                deps.postToNative({ type: "auth:google:start" });
+                return;
+            }
+            if (action === "pricing") {
+                openPricingPage();
+                return;
+            }
+            if (action === "refresh") {
+                requestAiAccessCheck(true);
+                requestPlatformUsage(true);
+                return;
+            }
+            if (action === "signout") {
+                deps.postToNative({ type: "auth:signout" });
+                return;
+            }
+        });
+    }
     const attachDropHost = aiAttach instanceof HTMLElement ? aiAttach.closest(".ai-chat-input") : null;
     if (attachDropHost instanceof HTMLElement) {
         attachDropHost.addEventListener("dragover", (event) => {
@@ -731,6 +1048,7 @@ export const initAiChatUi = (context, deps) => {
                 return;
             disableAutonomous(chat.id);
             deps.postToNative({ type: "agent:abort", conversationId: chat.id }, true);
+            pendingAgentRequests.delete(chat.id);
             chat.statusMessage = "";
             runningConversations.delete(chat.id);
             clearThinkingMessage(chat.id);
@@ -764,6 +1082,7 @@ export const initAiChatUi = (context, deps) => {
             runningConversations.delete(chat.id);
             chat.statusMessage = "";
             clearThinkingMessage(chat.id);
+            scheduleUsageRefresh(true);
         }
         renderHistoryList();
         updateSendState();
@@ -772,6 +1091,9 @@ export const initAiChatUi = (context, deps) => {
     };
     const handleMessage = (text, conversationId) => {
         clearThinkingMessage(conversationId);
+        if (conversationId) {
+            pendingAgentRequests.delete(conversationId);
+        }
         if (conversationId && finalizeStreamingMessage(conversationId, text))
             scrollToBottom();
         else
@@ -785,6 +1107,7 @@ export const initAiChatUi = (context, deps) => {
         if (chat)
             chat.statusMessage = "";
         updateStatusDisplay();
+        scheduleUsageRefresh(true);
     };
     const handleMessageDelta = (text, conversationId) => {
         const chatId = conversationId !== null && conversationId !== void 0 ? conversationId : activeChatId;
@@ -861,6 +1184,7 @@ export const initAiChatUi = (context, deps) => {
         updateContextBar();
     };
     const handleError = (message, conversationId) => {
+        var _a;
         appendMessage({ role: "system", text: message }, conversationId);
         const chat = ensureChat(conversationId);
         if (chat) {
@@ -871,19 +1195,93 @@ export const initAiChatUi = (context, deps) => {
         if (conversationId)
             streamingMessages.delete(conversationId);
         if (conversationId) {
+            const pending = (_a = pendingAgentRequests.get(conversationId)) !== null && _a !== void 0 ? _a : null;
+            pendingAgentRequests.delete(conversationId);
+            restoreDraftFromPending(conversationId, pending);
+        }
+        if (conversationId) {
             runningConversations.delete(conversationId);
             renderHistoryList();
             updateSendState();
         }
         updateStatusDisplay();
+        scheduleUsageRefresh(true);
     };
+    const handlePlatformAuth = (payload) => {
+        var _a, _b, _c;
+        platformAuth = (_a = payload === null || payload === void 0 ? void 0 : payload.auth) !== null && _a !== void 0 ? _a : null;
+        platformError = (_b = payload === null || payload === void 0 ? void 0 : payload.error) !== null && _b !== void 0 ? _b : null;
+        if (!(platformAuth === null || platformAuth === void 0 ? void 0 : platformAuth.authenticated)) {
+            platformAiAccess = null;
+            platformUsage = null;
+            requestedInitialUsage = false;
+        }
+        else if (!platformAuth.pending && !requestedInitialUsage && !((_c = payload === null || payload === void 0 ? void 0 : payload.error) === null || _c === void 0 ? void 0 : _c.message)) {
+            requestedInitialUsage = true;
+            requestAiAccessCheck(false);
+            requestPlatformUsage(false);
+        }
+        updateStatusDisplay();
+    };
+    const handlePlatformAiAccess = (payload) => {
+        var _a, _b, _c, _d, _e, _f;
+        const access = (_a = payload === null || payload === void 0 ? void 0 : payload.access) !== null && _a !== void 0 ? _a : null;
+        if (!access) {
+            return;
+        }
+        platformAiAccess = access;
+        if (access.allowed) {
+            platformError = null;
+        }
+        if (access.quota &&
+            (!(platformUsage === null || platformUsage === void 0 ? void 0 : platformUsage.summary) ||
+                (payload === null || payload === void 0 ? void 0 : payload.source) === "auth" ||
+                (payload === null || payload === void 0 ? void 0 : payload.source) === "manual" ||
+                (payload === null || payload === void 0 ? void 0 : payload.source) === "chat")) {
+            const usageFromAccess = normalizeUsageSnapshot({
+                authenticated: Boolean(access.authenticated),
+                plan: (_b = access.plan) !== null && _b !== void 0 ? _b : null,
+                period: null,
+                summary: access.quota,
+                byFeature: (_c = platformUsage === null || platformUsage === void 0 ? void 0 : platformUsage.byFeature) !== null && _c !== void 0 ? _c : null,
+                errorCode: access.allowed ? null : (_d = access.reason) !== null && _d !== void 0 ? _d : null,
+                message: (_e = access.message) !== null && _e !== void 0 ? _e : null,
+                fetchedAt: (_f = access.fetchedAt) !== null && _f !== void 0 ? _f : Date.now(),
+            });
+            if (usageFromAccess) {
+                const currentFetchedAt = typeof (platformUsage === null || platformUsage === void 0 ? void 0 : platformUsage.fetchedAt) === "number" && Number.isFinite(platformUsage.fetchedAt)
+                    ? platformUsage.fetchedAt
+                    : 0;
+                const nextFetchedAt = typeof usageFromAccess.fetchedAt === "number" &&
+                    Number.isFinite(usageFromAccess.fetchedAt)
+                    ? usageFromAccess.fetchedAt
+                    : Date.now();
+                if (!platformUsage || nextFetchedAt >= currentFetchedAt) {
+                    platformUsage = usageFromAccess;
+                }
+            }
+        }
+        updateStatusDisplay();
+    };
+    const handlePlatformUsage = (payload) => {
+        var _a;
+        platformUsage = normalizeUsageSnapshot((_a = payload === null || payload === void 0 ? void 0 : payload.usage) !== null && _a !== void 0 ? _a : null);
+        if (!(platformUsage === null || platformUsage === void 0 ? void 0 : platformUsage.errorCode)) {
+            platformError = null;
+        }
+        updateStatusDisplay();
+    };
+    const handlePlatformUpdate = (_payload) => { };
     // ── Init ──────────────────────────────────────────────
     resetToNewChatState();
     updateContextBar();
     renderAttachmentBar();
+    requestPlatformState();
     return {
         handleSettings, handleStatus, handleMessage, handleMessageDelta, handleTool,
         handleProposal, handleApplyResult, handleUndoResult, handleError,
+        handlePlatformAuth, handlePlatformAiAccess, handlePlatformUsage,
+        handlePlatformUpdate,
         applyPendingFromDiffModal: () => { if (pendingAiProposalId) {
             deps.postToNative({ type: "agent:apply", proposalId: pendingAiProposalId });
             pendingAiProposalId = null;

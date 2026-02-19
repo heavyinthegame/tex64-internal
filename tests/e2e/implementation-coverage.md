@@ -88,3 +88,87 @@
 | 10.3 Search | `.tex`全文検索（大小無視）、最大200件、ファイル単位グループ、クリックでsecondaryジャンプ | `tests/e2e/search.e2e.mjs` Step 1-8 | ✅ |
 | 10.4 Search 内シンボルリネーム | from/to検証、同一禁止、禁止文字検証、対象必須、`label/ref` + `cite(.bib)`、`search:renameResult`反映 | `tests/e2e/search.e2e.mjs` Step 9-12 | ✅ |
 | 10.5 Issues | build/format/save/runtime + duplicate label の表示、severity/location/message/hint、`open-runtime`遷移、build失敗後のIssues自動フォーカス | `tests/e2e/issues.e2e.mjs` Error loop + Warning loop + sources/runtime/duplicate-label steps | ✅ |
+
+## 11. Blocks（数式編集）
+
+| implementation.md | 要件 | E2E | 状態 |
+| --- | --- | --- | --- |
+| 11.1 モード | `insert/edit` 切替、`.tex`のみ対象、Escapeで edit 離脱 | `tests/e2e/math-wysiwyg-boundary.e2e.mjs` [1/7], [4/7] | ✅ |
+| 11.2 自動検出 | `$...$`/環境検出、comment/verbatim除外、env registry+ヒューリスティック判定、検出ハイライト | `tests/e2e/math-wysiwyg-boundary.e2e.mjs` [2/7], [3/7] | ✅ |
+| 11.3 入力 UI | MathLive `<math-field>`、fallback textarea、captureボタン導線 | `tests/e2e/math-wysiwyg-basic.e2e.mjs`, `tests/e2e/math-wysiwyg-fallback.e2e.mjs`, `tests/e2e/math-wysiwyg-boundary.e2e.mjs` [5/7] | ✅ |
+| 11.4 挿入フォーマット | `inline/display/align/gather/none` と wrap保持 | `tests/e2e/math-wysiwyg-insert-formats.e2e.mjs` [1/10]-[10/10] | ✅ |
+| 11.5 適用フロー | Diff Modal確認→Submit適用、整形要求、`.tex64/blocks.json`追記 | `tests/e2e/math-wysiwyg-boundary.e2e.mjs` [6/7] | ✅ |
+| 11.6 WYSIWYG 候補 | 自動/手動候補、キーボード操作、MRU/packs、trigger網羅 | `tests/e2e/math-wysiwyg-basic.e2e.mjs`, `tests/e2e/math-wysiwyg-interactions.e2e.mjs`, `tests/e2e/math-wysiwyg-advanced.e2e.mjs`, `tests/e2e/math-wysiwyg-specialized.e2e.mjs`, `tests/e2e/math-wysiwyg-discoverability.e2e.mjs`, `tests/e2e/math-wysiwyg-catalog.e2e.mjs` | ✅ |
+| 11.7 数式キーボード | `MATH_KEYBOARD_VISIBLE=false` による常時非表示 | `tests/e2e/math-wysiwyg-boundary.e2e.mjs` [7/7] | ✅ |
+
+## 12. 画面キャプチャ / OCR
+
+| implementation.md | 要件 | E2E | 状態 |
+| --- | --- | --- | --- |
+| 12 画面ソース選択 | 画面ソース一覧の表示、検索、選択、キャンセル | `tests/e2e/math-capture.e2e.mjs` [1/9] | ✅ |
+| 12 クロップ範囲指定 | 新規作成、移動、リサイズ、Escapeで選択解除 | `tests/e2e/math-capture.e2e.mjs` [2/9] | ✅ |
+| 12 OCR 実行 | ONNX入力テンソル正規化、全体/部分クロップ、前処理バリエーション候補付与 | `tests/e2e/math-capture.e2e.mjs` [3/9], [4/9] | ✅ |
+| 12 OCR 例外/再評価 | OCR失敗時Issues、multi-pass候補比較で最良結果採用 | `tests/e2e/math-capture.e2e.mjs` [7/9], [8/9] | ✅ |
+| 12 Blocks 連携 | OCR結果をBlocks入力へ注入し、編集してDiff経由で挿入適用 | `tests/e2e/math-capture.e2e.mjs` [9/9] | ✅ |
+
+## 13. AI アシスタント
+
+| implementation.md | 要件 | E2E | 状態 |
+| --- | --- | --- | --- |
+| 13.1 チャット基本 | 複数会話、履歴切替、ストリーミング応答、停止、会話クリア | `tests/e2e/ai.e2e.mjs` [12/18], [17/18], [18/18], `tests/e2e/ai.input-send.e2e.mjs` step1-3 | ✅ |
+| 13.2 コンテキスト注入 | active file / selection / open files / recent issues(最大5) の付与 | `tests/e2e/ai.e2e.mjs` [15/18]（context payload検証）, `tests/e2e/ai.functions.e2e.mjs`（index/issues参照ツール経由） | ✅ |
+| 13.3 画像添付 | 画像のみ、最大4件、1件5MB、合計8MB、超過/非画像/読込失敗理由をUI通知 | `tests/e2e/ai.attachments.e2e.mjs`, `tests/e2e/ai.e2e.mjs` [13/18], `tests/e2e/ai.input-send.e2e.mjs` step4 | ✅ |
+| 13.4 ツール実行と提案 | `list/read/search/index/run_build/run_command/get/set/propose*` の実行と提案作成 | `tests/e2e/ai.functions.e2e.mjs`（宣言済み全ツール成功/失敗経路）, `tests/e2e/ai.e2e.mjs` [1/18]-[11/18]（提案UI） | ✅ |
+| 13.5 提案適用 | proposal card差分確認、Diff Modal適用、`適用して次へ`、apply失敗/競合、undo | `tests/e2e/ai.e2e.mjs` [1/18]-[11/18], `tests/e2e/ai.functions.e2e.mjs`（apply conflict/undo） | ✅ |
+| 13.6 AI 実行制約 | policy制約（サイズ/件数/拡張子/許可禁止パス）、`run_command`制約（許可コマンド/演算子禁止/検証） | `tests/e2e/ai.functions.e2e.mjs`（`withPolicy` + `run_command` error path） | ✅ |
+| 13.7 使用量記録 | input/output/total tokens、requests、概算コスト、リセット | `tests/e2e/ai.e2e.mjs` [16/18]（`tex64-api-usage.json` 記録確認 + reset後ゼロ化） | ✅ |
+
+## 14. 設定
+
+| implementation.md | 要件 | E2E | 状態 |
+| --- | --- | --- | --- |
+| 14.1 Editor | compile engine、build後auto-forward SyncTeX、reverse SyncTeX ON/OFF、PDF表示モード、Ghost ON/OFF・debounce・max chars、align env ON/OFF | `tests/e2e/build.e2e.mjs` [1/6], `tests/e2e/synctex-controls.e2e.mjs` [8/10]-[9/10], `tests/e2e/viewer-ops.e2e.mjs` [3/5], `tests/e2e/settings-runtime-env.e2e.mjs` [2/4] | ✅ |
+| 14.2 Format | indent style、begin/end改行、`document` no-indent、math/table align、blank lines方針、custom verbatim追加/削除 | `tests/e2e/formatter.e2e.mjs` [1/4]-[3/4] | ✅ |
+| 14.3 Build Profiles | プロファイル追加/削除/選択、`name/outDir/extraArgs`編集、clean/clean-all実行 | `tests/e2e/build.e2e.mjs` [2/6]-[4/6], `tests/e2e/clean.e2e.mjs` [1/5]-[5/5] | ✅ |
+| 14.4 Runtime | `lualatex/pdflatex/xelatex/uplatex/latexmk/latexindent/synctex`チェック、再チェック、未導入時インストール導線 | `tests/e2e/settings-runtime-env.e2e.mjs` [1/4] | ✅ |
+| 14.5 Env Registry | 既定+custom管理、math/table種別、有効/無効切替、discouraged/package表示、Blocks検出・整形設定反映 | `tests/e2e/settings-runtime-env.e2e.mjs` [3/4]-[4/4], `tests/e2e/math-wysiwyg-boundary.e2e.mjs` [3/7] | ✅ |
+
+## 15. 永続化（どこに何を保存するか）
+
+| implementation.md | 要件 | E2E | 状態 |
+| --- | --- | --- | --- |
+| 15.1 ワークスペース内 | `.tex64/settings.json`（`rootFile/buildProfiles/buildProfileId`） | `tests/e2e/workspace-model-root.e2e.mjs` Step 2, `tests/e2e/build.e2e.mjs` Step 2-3 | ✅ |
+| 15.1 ワークスペース内 | `.tex64/.trash/*`（削除ファイル退避） | `tests/e2e/file-tree-ops.e2e.mjs` Step 8 | ✅ |
+| 15.1 ワークスペース内 | `.tex64/blocks.json`（Blocks適用履歴） | `tests/e2e/math-wysiwyg-boundary.e2e.mjs` [6/7] | ✅ |
+| 15.1 ワークスペース内 | `.tex64/.format/*`（formatter作業用） | `tests/e2e/persistence-surfaces.e2e.mjs` [6/6] | ✅ |
+| 15.2 userData | `tex64-user-settings.json`（AI設定/ recent projects） | `tests/e2e/launcher-workspace.e2e.mjs` Step 4-7, `tests/e2e/persistence-surfaces.e2e.mjs` [1/6] | ✅ |
+| 15.2 userData | `tex64-api-usage.json`（API usage集計） | `tests/e2e/ai.e2e.mjs` [16/18], `tests/e2e/input-assist.e2e.mjs` `assertApiUsageSnapshot` | ✅ |
+| 15.3 localStorage | `compileEngine/autoSynctex/reverseSynctex/pdfViewerMode/ghost*` | `tests/e2e/persistence-surfaces.e2e.mjs` [2/6], `tests/e2e/settings-runtime-env.e2e.mjs` [2/4] | ✅ |
+| 15.3 localStorage | `editorSplitRatio` | `tests/e2e/editor-tabs-layout.e2e.mjs` Step 4-5 | ✅ |
+| 15.3 localStorage | `sidebar.primaryTabs` | `tests/e2e/editor-tabs-layout.e2e.mjs` Step 2,5 | ✅ |
+| 15.3 localStorage | `activeTab` | `tests/e2e/persistence-surfaces.e2e.mjs` [3/6] | ✅ |
+| 15.3 localStorage | `tree.<workspace>` | `tests/e2e/file-tree-ops.e2e.mjs` Step 2 | ✅ |
+| 15.3 localStorage | `outline.mode` | `tests/e2e/persistence-surfaces.e2e.mjs` [3/6] | ✅ |
+| 15.3 localStorage | `math-insert-* / math-wysiwyg.autoSuggest / packs / mru*` | `tests/e2e/persistence-surfaces.e2e.mjs` [4/6] | ✅ |
+| 15.3 localStorage | `pdf.invert / pdf.sidebarTab` | `tests/e2e/persistence-surfaces.e2e.mjs` [5/6], `tests/e2e/viewer-ops.e2e.mjs` Step 4 | ✅ |
+
+## 16. 外部リンク・ショートカット
+
+| implementation.md | 要件 | E2E | 状態 |
+| --- | --- | --- | --- |
+| 16.1 `tex64://` アクション | `tex64://open-source?path=...&line=...&column=...` でエディタの該当位置を開く | `tests/e2e/external-links-shortcuts.e2e.mjs` [2/4] | ✅ |
+| 16.1 `tex64://` アクション | `tex64://view-on-pdf?path=...&line=...&column=...` で forward SyncTeX を実行 | `tests/e2e/external-links-shortcuts.e2e.mjs` [3/4], `tests/e2e/synctex-controls.e2e.mjs` Step 6-7 | ✅ |
+| 16.2 グローバル操作 | `Cmd/Ctrl+B` で build 実行 | `tests/e2e/external-links-shortcuts.e2e.mjs` [4/4] | ✅ |
+
+## 17. 主要制限値（実装値）
+
+| implementation.md | 要件 | E2E | 状態 |
+| --- | --- | --- | --- |
+| 17 制限値 | ワークスペース列挙 5000 | `tests/e2e/limits-constraints.e2e.mjs` [1/2] | ✅ |
+| 17 制限値 | Search結果 200 | `tests/e2e/search.e2e.mjs` [8/12] | ✅ |
+| 17 制限値 | Index/Issues の上位表示制御 | `tests/e2e/issues.e2e.mjs`（sources/runtime/duplicate-label 含む集約表示）, `tests/e2e/build.e2e.mjs` [5/6]（build解析結果表示） | ✅ |
+| 17 制限値 | ファイルプレビュー画像 2MB | `tests/e2e/limits-constraints.e2e.mjs` [2/2], `tests/e2e/input-assist.e2e.mjs` `runHoverChecks` H-07 | ✅ |
+| 17 制限値 | ファイル抜粋（radius/maxLines 上限運用、本文12KB切り詰め） | `tests/e2e/limits-constraints.e2e.mjs` [2/2], `tests/e2e/input-assist.e2e.mjs` `runHoverChecks` H-06 | ✅ |
+| 17 制限値 | Ghost API（minPrefix 10 / cooldown 3s / 最大12 req/min） | `tests/e2e/input-assist.e2e.mjs` `runGhostApiLimitChecks`（`E2E_ONLY_GHOST=1` 実行） | ✅ |
+| 17 制限値 | AI画像添付（最大4件 / 1件5MB / 合計8MB） | `tests/e2e/ai.attachments.e2e.mjs` | ✅ |
+| 17 制限値 | 最近プロジェクト 10件 | `tests/e2e/launcher-workspace.e2e.mjs` [4/7], [7/7] | ✅ |

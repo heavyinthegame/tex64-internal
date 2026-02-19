@@ -157,6 +157,30 @@ const isSuggestionPanelVisible = async (page) =>
     );
   });
 
+const getSuggestionHints = async (page) =>
+  page.evaluate(() => {
+    const panel = document.querySelector(".math-wysiwyg-panel");
+    if (!(panel instanceof HTMLElement) || panel.getAttribute("aria-hidden") !== "false") {
+      return [];
+    }
+    return Array.from(panel.querySelectorAll(".math-wysiwyg-item .math-wysiwyg-label"))
+      .map((node) => (node.textContent ?? "").trim())
+      .filter(Boolean);
+  });
+
+const getActiveSuggestionHint = async (page) =>
+  page.evaluate(() => {
+    const panel = document.querySelector(".math-wysiwyg-panel");
+    if (!(panel instanceof HTMLElement) || panel.getAttribute("aria-hidden") !== "false") {
+      return "";
+    }
+    const active = panel.querySelector(".math-wysiwyg-item.is-active, .math-wysiwyg-item[aria-selected=\"true\"]");
+    if (!(active instanceof HTMLElement)) {
+      return "";
+    }
+    return (active.querySelector(".math-wysiwyg-label")?.textContent ?? "").trim();
+  });
+
 const waitForSuggestionVisible = async (page, hint) => {
   const expected = String(hint ?? "").trim().toLowerCase();
   await page.waitForFunction(
@@ -270,6 +294,27 @@ const waitForLatexIncludes = async (page, expectedPart, label) => {
   assert.ok(actual.includes(expected), `${label}: latex mismatch\nexpected include ${expected}\nactual ${actual}`);
 };
 
+const waitForExactLatex = async (page, expected, label) => {
+  const normalized = normalizeLatex(expected);
+  await page.waitForFunction(
+    (needle) => {
+      const field = document.getElementById("block-math-input");
+      if (!field || typeof field.getValue !== "function") {
+        return false;
+      }
+      try {
+        return String(field.getValue("latex") ?? "").replace(/\s+/g, "") === needle;
+      } catch {
+        return false;
+      }
+    },
+    normalized,
+    { timeout: 6000 }
+  );
+  const actual = normalizeLatex(await getMathFieldLatex(page));
+  assert.equal(actual, normalized, `${label}: latex mismatch\nexpected ${normalized}\nactual ${actual}`);
+};
+
 const runCase = async (label, test) => {
   const { tempDir, workspacePath } = await createWorkspaceCopy();
   const userDataPath = path.join(tempDir, "user-data");
@@ -286,6 +331,7 @@ const runCase = async (label, test) => {
       env: {
         ...process.env,
         TEX64_E2E: "1",
+        TEX64_E2E_HEADLESS: "1",
         TEX64_E2E_USERDATA: userDataPath,
       },
     });
@@ -341,7 +387,7 @@ const runCase = async (label, test) => {
 };
 
 const run = async () => {
-  await runCase("[1/5] explicit shortcut works with autoSuggest off", async (page) => {
+  await runCase("[1/7] explicit shortcut works with autoSuggest off", async (page) => {
     await openSuggestionsSettings(page);
     await setAutoSuggest(page, false);
     await closeSettingsModal(page);
@@ -356,7 +402,7 @@ const run = async () => {
     await waitForLatexIncludes(page, "\\sin", "explicit shortcut apply");
   });
 
-  await runCase("[2/5] ArrowDown + Enter applies non-default candidate", async (page) => {
+  await runCase("[2/7] ArrowDown + Enter applies non-default candidate", async (page) => {
     await typeToken(page, "int");
     await waitForSuggestionVisible(page, "int");
     await page.keyboard.press("ArrowDown");
@@ -365,7 +411,30 @@ const run = async () => {
     await waitForLatexIncludes(page, "\\mathrm{d}", "non-default int candidate");
   });
 
-  await runCase("[3/5] Escape closes suggestion panel", async (page) => {
+  await runCase("[3/7] Tab and Shift+Tab cycle suggestion candidates", async (page) => {
+    await typeToken(page, "int");
+    await waitForSuggestionVisible(page, "int");
+    await page.keyboard.press("Tab");
+    await pause(70);
+    await page.keyboard.press("Enter");
+    await waitForLatexIncludes(page, "\\mathrm{d}", "Tab candidate navigation");
+
+    await clearMathField(page);
+    await typeToken(page, "int");
+    await waitForSuggestionVisible(page, "int");
+    const defaultHint = await getActiveSuggestionHint(page);
+    await page.keyboard.press("Shift+Tab");
+    await pause(70);
+    const shiftedHint = await getActiveSuggestionHint(page);
+    assert.notEqual(shiftedHint, defaultHint, "Shift+Tab should move to previous candidate");
+    await page.keyboard.press("Tab");
+    await pause(70);
+    assert.equal(await getActiveSuggestionHint(page), defaultHint, "Tab should return to default candidate");
+    await page.keyboard.press("Enter");
+    await waitForLatexIncludes(page, "\\int", "Shift+Tab candidate navigation");
+  });
+
+  await runCase("[4/7] Escape closes suggestion panel", async (page) => {
     await typeToken(page, "log");
     await waitForSuggestionVisible(page, "log");
     await page.keyboard.press("Escape");
@@ -373,7 +442,39 @@ const run = async () => {
     assert.equal(await isSuggestionPanelVisible(page), false, "Escape should close panel");
   });
 
-  await runCase("[4/5] Tab and Shift+Tab move placeholders", async (page) => {
+  await runCase("[5/7] backslash direct input is blocked and unknown token stays literal", async (page) => {
+    await clearMathField(page);
+    await focusMathField(page);
+
+    await page.keyboard.press("Backslash");
+    await pause(120);
+    await waitForExactLatex(page, "", "backslash should not insert raw token");
+    assert.equal(await isSuggestionPanelVisible(page), true, "backslash should open suggestion panel");
+
+    await page.keyboard.press("Escape");
+    await waitForSuggestionHidden(page);
+    await clearMathField(page);
+    await focusMathField(page);
+
+    const rawCommandToken = "qxzvjk";
+    await page.keyboard.type(rawCommandToken, { delay: typeDelayMs });
+    await page.keyboard.press(explicitSuggestShortcut);
+    await pause(160);
+    const hints = await getSuggestionHints(page);
+    assert.equal(
+      hints.includes("入力コマンド"),
+      false,
+      `raw command hint should not appear: [${hints.join(", ")}]`
+    );
+    assert.equal(
+      await isSuggestionPanelVisible(page),
+      false,
+      "unknown token should not keep suggestion panel open"
+    );
+    await waitForExactLatex(page, rawCommandToken, "unknown token should stay literal");
+  });
+
+  await runCase("[6/7] Tab and Shift+Tab move placeholders", async (page) => {
     await typeToken(page, "frac");
     await waitForSuggestionVisible(page, "frac");
     await page.keyboard.press("Enter");
@@ -387,15 +488,30 @@ const run = async () => {
     assert.equal(latex, normalizeLatex("\\frac{a}{b}"), `placeholder navigation failed: ${latex}`);
   });
 
-  await runCase("[5/5] math pack toggle affects auto-suggest", async (page) => {
+  await runCase("[7/7] math pack toggle affects auto-suggest", async (page) => {
     await openSuggestionsSettings(page);
     await setAutoSuggest(page, true);
     await setPackEnabled(page, "math", false);
     await closeSettingsModal(page);
 
     await typeToken(page, "min");
-    await pause(260);
-    assert.equal(await isSuggestionPanelVisible(page), false, "math pack off should hide 'min' suggestions");
+    await pause(180);
+    const hintsWhenPackOff = (await getSuggestionHints(page)).map((hint) => hint.toLowerCase());
+    assert.equal(
+      hintsWhenPackOff.includes("min"),
+      false,
+      "math pack off should hide 'min' trigger candidates"
+    );
+    assert.equal(
+      hintsWhenPackOff.includes("入力コマンド"),
+      false,
+      "raw command fallback should not appear when pack candidates are unavailable"
+    );
+    assert.equal(
+      await isSuggestionPanelVisible(page),
+      false,
+      "math pack off should not keep panel open for unknown token-only match"
+    );
 
     await clearMathField(page);
     await openSuggestionsSettings(page);

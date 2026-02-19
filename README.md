@@ -22,6 +22,7 @@ E2E:
 - `npm run e2e`
 - `TEX180_E2E=1` で E2E モード（contextIsolation を無効化 / `?e2e=1` を付与）。
 - `TEX180_E2E_WORKSPACE` / `TEX180_E2E_USERDATA` でワークスペース/ユーザーデータを指定。
+- `TEX64_E2E_HEADLESS=1` で Electron ウィンドウを表示せずに E2E 実行。
 
 Unit / Nightly:
 
@@ -34,9 +35,16 @@ CI:
 
 - PR / `main` push: `.github/workflows/unit.yml` で `test:unit:with-build` を実行
 - Nightly: `.github/workflows/nightly.yml` を毎日 `10:00 UTC`（`02:00 PST` / `03:00 PDT`）に実行
+- Tag push（例: `v0.1.0`）: `.github/workflows/release.yml` で配布物（`dist/`）をビルドして artifact として保存
 - Nightly は実行ログ/メタ情報を artifact (`nightly-test-log-<run_id>`) として14日保存
 - Nightly 失敗時は GitHub Issue (`Nightly Input Tests failing`) を自動作成/追記し、復旧時に自動クローズ
 - Nightly 通知のラベル/担当者は repository variables で調整可能: `NIGHTLY_ALERT_LABEL`, `NIGHTLY_ALERT_ASSIGNEE`
+
+配布（Release）:
+
+- `npm run electron:pack`（unpacked / 起動確認用）
+- `npm run electron:dist`（配布物生成）
+- 詳細: `docs/distribution.md`
 
 SyncTeX forward ベンチ:
 

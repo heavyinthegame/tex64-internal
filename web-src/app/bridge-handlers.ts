@@ -13,6 +13,11 @@ import type {
   SectionEntry,
   ApiCompletionResultPayload,
   ApiUsageSnapshot,
+  PlatformAuthSnapshot,
+  PlatformAiAccessSnapshot,
+  PlatformUsageSnapshot,
+  PlatformUpdateSnapshot,
+  PlatformUpdateStatusSnapshot,
   BuildProfile,
 } from "./types.js";
 import type { FilePreviewResultPayload } from "./file-preview.js";
@@ -138,6 +143,34 @@ type BridgeHandlersDeps = {
   api?: {
     handleCompletionResult: (payload: ApiCompletionResultPayload) => void;
     handleUsage: (payload: { snapshot?: ApiUsageSnapshot }) => void;
+  };
+  platform?: {
+    handleAuth: (payload: {
+      auth: PlatformAuthSnapshot;
+      error?: { code?: string; message?: string };
+    }) => void;
+    handleAiAccess: (payload: {
+      source?: string;
+      access: PlatformAiAccessSnapshot;
+    }) => void;
+    handleUsage: (payload: {
+      source?: string;
+      usage: PlatformUsageSnapshot;
+    }) => void;
+    handleUpdate: (payload: {
+      source?: string;
+      update: PlatformUpdateSnapshot | null;
+      error?: { code?: string; message?: string };
+    }) => void;
+    handleUpdateStatus: (payload: {
+      source?: string;
+      status: PlatformUpdateStatusSnapshot;
+    }) => void;
+    handleFeedback: (payload: {
+      ok: boolean;
+      feedbackId?: string | null;
+      error?: { code?: string; message?: string };
+    }) => void;
   };
   editorSession: {
     handleOpenFileResult: (payload: {
@@ -498,6 +531,50 @@ export const initBridgeHandlers = (deps: BridgeHandlersDeps) => {
       case "api:usage":
         deps.api?.handleUsage(
           message.payload as { snapshot?: ApiUsageSnapshot }
+        );
+        break;
+      case "platform:auth":
+        deps.platform?.handleAuth(
+          message.payload as {
+            auth: PlatformAuthSnapshot;
+            error?: { code?: string; message?: string };
+          }
+        );
+        break;
+      case "platform:aiAccess":
+        deps.platform?.handleAiAccess(
+          message.payload as { source?: string; access: PlatformAiAccessSnapshot }
+        );
+        break;
+      case "platform:usage":
+        deps.platform?.handleUsage(
+          message.payload as { source?: string; usage: PlatformUsageSnapshot }
+        );
+        break;
+      case "platform:update":
+        deps.platform?.handleUpdate(
+          message.payload as {
+            source?: string;
+            update: PlatformUpdateSnapshot | null;
+            error?: { code?: string; message?: string };
+          }
+        );
+        break;
+      case "platform:updateStatus":
+        deps.platform?.handleUpdateStatus(
+          message.payload as {
+            source?: string;
+            status: PlatformUpdateStatusSnapshot;
+          }
+        );
+        break;
+      case "platform:feedback":
+        deps.platform?.handleFeedback(
+          message.payload as {
+            ok: boolean;
+            feedbackId?: string | null;
+            error?: { code?: string; message?: string };
+          }
         );
         break;
       case "file:previewResult":

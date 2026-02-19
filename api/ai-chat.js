@@ -56,6 +56,7 @@ const handler = async (req, res) => {
   }
 
   const {
+    model: requestModel,
     contents,
     systemInstruction,
     tools,
@@ -69,9 +70,11 @@ const handler = async (req, res) => {
     return;
   }
 
-  const model = typeof process.env.GEMINI_MODEL === "string"
+  const modelFromRequest = typeof requestModel === "string" ? requestModel.trim() : "";
+  const modelFromEnv = typeof process.env.GEMINI_MODEL === "string"
     ? process.env.GEMINI_MODEL.trim()
-    : "gemini-3-flash-preview";
+    : "";
+  const model = modelFromRequest || modelFromEnv || "gemini-3-flash-preview";
 
   const acceptHeader = typeof req.headers?.accept === "string" ? req.headers.accept : "";
   const wantsStream = Boolean(stream) || acceptHeader.includes("text/event-stream");
@@ -93,6 +96,7 @@ const handler = async (req, res) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(upstreamBody),
     });
+    res.setHeader("X-Tex64-Resolved-Model", model);
     if (wantsStream) {
       res.statusCode = upstream.status;
       const contentType = upstream.headers.get("content-type") || "";
@@ -128,9 +132,23 @@ const handler = async (req, res) => {
     }
 
     const raw = await upstream.text();
+    let payloadText = raw || "{}";
+    if (upstream.ok && payloadText) {
+      try {
+        const parsed = JSON.parse(payloadText);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          if (typeof parsed.resolvedModel !== "string" || !parsed.resolvedModel.trim()) {
+            parsed.resolvedModel = model;
+          }
+          payloadText = JSON.stringify(parsed);
+        }
+      } catch {
+        // keep original payload when upstream does not return JSON
+      }
+    }
     res.statusCode = upstream.status;
     res.setHeader("Content-Type", "application/json; charset=utf-8");
-    res.end(raw || "{}");
+    res.end(payloadText);
   } catch (error) {
     sendJson(res, 500, { error: error?.message ?? "Upstream error" });
   }

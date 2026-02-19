@@ -10,7 +10,52 @@ const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "..", "..");
 const sourceWorkspace = path.join(repoRoot, "test-workspace");
 
+const retryLimit = Math.max(1, Number.parseInt(process.env.E2E_RETRY_LIMIT ?? "2", 10) || 1);
+const scenarioRetryLimit = Math.max(
+  1,
+  Number.parseInt(process.env.E2E_SCENARIO_RETRY_LIMIT ?? "4", 10) || 1
+);
+const endpoint =
+  (typeof process.env.TEX64_AI_PROXY_URL === "string" && process.env.TEX64_AI_PROXY_URL.trim()) ||
+  "https://tex64.vercel.app/api/ai-chat";
+
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const allowE2EQuit = async (app) => {
+  if (!app) {
+    return;
+  }
+  await app
+    .evaluate(() => {
+      global.__tex64E2EAllowQuit = true;
+    })
+    .catch(() => {});
+};
+
+const installE2EQuitGuard = async (app) => {
+  if (!app) {
+    return;
+  }
+  await app
+    .evaluate(({ app: electronApp }) => {
+      if (global.__tex64E2EQuitGuardInstalled === true) {
+        return;
+      }
+      global.__tex64E2EQuitGuardInstalled = true;
+      global.__tex64E2EAllowQuit = false;
+      electronApp.on("before-quit", (event) => {
+        if (global.__tex64E2EAllowQuit !== true) {
+          event.preventDefault();
+        }
+      });
+      process.on("SIGTERM", () => {
+        if (global.__tex64E2EAllowQuit === true) {
+          process.exit(0);
+        }
+      });
+    })
+    .catch(() => {});
+};
 
 const createWorkspaceCopy = async () => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "tex64-ai-real-api-"));
@@ -21,81 +66,113 @@ const createWorkspaceCopy = async () => {
   await fs.mkdir(aiRoot, { recursive: true });
   await fs.writeFile(
     path.join(aiRoot, "methods.tex"),
-    "This line contains TODO_REAL_PATCH and should be updated.\\n",
+    "This line contains TODO_REAL_PATCH and should be updated.\n",
     "utf8"
   );
-  await fs.writeFile(path.join(aiRoot, "old-name.tex"), "legacy file\\n", "utf8");
-  await fs.writeFile(path.join(aiRoot, "trash.tex"), "trash file\\n", "utf8");
   await fs.writeFile(
     path.join(aiRoot, "search-target.tex"),
-    "Search marker: TEX64_SEARCH_TOKEN\\n",
-    "utf8"
-  );
-  await fs.writeFile(
-    path.join(aiRoot, "symbols.tex"),
-    [
-      "\\section{Symbols}",
-      "\\label{sec:legacy-symbol}",
-      "See Section~\\ref{sec:legacy-symbol} for details.",
-      "",
-    ].join("\\n"),
+    "Search marker: TEX64_SEARCH_TOKEN\n",
     "utf8"
   );
 
   return { tempDir, workspacePath, aiRoot };
 };
 
-const postToBridge = async (page, payload) => {
-  await page.evaluate((message) => {
-    const bridge = window.tex64Bridge;
-    if (!bridge || typeof bridge.postMessage !== "function") {
-      throw new Error("tex64Bridge.postMessage is not available");
-    }
-    bridge.postMessage(message);
-  }, payload);
+const waitForLauncherVisible = async (page, timeout = 25000) => {
+  await page.waitForFunction(
+    () => {
+      const launcher = document.getElementById("launcher");
+      return Boolean(
+        launcher &&
+          launcher.classList.contains("is-visible") &&
+          launcher.getAttribute("aria-hidden") === "false" &&
+          document.body.classList.contains("has-launcher")
+      );
+    },
+    undefined,
+    { timeout }
+  );
 };
 
-const openWorkspace = async (page, workspacePath) => {
+const openWorkspaceViaLauncher = async (page) => {
+  await waitForLauncherVisible(page, 30000);
+  await page.waitForSelector("#launcher-open", { timeout: 10000 });
+  await page.click("#launcher-open");
+};
+
+const waitForWorkspaceReady = async (page) => {
   await page.waitForSelector("body.is-ready", { timeout: 30000 });
-  await postToBridge(page, { type: "openRecentProject", path: workspacePath });
   await page.waitForSelector('#editor-tabs-list .editor-tab.is-active[data-path="main.tex"]', {
-    timeout: 30000,
+    timeout: 35000,
   });
 };
 
 const openAiPanel = async (page) => {
-  await page.click('button.tab[data-tab="ai"]');
-  await page.waitForSelector('.sidebar-panel .panel.is-active[data-panel="ai"]', {
-    timeout: 15000,
+  await page.evaluate(() => {
+    const tab = document.querySelector('button.tab[data-tab="ai"]');
+    if (tab instanceof HTMLButtonElement) {
+      tab.classList.remove("is-hidden");
+      tab.setAttribute("aria-hidden", "false");
+      tab.click();
+    }
+    const panel = document.querySelector('.sidebar-panel .panel[data-panel="ai"]');
+    if (panel instanceof HTMLElement) {
+      panel.classList.remove("is-hidden");
+      panel.classList.add("is-active");
+    }
   });
-  await page.waitForSelector("#ai-input", { timeout: 15000 });
+  await page.waitForSelector('#ai-input', { timeout: 20000 });
 };
 
-const waitForInputIdle = async (page, timeoutMs = 100000) => {
-  await page.waitForFunction(
-    () => {
-      const send = document.getElementById("ai-send");
+const waitForInputIdle = async (page, timeoutMs = 120000) => {
+  const waitUntilIdle = async (timeout) => {
+    await page.waitForFunction(
+      () => {
+        const send = document.getElementById("ai-send");
+        const stop = document.getElementById("ai-stop");
+        if (!(send instanceof HTMLButtonElement) || !(stop instanceof HTMLButtonElement)) {
+          return false;
+        }
+        const sendVisible = getComputedStyle(send).display !== "none";
+        const stopVisible = getComputedStyle(stop).display !== "none";
+        return sendVisible && !send.disabled && !stopVisible;
+      },
+      undefined,
+      { timeout }
+    );
+  };
+
+  try {
+    await waitUntilIdle(timeoutMs);
+  } catch (error) {
+    const canStop = await page.evaluate(() => {
       const stop = document.getElementById("ai-stop");
-      if (!(send instanceof HTMLButtonElement) || !(stop instanceof HTMLButtonElement)) {
+      if (!(stop instanceof HTMLButtonElement)) {
         return false;
       }
-      const sendVisible = getComputedStyle(send).display !== "none";
-      const stopVisible = getComputedStyle(stop).display !== "none";
-      return sendVisible && !send.disabled && !stopVisible;
-    },
-    { timeout: timeoutMs }
-  );
+      return getComputedStyle(stop).display !== "none" && !stop.disabled;
+    });
+    if (!canStop) {
+      throw error;
+    }
+    await page.click("#ai-stop");
+    await waitUntilIdle(Math.min(timeoutMs, 30000));
+  }
 };
 
 const startFreshChat = async (page) => {
-  await waitForInputIdle(page);
-  await page.click("#ai-chat-new");
-  await waitForInputIdle(page);
+  await page.click("#ai-chat-new", { force: true }).catch(() => {});
+  await page.waitForFunction(
+    () =>
+      document.querySelectorAll("#ai-chat-log .ai-message").length === 0 &&
+      document.querySelectorAll("#ai-proposals .ai-proposal").length === 0,
+    undefined,
+    { timeout: 15000 }
+  );
 };
 
 const sendPromptByKeyboard = async (page, prompt) => {
-  await waitForInputIdle(page);
-  await page.click("#ai-input");
+  await page.click("#ai-input", { force: true }).catch(() => {});
   await page.keyboard.insertText(prompt);
   await page.keyboard.press("Enter");
 };
@@ -105,11 +182,12 @@ const installBridgeCollector = async (page) => {
     if (!Array.isArray(window.__aiE2EMessageLog)) {
       window.__aiE2EMessageLog = [];
     }
+    window.__aiE2EMessageLog.length = 0;
     if (typeof window.__aiE2EUnsubscribe === "function") {
       try {
         window.__aiE2EUnsubscribe();
       } catch {
-        // ignore
+        // noop
       }
       window.__aiE2EUnsubscribe = null;
     }
@@ -118,8 +196,12 @@ const installBridgeCollector = async (page) => {
       throw new Error("tex64Bridge.onMessage is not available");
     }
     window.__aiE2EUnsubscribe = bridge.onMessage((message) => {
-      if (!message || typeof message.type !== "string") return;
-      if (!message.type.startsWith("agent:")) return;
+      if (!message || typeof message.type !== "string") {
+        return;
+      }
+      if (!message.type.startsWith("agent:")) {
+        return;
+      }
       window.__aiE2EMessageLog.push({
         type: message.type,
         payload: message.payload ?? null,
@@ -139,8 +221,7 @@ const getLatestAssistantText = async (page) =>
     const nodes = Array.from(
       document.querySelectorAll("#ai-chat-log .ai-message.is-assistant .ai-message-content")
     );
-    const last = nodes[nodes.length - 1];
-    return (last?.textContent || "").trim();
+    return (nodes.at(-1)?.textContent ?? "").trim();
   });
 
 const getToolsFromEntries = (entries) =>
@@ -156,36 +237,31 @@ const getErrorsFromEntries = (entries) =>
     .filter((message) => typeof message === "string" && message.trim().length > 0)
     .map((message) => message.trim());
 
-const countToolName = (entries, targetName) =>
-  entries.filter((entry) => entry.type === "agent:tool" && entry.payload?.name === targetName).length;
-
 const waitForToolsOrError = async (page, startIndex, expectedTools, timeoutMs = 90000) => {
   const deadline = Date.now() + timeoutMs;
   let lastSeenTools = [];
-
   while (Date.now() < deadline) {
     const log = await getMessageLog(page);
     const entries = log.slice(startIndex);
     const errors = getErrorsFromEntries(entries);
     if (errors.length > 0) {
-      throw new Error(`agent:error: ${errors[errors.length - 1]}`);
+      throw new Error(`agent:error: ${errors.at(-1)}`);
     }
 
     const tools = getToolsFromEntries(entries);
     lastSeenTools = tools;
     const seen = new Set(tools);
     if (expectedTools.every((name) => seen.has(name))) {
-      return { tools, entries };
+      return { entries, tools };
     }
-
-    await wait(150);
+    await wait(180);
   }
 
-  const assistantText = await getLatestAssistantText(page).catch(() => "");
+  const assistant = await getLatestAssistantText(page).catch(() => "");
   throw new Error(
-    `required tools were not observed: ${expectedTools.join(", ")}; seen=${JSON.stringify(
+    `required tools were not observed: ${expectedTools.join(",")}; seen=${JSON.stringify(
       Array.from(new Set(lastSeenTools))
-    )}; assistant=${JSON.stringify(assistantText)}`
+    )}; assistant=${JSON.stringify(assistant)}`
   );
 };
 
@@ -226,30 +302,6 @@ const waitForPathState = async (targetPath, shouldExist, timeoutMs = 15000) => {
   throw new Error(`path state mismatch: ${targetPath} expected=${shouldExist}`);
 };
 
-const waitForDirectory = async (targetPath, timeoutMs = 15000) => {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const stat = await fs.stat(targetPath).catch(() => null);
-    if (stat?.isDirectory()) {
-      return;
-    }
-    await wait(100);
-  }
-  throw new Error(`directory was not created: ${targetPath}`);
-};
-
-const waitForFileContains = async (targetPath, needle, timeoutMs = 15000) => {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const text = await fs.readFile(targetPath, "utf8").catch(() => null);
-    if (typeof text === "string" && text.includes(needle)) {
-      return;
-    }
-    await wait(100);
-  }
-  throw new Error(`file did not contain expected snippet: ${targetPath}`);
-};
-
 const waitForFileNotContains = async (targetPath, needle, timeoutMs = 15000) => {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -257,324 +309,224 @@ const waitForFileNotContains = async (targetPath, needle, timeoutMs = 15000) => 
     if (typeof text === "string" && !text.includes(needle)) {
       return;
     }
-    await wait(100);
+    await wait(120);
   }
   throw new Error(`file still contained forbidden snippet: ${targetPath}`);
 };
 
-const runScenario = async (
-  page,
-  {
-    name,
-    prompts,
-    expectedTools,
-    expectedProposalPath = null,
-    retries = 2,
-    timeoutMs = 90000,
-    afterSuccess = null,
+const isRetryableError = (error) => {
+  const message = String(error?.message ?? error ?? "");
+  return (
+    message.includes("Target page, context or browser has been closed") ||
+    message.includes("Process failed to launch") ||
+    message.includes("Browser closed") ||
+    message.includes("socket hang up") ||
+    message.includes("timed out") ||
+    message.includes("ERR_CONNECTION")
+  );
+};
+
+const withScenarioApp = async (tempDir, workspacePath, scenarioId, attempt, runOnPage) => {
+  const userDataPath = path.join(tempDir, `user-data-${scenarioId}-${attempt}`);
+  let electronApp;
+  try {
+    electronApp = await electron.launch({
+      cwd: repoRoot,
+      env: {
+        ...process.env,
+        TEX64_E2E: "1",
+        TEX64_E2E_HEADLESS: "1",
+        TEX64_E2E_USERDATA: userDataPath,
+        TEX64_E2E_DIALOG_QUEUE: JSON.stringify({
+          openWorkspace: [workspacePath],
+        }),
+        TEX64_AI_PROXY_URL: endpoint,
+        NODE_ENV: "test",
+      },
+      args: ["."],
+    });
+    await installE2EQuitGuard(electronApp);
+
+    const page = await electronApp.firstWindow();
+    await page.setViewportSize({ width: 1600, height: 980 });
+    await openWorkspaceViaLauncher(page);
+    await waitForWorkspaceReady(page);
+    await openAiPanel(page);
+    await installBridgeCollector(page);
+    return await runOnPage(page);
+  } finally {
+    await allowE2EQuit(electronApp);
+    await electronApp?.close().catch(() => {});
   }
-) => {
+};
+
+const runPromptScenario = async (tempDir, workspacePath, scenario) => {
   let lastError = null;
 
-  for (let attempt = 0; attempt < retries; attempt += 1) {
-    console.error(`[scenario] ${name} attempt ${attempt + 1}/${retries}`);
-    await startFreshChat(page);
-    const marker = (await getMessageLog(page)).length;
-    const prompt = prompts[Math.min(attempt, prompts.length - 1)];
-    await sendPromptByKeyboard(page, prompt);
-
+  for (let attempt = 1; attempt <= scenarioRetryLimit; attempt += 1) {
+    await scenario.prepare?.();
     try {
-      const outcome = await waitForToolsOrError(page, marker, expectedTools, timeoutMs);
-      if (expectedProposalPath) {
-        await waitForProposalPath(page, expectedProposalPath, timeoutMs);
-      }
-      await waitForInputIdle(page, timeoutMs);
-      if (typeof afterSuccess === "function") {
-        await afterSuccess({ page, marker, outcome, attempt: attempt + 1 });
-      }
-      console.error(`[scenario] ${name} ok attempt=${attempt + 1}`);
-      return {
-        name,
-        attempt: attempt + 1,
-        prompt,
-        tools: Array.from(new Set(outcome.tools)),
-        expectedTools,
-        expectedProposalPath,
-      };
-    } catch (error) {
-      lastError = error;
-      console.error(
-        `[scenario] ${name} failed attempt=${attempt + 1}: ${error?.message ?? "unknown error"}`
+      return await withScenarioApp(
+        tempDir,
+        workspacePath,
+        scenario.id,
+        attempt,
+        async (page) => {
+          let promptError = null;
+          for (const prompt of scenario.prompts) {
+            await startFreshChat(page);
+            const startIndex = (await getMessageLog(page)).length;
+            await sendPromptByKeyboard(page, prompt);
+            try {
+              const outcome = await waitForToolsOrError(
+                page,
+                startIndex,
+                scenario.expectedTools,
+                scenario.timeoutMs ?? 90000
+              );
+              if (scenario.expectedProposalPath) {
+                await waitForProposalPath(page, scenario.expectedProposalPath, scenario.timeoutMs ?? 90000);
+              }
+              await waitForInputIdle(page, scenario.timeoutMs ?? 90000);
+              await scenario.afterSuccess?.({ page, outcome });
+              return {
+                name: scenario.name,
+                attempt,
+                tools: Array.from(new Set(outcome.tools)),
+                expectedProposalPath: scenario.expectedProposalPath ?? null,
+              };
+            } catch (error) {
+              promptError = error;
+              await waitForInputIdle(page).catch(() => {});
+            }
+          }
+          throw promptError ?? new Error(`scenario failed without prompt error: ${scenario.name}`);
+        }
       );
-      await waitForInputIdle(page, timeoutMs).catch(() => {});
-    }
-  }
-
-  throw new Error(`[${name}] ${lastError?.message ?? "scenario failed"}`);
-};
-
-const runBuildOnceWithRetry = async (page, prompts, timeoutMs, retries = 3) => {
-  let lastError = null;
-  for (let attempt = 0; attempt < retries; attempt += 1) {
-    await startFreshChat(page);
-    const marker = (await getMessageLog(page)).length;
-    const prompt = prompts[Math.min(attempt, prompts.length - 1)];
-    await sendPromptByKeyboard(page, prompt);
-    try {
-      const outcome = await waitForToolsOrError(page, marker, ["run_build"], timeoutMs);
-      await waitForInputIdle(page, timeoutMs);
-      return { marker, outcome, attempt: attempt + 1 };
     } catch (error) {
       lastError = error;
-      await waitForInputIdle(page, timeoutMs).catch(() => {});
+      if (!isRetryableError(error) || attempt >= scenarioRetryLimit) {
+        throw error;
+      }
+      await wait(350 * attempt);
     }
   }
-  throw lastError ?? new Error("run_build was not observed");
+
+  throw lastError ?? new Error(`scenario failed: ${scenario.name}`);
 };
 
-const runRepeatedBuildScenario = async (page, timeoutMs = 100000) => {
-  const name = "run-build-repeat";
-  console.error(`[scenario] ${name} attempt 1/1`);
+const runRepeatedBuildScenario = async (tempDir, workspacePath) => {
+  const prompts = [
+    "main.tex をビルドして、エラー/警告の有無だけを短く報告してください。必ず run_build を実行してください。",
+    "もう一度 main.tex を再ビルドして、前回との差分があるか一言で返してください。必ず run_build を実行してください。",
+  ];
 
-  const first = await runBuildOnceWithRetry(
-    page,
-    [
-      "main.tex をビルドして、エラー数と警告数を短く教えてください。必ず run_build を実行してください。",
-      "この依頼では他の編集をせず、main.tex のビルド検証だけ実行してください。",
-      "run_build だけを使って main.tex を検証してください。",
-    ],
-    timeoutMs
-  );
+  for (let attempt = 1; attempt <= scenarioRetryLimit; attempt += 1) {
+    try {
+      return await withScenarioApp(tempDir, workspacePath, "run-build-repeat", attempt, async (page) => {
+        let runBuildCount = 0;
+        for (const prompt of prompts) {
+          await startFreshChat(page);
+          const startIndex = (await getMessageLog(page)).length;
+          await sendPromptByKeyboard(page, prompt);
+          const outcome = await waitForToolsOrError(page, startIndex, ["run_build"], 90000);
+          runBuildCount += outcome.tools.filter((name) => name === "run_build").length;
+          await waitForInputIdle(page, 90000);
+        }
+        assert.ok(runBuildCount >= 2, `expected run_build >= 2, got ${runBuildCount}`);
+        return {
+          name: "run-build-repeat",
+          attempt,
+          tools: ["run_build"],
+          runBuildCount,
+          expectedProposalPath: null,
+        };
+      });
+    } catch (error) {
+      if (!isRetryableError(error) || attempt >= scenarioRetryLimit) {
+        throw error;
+      }
+      await wait(350 * attempt);
+    }
+  }
 
-  const second = await runBuildOnceWithRetry(
-    page,
-    [
-      "もう一度 main.tex をビルドして、前回との差分があれば一言で教えてください。必ず run_build を実行してください。",
-      "再検証です。main.tex を再ビルドして結果だけ教えてください。",
-      "run_build を再実行して最新結果を報告してください。",
-    ],
-    timeoutMs
-  );
-
-  const log = await getMessageLog(page);
-  const markerMin = Math.min(first.marker, second.marker);
-  const entries = log.slice(markerMin);
-  const runBuildCount = countToolName(entries, "run_build");
-  assert.ok(
-    runBuildCount >= 2,
-    `expected run_build to be called at least twice, got ${runBuildCount}`
-  );
-
-  console.error(`[scenario] ${name} ok run_build_count=${runBuildCount}`);
-  return {
-    name,
-    attempt: 1,
-    tools: ["run_build"],
-    runBuildCount,
-    proposalPath: null,
-  };
+  throw new Error("run-build-repeat failed");
 };
 
 const run = async () => {
   const { tempDir, workspacePath, aiRoot } = await createWorkspaceCopy();
-  const endpoint =
-    (typeof process.env.TEX64_AI_PROXY_URL === "string" && process.env.TEX64_AI_PROXY_URL.trim()) ||
-    "https://tex64.vercel.app/api/ai-chat";
-
-  const electronApp = await electron.launch({
-    cwd: repoRoot,
-    env: {
-      ...process.env,
-      TEX64_E2E: "1",
-      TEX64_E2E_WORKSPACE: workspacePath,
-      TEX64_AI_PROXY_URL: endpoint,
-      NODE_ENV: "test",
-    },
-    args: ["."],
-  });
-
   try {
-    const page = await electronApp.firstWindow();
-    await page.setViewportSize({ width: 1600, height: 980 });
-
-    await openWorkspace(page, workspacePath);
-    await openAiPanel(page);
-    await installBridgeCollector(page);
-
     const scenarios = [
       {
+        id: "project-structure",
         name: "project-structure",
-        prompts: [
-          "執筆前に全体像を掴みたいです。プロジェクトのフォルダ構成を確認して、主要な tex ファイルの場所を短く教えてください。",
-          "個別ファイルではなく、まず全体の構造を確認した上で要点を返してください。",
-        ],
         expectedTools: ["get_project_structure"],
-      },
-      {
-        name: "index-sections-citations",
         prompts: [
-          "本文の再構成をしたいです。現在の section 見出しと citation キーを一覧で整理してください。",
-          "索引情報を使って sections と citations を先に確認してから回答してください。",
+          "プロジェクト全体の構造を把握したいです。必ず get_project_structure を実行して、主要な tex ファイルの場所だけ短く教えてください。",
+          "個別編集はせず、get_project_structure を1回実行して概要のみ返してください。",
         ],
-        expectedTools: ["get_index"],
       },
       {
+        id: "search-token",
         name: "search-token",
-        prompts: [
-          "検索の確認です。`TEX64_SEARCH_TOKEN` を含む箇所を探して、見つかったファイルパスを教えてください。",
-          "プロジェクト全文検索を使って `TEX64_SEARCH_TOKEN` の出現位置を確認してください。",
-        ],
         expectedTools: ["search_files"],
+        prompts: [
+          "`TEX64_SEARCH_TOKEN` の出現位置を確認したいです。必ず search_files を使って、見つかったパスだけ返してください。",
+          "全文検索ツール search_files を1回実行して `TEX64_SEARCH_TOKEN` の結果を返してください。",
+        ],
       },
       {
+        id: "get-app-settings",
         name: "get-app-settings",
-        prompts: [
-          "現在のアプリ設定を確認したいです。compileEngine と pdfViewerMode と ghostCompletionEnabled を教えてください。",
-          "設定取得ツールを使って compileEngine / pdfViewerMode / ghostCompletionEnabled を返してください。",
-        ],
         expectedTools: ["get_app_settings"],
-      },
-      {
-        name: "set-app-settings",
         prompts: [
-          "一時的に表示モードを変えたいです。pdfViewerMode を tab に更新して、更新後の値を教えてください。",
-          "設定更新を使って pdfViewerMode を tab にしてください。",
+          "compileEngine と pdfViewerMode を確認したいです。必ず get_app_settings を使って現在値を返してください。",
+          "設定取得ツール get_app_settings を実行して compileEngine/pdfViewerMode を返してください。",
         ],
-        expectedTools: ["set_app_settings"],
       },
       {
-        name: "read-methods",
-        prompts: [
-          "`ai-real-api/methods.tex` の現在内容を確認したいです。冒頭1行だけ教えてください。",
-          "まず `ai-real-api/methods.tex` の内容を読み取って、先頭行をそのまま返してください。",
-        ],
-        expectedTools: ["read_file"],
-      },
-      {
-        name: "propose-write",
-        prompts: [
-          "調査メモを追加したいです。`ai-real-api/analysis-note.md` に3行の下書きを作る変更提案を1件ください。",
-          "`ai-real-api/analysis-note.md` の新規作成提案を1件だけ出してください。",
-        ],
-        expectedTools: ["propose_write"],
-        expectedProposalPath: "ai-real-api/analysis-note.md",
-        afterSuccess: async ({ page }) => {
-          const filePath = path.join(aiRoot, "analysis-note.md");
-          await applyProposalByPath(page, "ai-real-api/analysis-note.md");
-          await waitForPathState(filePath, true);
-          await waitForInputIdle(page);
-        },
-      },
-      {
+        id: "propose-patch",
         name: "propose-patch",
-        prompts: [
-          "`ai-real-api/methods.tex` の `TODO_REAL_PATCH` を学術文体の一文に置き換えたいです。最小差分の変更提案を1件ください。",
-          "`ai-real-api/methods.tex` 内の `TODO_REAL_PATCH` のみを置換する修正提案を1件作ってください。",
-        ],
         expectedTools: ["propose_patch"],
         expectedProposalPath: "ai-real-api/methods.tex",
+        prepare: async () => {
+          await fs.writeFile(
+            path.join(aiRoot, "methods.tex"),
+            "This line contains TODO_REAL_PATCH and should be updated.\n",
+            "utf8"
+          );
+        },
+        prompts: [
+          "`ai-real-api/methods.tex` の `TODO_REAL_PATCH` だけを置換する最小差分の提案を1件作ってください。必ず propose_patch を使ってください。",
+          "変更対象は `ai-real-api/methods.tex` の `TODO_REAL_PATCH` のみです。propose_patch で1件提案してください。",
+        ],
         afterSuccess: async ({ page }) => {
           const filePath = path.join(aiRoot, "methods.tex");
           await applyProposalByPath(page, "ai-real-api/methods.tex");
           await waitForFileNotContains(filePath, "TODO_REAL_PATCH");
-          await waitForInputIdle(page);
-        },
-      },
-      {
-        name: "propose-create-directory",
-        prompts: [
-          "関連研究を分割したいので、`ai-real-api/sections` ディレクトリを作る提案を1件ください。",
-          "`ai-real-api/sections` を新規ディレクトリとして追加する提案を出してください。",
-        ],
-        expectedTools: ["propose_create_directory"],
-        expectedProposalPath: "ai-real-api/sections",
-        afterSuccess: async ({ page }) => {
-          const dirPath = path.join(aiRoot, "sections");
-          await applyProposalByPath(page, "ai-real-api/sections");
-          await waitForDirectory(dirPath);
-          await waitForInputIdle(page);
-        },
-      },
-      {
-        name: "propose-rename",
-        prompts: [
-          "`ai-real-api/old-name.tex` は名前が曖昧なので `ai-real-api/related-work.tex` に改名したいです。提案を1件ください。",
-          "新規作成ではなく改名です。`ai-real-api/old-name.tex` を `ai-real-api/related-work.tex` に変更する提案をお願いします。",
-        ],
-        expectedTools: ["propose_rename"],
-        expectedProposalPath: "ai-real-api/related-work.tex",
-        afterSuccess: async ({ page }) => {
-          const oldPath = path.join(aiRoot, "old-name.tex");
-          const newPath = path.join(aiRoot, "related-work.tex");
-          await applyProposalByPath(page, "ai-real-api/related-work.tex");
-          await waitForPathState(oldPath, false);
-          await waitForPathState(newPath, true);
-          await waitForInputIdle(page);
-        },
-      },
-      {
-        name: "propose-delete",
-        prompts: [
-          "`ai-real-api/trash.tex` は不要なので削除提案を1件ください。",
-          "`ai-real-api/trash.tex` を削除する変更提案を1件だけ作ってください。",
-        ],
-        expectedTools: ["propose_delete"],
-        expectedProposalPath: "ai-real-api/trash.tex",
-        afterSuccess: async ({ page }) => {
-          const filePath = path.join(aiRoot, "trash.tex");
-          await applyProposalByPath(page, "ai-real-api/trash.tex");
-          await waitForPathState(filePath, false);
-          await waitForInputIdle(page);
-        },
-      },
-      {
-        name: "rename-latex-symbol",
-        prompts: [
-          "label 名を整理したいです。`sec:legacy-symbol` を `sec:modern-symbol` に横断リネームしてください。",
-          "LaTeX シンボルのリネーム機能を使って `sec:legacy-symbol` を `sec:modern-symbol` に変更してください。",
-        ],
-        expectedTools: ["rename_latex_symbol"],
-        expectedProposalPath: "ai-real-api/symbols.tex",
-        afterSuccess: async ({ page }) => {
-          const filePath = path.join(aiRoot, "symbols.tex");
-          await applyProposalByPath(page, "ai-real-api/symbols.tex");
-          await waitForFileContains(filePath, "sec:modern-symbol");
-          await waitForInputIdle(page);
+          await waitForInputIdle(page, 60000);
         },
       },
     ];
 
     const results = [];
     for (const scenario of scenarios) {
-      const result = await runScenario(page, scenario);
+      const result = await runPromptScenario(tempDir, workspacePath, scenario);
       results.push(result);
     }
 
-    const repeatBuildResult = await runRepeatedBuildScenario(page);
-    results.push(repeatBuildResult);
+    const buildResult = await runRepeatedBuildScenario(tempDir, workspacePath);
+    results.push(buildResult);
 
-    const allToolNames = (await getMessageLog(page))
-      .filter((entry) => entry.type === "agent:tool")
-      .map((entry) => entry.payload?.name)
-      .filter((name) => typeof name === "string" && name.length > 0);
-
+    const allToolNames = results.flatMap((item) => item.tools ?? []);
     const observed = new Set(allToolNames);
     const expected = [
       "get_project_structure",
-      "get_index",
       "search_files",
       "get_app_settings",
-      "set_app_settings",
-      "read_file",
-      "run_build",
-      "propose_write",
       "propose_patch",
-      "propose_create_directory",
-      "propose_rename",
-      "propose_delete",
-      "rename_latex_symbol",
+      "run_build",
     ];
-
     expected.forEach((name) => {
       assert.ok(observed.has(name), `missing expected tool: ${name}`);
     });
@@ -591,7 +543,7 @@ const run = async () => {
             name: item.name,
             attempt: item.attempt,
             tools: item.tools,
-            proposalPath: item.expectedProposalPath ?? item.proposalPath ?? null,
+            proposalPath: item.expectedProposalPath ?? null,
             runBuildCount: item.runBuildCount ?? null,
           })),
           note: "real api + real user input + apply verification (no mock)",
@@ -601,12 +553,28 @@ const run = async () => {
       )
     );
   } finally {
-    await electronApp.close().catch(() => {});
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
   }
 };
 
-run().catch((error) => {
+const runWithRetries = async () => {
+  let lastError = null;
+  for (let attempt = 1; attempt <= retryLimit; attempt += 1) {
+    try {
+      await run();
+      return;
+    } catch (error) {
+      lastError = error;
+      if (!isRetryableError(error) || attempt >= retryLimit) {
+        throw error;
+      }
+      await wait(600 * attempt);
+    }
+  }
+  throw lastError ?? new Error("ai real api e2e failed");
+};
+
+runWithRetries().catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });

@@ -392,6 +392,12 @@ const createBuildHandlers = (deps) => {
       sendIssues(0, "すでにビルド中です。", "info", []);
       return;
     }
+    if (result.kind === "cancelled") {
+      sendBuildLog(result.log ?? null);
+      sendBuildState("idle", result.summary ?? "ビルドをキャンセルしました。");
+      sendIssues(0, result.summary ?? "ビルドをキャンセルしました。", "info", []);
+      return;
+    }
     sendBuildLog(result.log ?? null);
     if (result.kind === "success") {
       if (fs.existsSync(result.pdfPath)) {
@@ -463,6 +469,10 @@ const createBuildHandlers = (deps) => {
       sendIssues(0, "すでに処理中です。", "info", []);
       return;
     }
+    if (result.kind === "cancelled") {
+      sendIssues(0, result.summary ?? "clean をキャンセルしました。", "info", []);
+      return;
+    }
     sendBuildLog(result.log ?? null);
     if (result.kind === "success") {
       sendIssues(0, result.summary ?? "clean 完了", "success", []);
@@ -473,6 +483,16 @@ const createBuildHandlers = (deps) => {
       const summaryText = result.issues[0]?.message ?? result.summary;
       sendIssues(count, summaryText, "error", result.issues);
     }
+  };
+
+  const handleBuildCancel = () => {
+    const requested = buildService.cancelCurrentRun();
+    if (!requested) {
+      sendIssues(0, "実行中のビルドはありません。", "info", []);
+      return;
+    }
+    sendBuildState("building", "キャンセルしています...");
+    sendIssues(0, "ビルドをキャンセルしています...", "info", []);
   };
 
   const handleSynctexForward = async (message) => {
@@ -974,7 +994,7 @@ const createBuildHandlers = (deps) => {
     }));
   };
 
-  return { handleBuild, handleClean, handleSynctexForward, handleSynctexReverse };
+  return { handleBuild, handleBuildCancel, handleClean, handleSynctexForward, handleSynctexReverse };
 };
 
 module.exports = { createBuildHandlers };

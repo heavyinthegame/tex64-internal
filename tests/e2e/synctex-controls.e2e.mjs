@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execSync } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -36,11 +37,82 @@ const pause = async (ms = stepDelayMs) => {
   await new Promise((resolve) => setTimeout(resolve, ms));
 };
 
+const cleanupStaleElectron = () => {
+  try {
+    execSync(
+      `pkill -9 -f "${path.join(
+        repoRoot,
+        "node_modules/electron/dist/Electron.app/Contents/MacOS/Electron"
+      )}"`,
+      { stdio: "ignore" }
+    );
+  } catch {
+    // no stale process
+  }
+};
+
+const closeElectronApp = async (app, label = "synctex-controls-e2e") => {
+  if (!app) {
+    return;
+  }
+  await allowE2EQuit(app);
+  try {
+    await Promise.race([
+      app.close(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("electronApp.close timeout")), 6000)
+      ),
+    ]);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    log(`${label}: close fallback (${detail})`);
+  }
+  cleanupStaleElectron();
+};
+
+const allowE2EQuit = async (app) => {
+  if (!app) {
+    return;
+  }
+  await app
+    .evaluate(() => {
+      global.__tex64E2EAllowQuit = true;
+    })
+    .catch(() => {});
+};
+
+const installE2EQuitGuard = async (app) => {
+  if (!app) {
+    return;
+  }
+  await app
+    .evaluate(({ app: electronApp }) => {
+      if (global.__tex64E2EQuitGuardInstalled === true) {
+        return;
+      }
+      global.__tex64E2EQuitGuardInstalled = true;
+      global.__tex64E2EAllowQuit = false;
+      electronApp.on("before-quit", (event) => {
+        if (global.__tex64E2EAllowQuit !== true) {
+          event.preventDefault();
+        }
+      });
+      process.on("SIGTERM", () => {
+        if (global.__tex64E2EAllowQuit === true) {
+          process.exit(0);
+        }
+      });
+    })
+    .catch(() => {});
+};
+
 const createWorkspaceCopy = async (workspaceSourcePath = sourceWorkspace) => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "tex64-e2e-synctex-controls-"));
   const workspacePath = path.join(tempDir, "workspace");
+  const userDataPath = path.join(tempDir, "userdata");
   await fs.cp(workspaceSourcePath, workspacePath, { recursive: true });
-  return { tempDir, workspacePath };
+  await fs.mkdir(userDataPath, { recursive: true });
+  return { tempDir, workspacePath, userDataPath };
 };
 
 const injectCommentLine = async (workspacePath) => {
@@ -658,18 +730,25 @@ const readIssuesState = async (page) => {
 };
 
 const run = async () => {
-  const { tempDir, workspacePath } = await createWorkspaceCopy();
+  const { tempDir, workspacePath, userDataPath } = await createWorkspaceCopy();
   let electronApp;
 
   try {
     await injectCommentLine(workspacePath);
     await cleanupBuildArtifacts(workspacePath);
+    cleanupStaleElectron();
 
     electronApp = await electron.launch({
       args: ["."],
       cwd: repoRoot,
-      env: { ...process.env },
+      env: {
+        ...process.env,
+        TEX64_E2E: "1",
+        TEX64_E2E_HEADLESS: "1",
+        TEX64_E2E_USERDATA: userDataPath,
+      },
     });
+    await installE2EQuitGuard(electronApp);
 
     const page = await electronApp.firstWindow();
     await page.setViewportSize({ width: 1680, height: 980 });
@@ -935,8 +1014,9 @@ const run = async () => {
     log("chapter 9 synctex controls e2e completed");
   } finally {
     if (electronApp) {
-      await electronApp.close().catch(() => {});
+      await closeElectronApp(electronApp);
     }
+    cleanupStaleElectron();
     if (!keepWorkspace) {
       await fs.rm(tempDir, { recursive: true, force: true });
       log("workspace copy removed");

@@ -117,17 +117,6 @@ const findWordToken = (text, cursorIndex) => {
     }
     return { token, range: { start, end: cursorIndex }, kind: "word" };
 };
-const buildRawCommandCandidate = (token, priority) => {
-    const normalized = token.trim();
-    const latex = `\\${normalized}`;
-    return {
-        id: `raw-command:${normalized.toLowerCase()}`,
-        key: getKeyByLatex(latex, latex, latex),
-        label: latex,
-        hint: "入力コマンド",
-        priority,
-    };
-};
 export const initMathWysiwyg = (deps) => {
     var _a, _b;
     let autoSuggest = (_a = deps.autoSuggest) !== null && _a !== void 0 ? _a : true;
@@ -653,9 +642,11 @@ export const initMathWysiwyg = (deps) => {
                 ? EXPLICIT_WORD_MIN_LENGTH
                 : tokenMatch.kind === "command"
                     ? AUTO_COMMAND_MIN_LENGTH
-                    : AUTO_WORD_ALLOWLIST.has(normalized)
-                        ? 2
-                        : AUTO_WORD_MIN_LENGTH;
+                    : isCommandToken(tokenMatch.token)
+                        ? AUTO_COMMAND_MIN_LENGTH
+                        : AUTO_WORD_ALLOWLIST.has(normalized)
+                            ? 2
+                            : AUTO_WORD_MIN_LENGTH;
             if (tokenMatch.token.length < minLength) {
                 currentCandidates = [];
                 currentRange = null;
@@ -670,6 +661,7 @@ export const initMathWysiwyg = (deps) => {
             : buildWordCandidates(tokenMatch.token, {
                 allowContainsMinLength: explicit ? 2 : AUTO_CONTAINS_MIN_LENGTH,
                 allowedPacks,
+                dedupeByLatex: !explicit,
             });
         const allowSuffixRescue = explicit &&
             tokenMatch.kind === "word" &&
@@ -681,6 +673,7 @@ export const initMathWysiwyg = (deps) => {
                 const suffixCandidates = buildWordCandidates(suffix, {
                     allowContainsMinLength: explicit ? 2 : AUTO_CONTAINS_MIN_LENGTH,
                     allowedPacks,
+                    dedupeByLatex: !explicit,
                 });
                 if (suffixCandidates.length === 0) {
                     continue;
@@ -695,14 +688,6 @@ export const initMathWysiwyg = (deps) => {
                 };
                 nextCandidates = suffixCandidates;
                 break;
-            }
-        }
-        const canUseRawCommandFallback = (tokenMatch.kind === "word" || tokenMatch.kind === "command") &&
-            isCommandToken(tokenMatch.token);
-        if (nextCandidates.length === 0 && canUseRawCommandFallback) {
-            const minLength = explicit ? 2 : 4;
-            if (tokenMatch.token.length >= minLength) {
-                nextCandidates = [buildRawCommandCandidate(tokenMatch.token, explicit ? 60 : 12)];
             }
         }
         if (nextCandidates.length === 0) {
@@ -979,8 +964,8 @@ export const initMathWysiwyg = (deps) => {
                 if (!match) {
                     return null;
                 }
-                const startOffset = indexToOffsetInRange(mathfieldApi, scopeRange.start, scopeRange.end, match.range.start);
-                const endOffset = indexToOffsetInRange(mathfieldApi, scopeRange.start, scopeRange.end, match.range.end);
+                const startOffset = indexToOffsetInRange(mathfieldApi, scopeRange.start, scopeRange.end, match.range.start, "floor");
+                const endOffset = indexToOffsetInRange(mathfieldApi, scopeRange.start, scopeRange.end, match.range.end, "ceil");
                 return { token: match.token, range: { start: startOffset, end: endOffset }, kind: match.kind };
             };
             const operatorCorrectionMatch = toOffsetMatch(findAutoReplaceCorrection(rawValue, cursorIndex));
@@ -1188,8 +1173,7 @@ export const initMathWysiwyg = (deps) => {
         clearTriggerRange();
         deps.insertKey(candidate.key);
         const hasPlaceholderTemplate = typeof candidate.key.latex === "string" && candidate.key.latex.includes("#?");
-        const isStyleWrapperTemplate = STYLE_WRAPPER_TEMPLATE_RE.test(insertedLatex);
-        if (hasPlaceholderTemplate && !isStyleWrapperTemplate) {
+        if (hasPlaceholderTemplate) {
             try {
                 const ranges = getInternalSelectionRanges(mathfieldApi);
                 const target = (_c = (_b = ranges.find((range) => range.start >= insertionAnchorStart)) !== null && _b !== void 0 ? _b : ranges[0]) !== null && _c !== void 0 ? _c : null;
@@ -1263,6 +1247,21 @@ export const initMathWysiwyg = (deps) => {
             event.preventDefault();
             selectedIndex =
                 (selectedIndex - 1 + currentCandidates.length) % currentCandidates.length;
+            renderPanel();
+            return true;
+        }
+        if (event.key === "Tab") {
+            if (event.metaKey || event.ctrlKey || event.altKey) {
+                return false;
+            }
+            event.preventDefault();
+            if (event.shiftKey) {
+                selectedIndex =
+                    (selectedIndex - 1 + currentCandidates.length) % currentCandidates.length;
+            }
+            else {
+                selectedIndex = (selectedIndex + 1) % currentCandidates.length;
+            }
             renderPanel();
             return true;
         }

@@ -47,6 +47,27 @@ export const initBlockInputUi = (context, deps) => {
     const wysiwygAutoOptions = Array.from(document.querySelectorAll("[data-wysiwyg-auto]"));
     const wysiwygPackOptions = Array.from(document.querySelectorAll("[data-wysiwyg-pack]"));
     const STYLE_WRAPPER_TEMPLATE_RE = /^\\(?:mathbb|mathcal|mathfrak|mathsf|mathrm|mathbf|mathit|mathtt|operatorname)\{#\?\}$/;
+    const isPlainBackslashInput = (event) => {
+        if (event.metaKey || event.ctrlKey || event.altKey) {
+            return false;
+        }
+        if (event.key === "\\" || event.key === "¥") {
+            return true;
+        }
+        return (event.code === "Backslash" || event.code === "IntlYen" || event.code === "IntlRo");
+    };
+    const blockDirectLatexCommandInput = (event) => {
+        if (!isPlainBackslashInput(event)) {
+            return false;
+        }
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        const opened = Boolean(mathWysiwygApi === null || mathWysiwygApi === void 0 ? void 0 : mathWysiwygApi.openExplicitSuggestions());
+        if (!opened) {
+            mathWysiwygApi === null || mathWysiwygApi === void 0 ? void 0 : mathWysiwygApi.close();
+        }
+        return true;
+    };
     const setFormatMenuOpen = (open) => {
         formatMenuOpen = open;
         if (blockFormatMenu instanceof HTMLElement) {
@@ -384,6 +405,9 @@ export const initBlockInputUi = (context, deps) => {
             textArea.addEventListener("keydown", (event) => {
                 if (mathWysiwygApi === null || mathWysiwygApi === void 0 ? void 0 : mathWysiwygApi.handleKeydown(event)) {
                     event.stopImmediatePropagation();
+                    return;
+                }
+                if (blockDirectLatexCommandInput(event)) {
                     return;
                 }
                 if (event.isComposing) {
@@ -877,6 +901,9 @@ export const initBlockInputUi = (context, deps) => {
                 event.stopImmediatePropagation();
                 return;
             }
+            if (blockDirectLatexCommandInput(event)) {
+                return;
+            }
             if (event.key === "/" &&
                 !event.metaKey &&
                 !event.ctrlKey &&
@@ -979,6 +1006,9 @@ export const initBlockInputUi = (context, deps) => {
         }
         mathfield.addEventListener("keydown", (e) => {
             if (mathWysiwygApi === null || mathWysiwygApi === void 0 ? void 0 : mathWysiwygApi.handleKeydown(e)) {
+                return;
+            }
+            if (blockDirectLatexCommandInput(e)) {
                 return;
             }
             if (e.isComposing) {

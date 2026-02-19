@@ -163,12 +163,13 @@ export const buildOperatorCandidates = (token) => {
     });
 };
 export const buildWordCandidates = (token, options = {}) => {
-    var _a, _b;
+    var _a, _b, _c;
     const normalized = token.toLowerCase();
     const allowContains = (_a = options.allowContains) !== null && _a !== void 0 ? _a : true;
     const allowContainsMinLength = (_b = options.allowContainsMinLength) !== null && _b !== void 0 ? _b : 2;
     const canContains = allowContains && normalized.length >= allowContainsMinLength;
     const allowedPacks = options.allowedPacks;
+    const dedupeByLatex = (_c = options.dedupeByLatex) !== null && _c !== void 0 ? _c : true;
     const prefixMatches = [];
     const containsMatches = [];
     const prefixTriggers = getPrefixMatches(normalized);
@@ -188,7 +189,13 @@ export const buildWordCandidates = (token, options = {}) => {
             const scriptBoost = 0;
             const isAlias = candidate.hint !== trigger;
             const aliasPenalty = isAlias && normalized.length <= 2 ? 140 : isAlias && matchType !== "exact" ? 40 : 0;
-            const score = baseScore + candidate.priority + group.priority + scriptBoost - aliasPenalty;
+            const exactHintBoost = candidate.hint === normalized ? 120 : 0;
+            const score = baseScore +
+                candidate.priority +
+                group.priority +
+                scriptBoost +
+                exactHintBoost -
+                aliasPenalty;
             prefixMatches.push({ candidate, score });
         });
     });
@@ -226,7 +233,9 @@ export const buildWordCandidates = (token, options = {}) => {
     const results = [];
     const pushMatches = (items) => {
         for (const { candidate } of items) {
-            const keyId = normalizeLatexKey(candidate.key.latex) || candidate.id;
+            const keyId = dedupeByLatex
+                ? normalizeLatexKey(candidate.key.latex) || candidate.id
+                : `${candidate.id}|${candidate.hint}`;
             if (seen.has(keyId)) {
                 continue;
             }

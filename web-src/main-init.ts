@@ -700,8 +700,15 @@ export const initMain = () => {
   updateIssues = workspaceController.updateIssues;
   setPendingBuildIssuesFocus = workspaceController.setPendingBuildIssuesFocus;
 
+  const storedActiveTab = (() => {
+    try {
+      return localStorage.getItem("tex64.activeTab") ?? undefined;
+    } catch {
+      return undefined;
+    }
+  })();
   const initialTab = tabController.normalizeTabKey(
-    tabs.find((tab) => tab.classList.contains("is-active"))?.dataset.tab
+    storedActiveTab ?? tabs.find((tab) => tab.classList.contains("is-active"))?.dataset.tab
   );
   setActiveTab(initialTab);
   sidebarUi.loadVisibility();
@@ -804,7 +811,11 @@ export const initMain = () => {
     event.stopPropagation();
     if (action === "open-source") {
       const groupKey = editorSession.getActiveEditorGroupKey();
-      editorSession.jumpToFileLine(path, line, groupKey, { force: true, focus: true });
+      editorSession.jumpToFileLine(path, line, groupKey, {
+        force: true,
+        focus: true,
+        column: Number.isFinite(column) && column > 0 ? column : 1,
+      });
       return;
     }
     postToNative(
@@ -891,6 +902,16 @@ export const initMain = () => {
       handleCompletionResult: (payload) =>
         apiCompletionBroker.handleCompletionResult(payload),
       handleUsage: (payload) => apiCompletionBroker.handleUsage(payload),
+    },
+    platform: {
+      handleAuth: (payload) => aiChatUi?.handlePlatformAuth(payload),
+      handleAiAccess: (payload) => aiChatUi?.handlePlatformAiAccess(payload),
+      handleUsage: (payload) => aiChatUi?.handlePlatformUsage(payload),
+      handleUpdate: (payload) => {
+        settingsUi.handlePlatformUpdate(payload);
+      },
+      handleUpdateStatus: (payload) => settingsUi.handlePlatformUpdateStatus(payload),
+      handleFeedback: (payload) => settingsUi.handlePlatformFeedback(payload),
     },
     filePreview: {
       handlePreviewResult: (payload) => filePreviewBroker.handlePreviewResult(payload),

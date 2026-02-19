@@ -1,0 +1,174 @@
+name: Build Distributables
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            script: electron:dist:mac
+          - os: windows-latest
+            script: electron:dist:win
+          - os: ubuntu-latest
+            script: electron:dist:linux
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Sync version from tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          node - <<'NODE'
+          const fs = require("fs");
+          const tag = process.env.GITHUB_REF_NAME || "";
+          const version = tag.replace(/^v/, "");
+          if (!version || !/^\d+\.\d+\.\d+/.test(version)) {
+            console.log(`skip version sync for tag: ${tag}`);
+            process.exit(0);
+          }
+          const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+          pkg.version = version;
+          fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2) + "\n");
+          console.log(`package.json version -> ${version}`);
+          NODE
+
+      - name: Build distributables
+        run: npm run -s ${{ matrix.script }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tex64-${{ matrix.os }}-${{ github.ref_name }}
+          path: dist/**
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish Release
+    runs-on: ubuntu-latest
+    needs: build
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Collect release assets
+        shell: bash
+        run: |
+          rm -rf release
+          mkdir -p release
+          find artifacts -type f \( \
+            -name '*.dmg' -o -name '*.zip' -o -name '*.exe' -o -name '*.msi' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' -o -name '*.tar.gz' \
+          \) -print0 | while IFS= read -r -d '' file; do
+            base="$(basename "$file")"
+            cp "$file" "release/$base"
+          done
+          ls -la release
+
+      - name: Generate checksums
+        run: node scripts/release-checksums.cjs --dir release --out release/checksums-sha256.txt
+
+      - name: Generate update feed (stable)
+        if: startsWith(github.ref, 'refs/tags/v') && secrets.TEX64_DOWNLOADS_PUBLIC_BASE_URL != ''
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          publicBaseUrl="${{ secrets.TEX64_DOWNLOADS_PUBLIC_BASE_URL }}"
+          notesUrl="https://tex64.com/releases/${version}"
+          mkdir -p update
+          node scripts/release-update-feed.cjs \
+            --dir release \
+            --out update/stable.json \
+            --channel stable \
+            --version "$version" \
+            --artifactsBaseUrl "${publicBaseUrl%/}/tex64/v${version}" \
+            --notesUrl "$notesUrl"
+          ls -la update
+
+      - name: Upload assets to downloads (S3/R2)
+        if: startsWith(github.ref, 'refs/tags/v') && secrets.TEX64_DOWNLOADS_BUCKET != '' && secrets.TEX64_DOWNLOADS_ACCESS_KEY_ID != '' && secrets.TEX64_DOWNLOADS_SECRET_ACCESS_KEY != '' && secrets.TEX64_DOWNLOADS_PUBLIC_BASE_URL != ''
+        shell: bash
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.TEX64_DOWNLOADS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.TEX64_DOWNLOADS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.TEX64_DOWNLOADS_REGION }}
+          TEX64_DOWNLOADS_BUCKET: ${{ secrets.TEX64_DOWNLOADS_BUCKET }}
+          TEX64_DOWNLOADS_ENDPOINT: ${{ secrets.TEX64_DOWNLOADS_ENDPOINT }}
+        run: |
+          set -euo pipefail
+          export AWS_EC2_METADATA_DISABLED=true
+
+          version="${GITHUB_REF_NAME#v}"
+          prefix="tex64/v${version}"
+          updatePrefix="tex64/updates"
+          bucket="${TEX64_DOWNLOADS_BUCKET}"
+          endpoint="${TEX64_DOWNLOADS_ENDPOINT:-}"
+          export AWS_REGION="${AWS_REGION:-auto}"
+          export AWS_DEFAULT_REGION="$AWS_REGION"
+          export AWS_S3_FORCE_PATH_STYLE=true
+
+          awsArgs=()
+          if [ -n "$endpoint" ]; then
+            awsArgs+=(--endpoint-url "$endpoint")
+          fi
+
+          echo "Uploading release assets to s3://${bucket}/${prefix}/ (region=${AWS_REGION})"
+          aws "${awsArgs[@]}" s3 sync \
+            release \
+            "s3://${bucket}/${prefix}/" \
+            --cache-control "public,max-age=31536000,immutable"
+
+          if [ -f "update/stable.json" ]; then
+            echo "Uploading update feed to s3://${bucket}/${updatePrefix}/stable.json"
+            aws "${awsArgs[@]}" s3 cp \
+              "update/stable.json" \
+              "s3://${bucket}/${updatePrefix}/stable.json" \
+              --cache-control "public,max-age=60"
+          fi
+
+      - name: Publish release assets
+        if: startsWith(github.ref, 'refs/tags/v') && secrets.TEX64_PUBLISH_GITHUB_RELEASE == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true

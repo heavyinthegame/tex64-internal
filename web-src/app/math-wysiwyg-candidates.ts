@@ -183,6 +183,7 @@ type WordCandidateOptions = {
   allowContains?: boolean;
   allowContainsMinLength?: number;
   allowedPacks?: Set<string>;
+  dedupeByLatex?: boolean;
 };
 
 export const buildWordCandidates = (token: string, options: WordCandidateOptions = {}) => {
@@ -191,6 +192,7 @@ export const buildWordCandidates = (token: string, options: WordCandidateOptions
   const allowContainsMinLength = options.allowContainsMinLength ?? 2;
   const canContains = allowContains && normalized.length >= allowContainsMinLength;
   const allowedPacks = options.allowedPacks;
+  const dedupeByLatex = options.dedupeByLatex ?? true;
   const prefixMatches: Array<{ candidate: Candidate; score: number }> = [];
   const containsMatches: Array<{ candidate: Candidate; score: number }> = [];
 
@@ -212,8 +214,14 @@ export const buildWordCandidates = (token: string, options: WordCandidateOptions
       const isAlias = candidate.hint !== trigger;
       const aliasPenalty =
         isAlias && normalized.length <= 2 ? 140 : isAlias && matchType !== "exact" ? 40 : 0;
+      const exactHintBoost = candidate.hint === normalized ? 120 : 0;
       const score =
-        baseScore + candidate.priority + group.priority + scriptBoost - aliasPenalty;
+        baseScore +
+        candidate.priority +
+        group.priority +
+        scriptBoost +
+        exactHintBoost -
+        aliasPenalty;
       prefixMatches.push({ candidate, score });
     });
   });
@@ -256,7 +264,9 @@ export const buildWordCandidates = (token: string, options: WordCandidateOptions
   const results: Candidate[] = [];
   const pushMatches = (items: Array<{ candidate: Candidate }>) => {
     for (const { candidate } of items) {
-      const keyId = normalizeLatexKey(candidate.key.latex) || candidate.id;
+      const keyId = dedupeByLatex
+        ? normalizeLatexKey(candidate.key.latex) || candidate.id
+        : `${candidate.id}|${candidate.hint}`;
       if (seen.has(keyId)) {
         continue;
       }

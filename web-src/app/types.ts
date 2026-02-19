@@ -69,6 +69,7 @@ export type AgentStatusState = "idle" | "running" | "error";
 export type AgentSettings = {
   apiKey?: string;
   model?: string;
+  inlineModel?: string;
   temperature: number;
   maxOutputTokens: number;
   maxIterations?: number;
@@ -80,6 +81,8 @@ export type AgentSettings = {
   maxReadFiles?: number;
   openFileMaxBytes?: number;
   openFileMaxChars?: number;
+  maxConversationMessages?: number;
+  maxConversationChars?: number;
   allowedTopLevel?: string[];
   blockedTopLevel?: string[];
   textExtensions?: string[];
@@ -117,6 +120,91 @@ export type ApiCompletionResultPayload = {
   text?: string | null;
   error?: string;
   usageSnapshot?: ApiUsageSnapshot;
+};
+
+export type PlatformQuotaSummary = {
+  limitTokens: number;
+  usedTokens: number;
+  remainingTokens: number;
+  usedRequests: number;
+  remainingRequests: number;
+  periodStart?: string | null;
+  periodEnd?: string | null;
+};
+
+export type PlatformAuthSnapshot = {
+  authenticated: boolean;
+  pending?: boolean;
+  user?: { id?: string | null; email?: string | null; name?: string | null } | null;
+  plan?: string | null;
+  pricingUrl?: string;
+};
+
+export type PlatformAiAccessSnapshot = {
+  authenticated: boolean;
+  allowed: boolean;
+  reason?: string | null;
+  status?: string | null;
+  plan?: string | null;
+  user?: { id?: string | null; email?: string | null; name?: string | null } | null;
+  quota?: PlatformQuotaSummary | null;
+  periodStart?: string | null;
+  periodEnd?: string | null;
+  graceEndsAt?: string | null;
+  message?: string | null;
+  pricingUrl?: string;
+  fetchedAt?: number;
+};
+
+export type PlatformUsageSnapshot = {
+  authenticated: boolean;
+  plan?: string | null;
+  period?: string | null;
+  summary?: PlatformQuotaSummary | null;
+  byFeature?: Record<string, { usedTokens?: number; usedRequests?: number }> | null;
+  errorCode?: string | null;
+  message?: string | null;
+  fetchedAt?: number;
+};
+
+export type PlatformUpdateSnapshot = {
+  platform?: string | null;
+  arch?: string | null;
+  channel?: string | null;
+  currentVersion?: string | null;
+  latestVersion?: string | null;
+  hasUpdate?: boolean;
+  required?: boolean;
+  notesUrl?: string | null;
+  artifactUrl?: string | null;
+  artifactSha256?: string | null;
+  sha256?: string | null;
+  checksum?: string | null;
+  signature?: string | null;
+  checkedAt?: number;
+};
+export type PlatformUpdatePhase =
+  | "idle"
+  | "checking"
+  | "up-to-date"
+  | "available"
+  | "downloading"
+  | "downloaded"
+  | "installing"
+  | "error";
+export type PlatformUpdateStatusSnapshot = {
+  phase: PlatformUpdatePhase;
+  mode?: string | null;
+  message?: string | null;
+  progressPercent?: number | null;
+  transferredBytes?: number | null;
+  totalBytes?: number | null;
+  downloadedPath?: string | null;
+  currentVersion?: string | null;
+  latestVersion?: string | null;
+  checkedAt?: number | null;
+  updatedAt?: number;
+  error?: { code?: string | null; message?: string | null } | null;
 };
 export type AppSettingsSnapshot = {
   compileEngine: string;

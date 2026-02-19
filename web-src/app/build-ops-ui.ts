@@ -123,6 +123,7 @@ export const initBuildOpsUi = (
   let formatWarningShown = false;
   let formatInFlightSnapshot: { path: string; content: string } | null = null;
   let currentBuildLog: string | null = null;
+  let currentBuildState: BuildState = "idle";
   let synctexForwardRequestOrder = 0;
   let synctexForwardLastAppliedOrder = 0;
   let synctexManualPriorityUntil = 0;
@@ -279,12 +280,14 @@ export const initBuildOpsUi = (
   };
 
   const setBuildState = (state: BuildState, message?: string) => {
+    currentBuildState = state;
     const isBusy = state === "building";
     if (buildButton instanceof HTMLButtonElement) {
-      buildButton.disabled = isBusy;
+      buildButton.disabled = false;
       buildButton.classList.toggle("is-busy", isBusy);
       buildButton.setAttribute("aria-busy", isBusy ? "true" : "false");
-      buildButton.setAttribute("aria-label", isBusy ? "ビルド中" : "ビルド");
+      buildButton.setAttribute("aria-label", isBusy ? "キャンセル" : "ビルド");
+      buildButton.title = isBusy ? "ビルドをキャンセル" : "ビルド (Cmd+B)";
     }
     if (state === "success") {
       const targetPath =
@@ -311,6 +314,13 @@ export const initBuildOpsUi = (
   };
 
   const startBuild = () => {
+    if (currentBuildState === "building") {
+      const ok = deps.postToNative({ type: "build:cancel" });
+      if (ok) {
+        deps.updateIssues(0, "ビルドをキャンセルしています...", "info", []);
+      }
+      return;
+    }
     deps.cacheCurrentBuffer(deps.getActiveGroup());
 
     const mainFile =
@@ -541,9 +551,6 @@ export const initBuildOpsUi = (
   const setupActionButtons = () => {
     if (buildButton instanceof HTMLButtonElement) {
       buildButton.addEventListener("click", () => {
-        if (buildButton.disabled) {
-          return;
-        }
         startBuild();
       });
     }

@@ -12,6 +12,9 @@ const repoRoot = path.resolve(__dirname, "..", "..");
 const keepWorkspace = process.env.E2E_KEEP_WORKSPACE === "1";
 const slowMoMs = Number.parseInt(process.env.E2E_PLAYWRIGHT_SLOWMO_MS ?? "0", 10);
 const defaultTimeoutMs = Number.parseInt(process.env.E2E_AI_TIMEOUT_MS ?? "180000", 10);
+const endpoint =
+  (typeof process.env.TEX64_AI_PROXY_URL === "string" && process.env.TEX64_AI_PROXY_URL.trim()) ||
+  "https://tex64.vercel.app/api/ai-chat";
 
 const now = () => new Date().toISOString().slice(11, 19);
 const log = (message) => {
@@ -27,7 +30,9 @@ const writeFile = async (workspacePath, relativePath, content) => {
 const createWorkspace = async () => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "tex64-e2e-ai-autonomous-"));
   const workspacePath = path.join(tempDir, "workspace");
+  const userDataPath = path.join(tempDir, "user-data");
   await fs.mkdir(workspacePath, { recursive: true });
+  await fs.mkdir(userDataPath, { recursive: true });
 
   await writeFile(
     workspacePath,
@@ -72,13 +77,31 @@ const createWorkspace = async () => {
     ].join("\n")
   );
 
-  return { tempDir, workspacePath };
+  return { tempDir, workspacePath, userDataPath };
 };
 
-const postToBridge = async (page, payload) => {
-  await page.evaluate((value) => {
-    window.tex64Bridge.postMessage(value);
-  }, payload);
+const toPosix = (value) => value.split(path.sep).join("/");
+
+const waitForLauncherVisible = async (page, timeout = 25000) => {
+  await page.waitForFunction(
+    () => {
+      const launcher = document.getElementById("launcher");
+      return Boolean(
+        launcher &&
+          launcher.classList.contains("is-visible") &&
+          launcher.getAttribute("aria-hidden") === "false" &&
+          document.body.classList.contains("has-launcher")
+      );
+    },
+    undefined,
+    { timeout }
+  );
+};
+
+const openWorkspaceViaLauncher = async (page) => {
+  await waitForLauncherVisible(page, 30000);
+  await page.waitForSelector("#launcher-open", { timeout: 10000 });
+  await page.click("#launcher-open");
 };
 
 const waitForWorkspaceReady = async (page) => {
@@ -95,24 +118,56 @@ const waitForWorkspaceReady = async (page) => {
 };
 
 const openAiPanel = async (page) => {
-  await page.click('button.tab[data-tab="ai"]');
-  await page.waitForSelector("#ai-input", { timeout: 10000 });
+  await page.evaluate(() => {
+    const tab = document.querySelector('button.tab[data-tab="ai"]');
+    if (tab instanceof HTMLButtonElement) {
+      tab.classList.remove("is-hidden");
+      tab.setAttribute("aria-hidden", "false");
+      tab.click();
+    }
+    const panel = document.querySelector('.sidebar-panel .panel[data-panel="ai"]');
+    if (panel instanceof HTMLElement) {
+      panel.classList.remove("is-hidden");
+      panel.classList.add("is-active");
+    }
+  });
+  await page.waitForSelector("#ai-input", { timeout: 20000 });
 };
 
 const waitForAiIdle = async (page, timeout = defaultTimeoutMs) => {
-  await page.waitForFunction(
-    () => {
+  const waitUntilIdle = async (timeoutMs) => {
+    await page.waitForFunction(
+      () => {
+        const send = document.getElementById("ai-send");
+        const stop = document.getElementById("ai-stop");
+        if (!(send instanceof HTMLButtonElement) || !(stop instanceof HTMLButtonElement)) {
+          return false;
+        }
+        const sendVisible = getComputedStyle(send).display !== "none";
+        const stopVisible = getComputedStyle(stop).display !== "none";
+        return sendVisible && !send.disabled && !stopVisible;
+      },
+      undefined,
+      { timeout: timeoutMs }
+    );
+  };
+
+  try {
+    await waitUntilIdle(timeout);
+  } catch (error) {
+    const canStop = await page.evaluate(() => {
       const stop = document.getElementById("ai-stop");
-      const send = document.getElementById("ai-send");
-      if (!(stop instanceof HTMLElement) || !(send instanceof HTMLElement)) return false;
-      const stopHidden = window.getComputedStyle(stop).display === "none";
-      const sendVisible = window.getComputedStyle(send).display !== "none";
-      const sendEnabled = !(send instanceof HTMLButtonElement) || !send.disabled;
-      return stopHidden && sendVisible && sendEnabled;
-    },
-    undefined,
-    { timeout }
-  );
+      if (!(stop instanceof HTMLButtonElement)) {
+        return false;
+      }
+      return getComputedStyle(stop).display !== "none" && !stop.disabled;
+    });
+    if (!canStop) {
+      throw error;
+    }
+    await page.click("#ai-stop");
+    await waitUntilIdle(Math.min(30000, timeout));
+  }
 };
 
 const startNewChat = async (page) => {
@@ -152,8 +207,9 @@ const waitForAssistantMessageContaining = async (page, needle, timeout = default
 
 const sendPromptAndWait = async (page, prompt, token) => {
   await waitForAiIdle(page);
-  await page.fill("#ai-input", prompt);
-  await page.click("#ai-send");
+  await page.click("#ai-input");
+  await page.keyboard.insertText(prompt);
+  await page.keyboard.press("Enter");
   const assistantMessage = await waitForAssistantMessageContaining(page, token);
   await waitForAiIdle(page);
   return assistantMessage;
@@ -161,8 +217,9 @@ const sendPromptAndWait = async (page, prompt, token) => {
 
 const sendPrompt = async (page, prompt) => {
   await waitForAiIdle(page);
-  await page.fill("#ai-input", prompt);
-  await page.click("#ai-send");
+  await page.click("#ai-input");
+  await page.keyboard.insertText(prompt);
+  await page.keyboard.press("Enter");
 };
 
 const waitForAnyAssistantMessage = async (page, timeout = defaultTimeoutMs) => {
@@ -179,6 +236,23 @@ const waitForAnyAssistantMessage = async (page, timeout = defaultTimeoutMs) => {
     );
     return (nodes.pop()?.textContent ?? "").trim();
   });
+};
+
+const getAssistantMessageCount = async (page) =>
+  page.evaluate(
+    () => document.querySelectorAll("#ai-chat-log .ai-message.is-assistant .ai-message-content").length
+  );
+
+const waitForStopVisible = async (page, timeout = defaultTimeoutMs) => {
+  await page.waitForFunction(
+    () => {
+      const stop = document.getElementById("ai-stop");
+      if (!(stop instanceof HTMLButtonElement)) return false;
+      return getComputedStyle(stop).display !== "none" && !stop.disabled;
+    },
+    undefined,
+    { timeout }
+  );
 };
 
 const getProposalPaths = async (page) =>
@@ -236,7 +310,7 @@ const applyProposal = async (page, targetPath) => {
 };
 
 const run = async () => {
-  const { tempDir, workspacePath } = await createWorkspace();
+  const { tempDir, workspacePath, userDataPath } = await createWorkspace();
   let electronApp;
   const bodyFile = path.join(workspacePath, "paper", "body.tex");
   const introFile = path.join(workspacePath, "paper", "intro.tex");
@@ -249,13 +323,21 @@ const run = async () => {
       args: ["."],
       cwd: repoRoot,
       slowMo: Number.isFinite(slowMoMs) ? Math.max(0, slowMoMs) : 0,
-      env: { ...process.env },
+      env: {
+        ...process.env,
+        TEX64_E2E: "1",
+        TEX64_E2E_HEADLESS: "1",
+        TEX64_E2E_USERDATA: userDataPath,
+        TEX64_E2E_DIALOG_QUEUE: JSON.stringify({ openWorkspace: [toPosix(workspacePath)] }),
+        TEX64_AI_PROXY_URL: endpoint,
+        NODE_ENV: "test",
+      },
     });
     const page = await electronApp.firstWindow();
     await page.setViewportSize({ width: 1660, height: 980 });
 
     log("opening workspace");
-    await postToBridge(page, { type: "openRecentProject", path: workspacePath });
+    await openWorkspaceViaLauncher(page);
     await waitForWorkspaceReady(page);
     await openAiPanel(page);
 
@@ -289,14 +371,35 @@ const run = async () => {
       [
         "paper/body.tex の `% INSERT_AUTONOMOUS` の直後に次の1文をそのまま追加してください。",
         "AUTO_TEST_ALPHA: 本研究の主張は再現性を重視した逐次検証である。",
-        "他の行は変更しないでください。変更提案を作成してください。",
+        "他の行は変更しないでください。提案は paper/body.tex の1件だけにして変更提案を作成してください。",
         "回答の最後に [CHECK:SINGLE] を入れてください。",
       ].join("\n"),
       "[CHECK:SINGLE]"
     );
     assert.ok(singleResponse.includes("[CHECK:SINGLE]"), "single-file answer token missing");
     await waitForProposalPath(page, "paper/body.tex");
-    await applyProposal(page, "paper/body.tex");
+
+    // Apply + continue once. Then ensure there's no implicit endless continuation.
+    await clickProposalAction(page, "paper/body.tex", "適用して次へ");
+    await waitForSystemMessageContains(page, "適用完了: paper/body.tex");
+
+    // Continuation should start (stop becomes visible). Then we stop it explicitly to
+    // ensure the user can break out quickly and it doesn't auto-restart.
+    await waitForStopVisible(page, 60000);
+    await page.evaluate(() => {
+      const stop = document.getElementById("ai-stop");
+      if (stop instanceof HTMLButtonElement) stop.click();
+    });
+    await waitForAiIdle(page, 30000);
+    const afterContinueCount = await getAssistantMessageCount(page);
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    const finalCount = await getAssistantMessageCount(page);
+    assert.equal(
+      finalCount,
+      afterContinueCount,
+      "assistant should not keep auto-continuing after apply-and-next completes"
+    );
+
     const bodyAfterSingle = await fs.readFile(bodyFile, "utf8");
     assert.ok(bodyAfterSingle.includes("AUTO_TEST_ALPHA"), "single-file proposal was not applied");
     assert.equal(

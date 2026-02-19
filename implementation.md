@@ -3,7 +3,7 @@
 この文書は、`/Users/wedd/tex64` の現行実装（Renderer/Main/PDF viewer/API proxy）を読み直して、
 **ユーザーができること**を機能ベースで整理した最新版です。
 
-- 基準日: 2026-02-17
+- 基準日: 2026-02-18
 - 方針: コード構造の説明ではなく、画面操作・挙動・制約・保存先を中心に記述
 - 対象: ランチャー、編集、ビルド、SyncTeX、検索、Blocks、OCR、AI、設定、永続化
 
@@ -168,6 +168,26 @@ TeX64 は、1つの LaTeX ワークスペースに対して次を一体で提供
 - split view を ON/OFF 可能
 - split 比率を保存して復元
 
+### 5.1.1 Monaco 言語登録とシンタックスカラー
+
+- Monaco 初期化時に `latex` / `bibtex` を言語登録し、Monarch トークナイザを設定
+- 言語割り当て:
+  - `.bib` は `bibtex`
+  - `.tex`, `.sty`, `.cls`, `.ltx`, `.dtx`, `.ins`, `.bbx`, `.cbx`, `.cfg`, `.def`, `.lbx`, `.bst` は `latex`
+  - それ以外のテキストは `plaintext`
+- `latex` の着色対象（現行実装）:
+  - `%` コメント
+  - `\begin`, `\end`, `\usepackage` などのコマンド
+  - 一般的な `\command` 形式
+  - `$...$`, `$$...$$`, `\(...\)`, `\[...\]` の数式デリミタ
+  - 波括弧/角括弧/丸括弧、`& ^ _ ~`、数値
+- `bibtex` の着色対象（現行実装）:
+  - `%` コメント
+  - `@article` などのエントリ種別
+  - 文字列（`"..."`）
+  - `{}`, `()`, `=`, 数値、識別子
+- テーマは `tex64-deep-slate`（base: `vs-dark`）を適用
+
 ### 5.2 タブ管理
 
 - 各グループに独立したタブ列
@@ -314,6 +334,7 @@ TeX64 は、1つの LaTeX ワークスペースに対して次を一体で提供
 ### 8.3 outDir/args の扱い
 
 - `extraArgs` 内 `-outdir` 解析対応
+- `extraArgs` 内 `-jobname` 解析対応（出力 PDF の検出に反映）
 - 不正 `outDir`（ワークスペース外・絶対パスなど）は拒否
 - clean/deep clean でも同一 profile を反映
 
@@ -328,6 +349,7 @@ TeX64 は、1つの LaTeX ワークスペースに対して次を一体で提供
 - path/line/column を推定
 - 失敗要約を生成して Issues へ反映
 - build log を保持して UI に表示
+- PDF は通常は `jobname.pdf` を開く。見つからない場合は `.fls` / `.fdb_latexmk` から生成 PDF を検出する
 - ツール未導入（latexmk/synctex）系は `open-runtime` アクションを付与
 
 ### 8.6 整形（formatter）
@@ -567,6 +589,13 @@ TeX64 は、1つの LaTeX ワークスペースに対して次を一体で提供
 - 概算コスト（モデル別集計）
 - リセット機能あり
 
+### 13.8 認証・契約導線（AIタブ）
+
+- AI利用時に Google OAuth 状態と契約状態を判定（未ログイン/未契約/上限超過を表示）
+- プラン導線（`pricing`）を AIタブのステータスから開ける
+- 使用量（token/request/期間）を表示し、`再試行` で再取得できる
+- AIが利用不可でも編集・ビルド・保存などローカル機能は継続利用できる
+
 ---
 
 ## 14. 設定
@@ -597,10 +626,19 @@ TeX64 は、1つの LaTeX ワークスペースに対して次を一体で提供
 - `name/outDir/extraArgs` 編集
 - clean / clean-all 実行
 
-### 14.4 Runtime
+### 14.4 Runtime（実行環境・アップデート）
 
 - `lualatex/pdflatex/xelatex/uplatex/latexmk/latexindent/synctex` をチェック
 - 未導入時のインストール導線（platform 別）
+- Runtime ページを開くと `update:status:get` と `update:check(force=false)` を実行
+- 更新UIで `現在/最新バージョン`、状態、進捗バーを表示
+- 更新操作:
+  - `更新を確認`
+  - `ダウンロード`（manifest の `artifactUrl` を取得）
+  - `適用`（ダウンロード済みインストーラを起動）
+  - `手動ダウンロード`（`artifactUrl` → `notesUrl` → `TEX64_LINKS.download` の順で開く）
+- ダウンロード後に `sha256` 検証を実施し、不一致時は適用しない
+  - 受理する検証値: `artifactSha256` / `sha256` / `checksum` / `signature`（sha256 として解釈可能な形式）
 
 ### 14.5 Env Registry
 
@@ -609,6 +647,13 @@ TeX64 は、1つの LaTeX ワークスペースに対して次を一体で提供
 - 有効/無効切替
 - discouraged/package 表示
 - Blocks 検出・整形設定へ反映
+
+### 14.6 フィードバック・法務/サポート導線
+
+- フィードバック送信（カテゴリ・本文・連絡先任意）は Settings > Runtime から実行
+  - `Cmd/Ctrl+Enter` でも送信可能
+  - 送信先は自前 API（`/feedback`）
+- 法務/サポートリンク（利用規約、プライバシー、特商法、返金、ヘルプ、問い合わせ、リリースノート）を Settings から開ける
 
 ---
 
@@ -634,6 +679,12 @@ TeX64 は、1つの LaTeX ワークスペースに対して次を一体で提供
   - recent projects
 - `tex64-api-usage.json`
   - API usage 集計
+- `tex64-platform-session.json`
+  - Google OAuth セッション
+  - plan/status のキャッシュ
+  - OAuth 進行中 state
+- `updates/*`
+  - アップデート用にダウンロードしたインストーラ
 
 ### 15.3 localStorage（主なキー）
 
@@ -679,6 +730,12 @@ TeX64 は、1つの LaTeX ワークスペースに対して次を一体で提供
 
 - `Cmd/Ctrl+B`: build 実行
 
+### 16.3 `tex64.com` 公開ページ導線
+
+- AI タブの `pricing` は `TEX64_LINKS.pricing`（現行既定: `https://tex64.com/#comparison`）へ遷移
+- Settings の法務/サポートボタンは `TEX64_LINKS.*` で定義した `tex64.com` 公開ページを開く
+- 手動アップデートは `artifactUrl` が無い場合に `notesUrl` または `TEX64_LINKS.download`（現行既定: `https://tex64.com/#download`）へフォールバック
+
 ---
 
 ## 17. 主要制限値（実装値）
@@ -707,6 +764,7 @@ TeX64 は、1つの LaTeX ワークスペースに対して次を一体で提供
 - 削除は OS ゴミ箱ではなく `.tex64/.trash` を使用
 - `rename_latex_symbol` は Search 画面から AI ツール経由で実行される
 - reverse SyncTeX は設定 OFF で無効化される
+- アップデート導線は Settings > Runtime に集約（AIタブに更新操作は置かない）
 
 ---
 
@@ -767,5 +825,13 @@ TeX64 は、1つの LaTeX ワークスペースに対して次を一体で提供
 - [x] 提案適用
 - [x] 適用 Undo
 - [x] usage 集計
+
+### 19.7 設定・運用
+
+- [x] Runtime で実行環境チェック
+- [x] Runtime で更新確認/ダウンロード/適用
+- [x] 更新ファイルの `sha256` 検証
+- [x] Runtime でフィードバック送信
+- [x] Settings から法務/サポート/リリース導線
 
 以上。

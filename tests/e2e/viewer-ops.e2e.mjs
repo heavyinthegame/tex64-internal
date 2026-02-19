@@ -28,6 +28,42 @@ const pause = async (ms = stepDelayMs) => {
 
 const toPosix = (value) => value.split(path.sep).join("/");
 
+const allowE2EQuit = async (app) => {
+  if (!app) {
+    return;
+  }
+  await app
+    .evaluate(() => {
+      global.__tex64E2EAllowQuit = true;
+    })
+    .catch(() => {});
+};
+
+const installE2EQuitGuard = async (app) => {
+  if (!app) {
+    return;
+  }
+  await app
+    .evaluate(({ app: electronApp }) => {
+      if (global.__tex64E2EQuitGuardInstalled === true) {
+        return;
+      }
+      global.__tex64E2EQuitGuardInstalled = true;
+      global.__tex64E2EAllowQuit = false;
+      electronApp.on("before-quit", (event) => {
+        if (global.__tex64E2EAllowQuit !== true) {
+          event.preventDefault();
+        }
+      });
+      process.on("SIGTERM", () => {
+        if (global.__tex64E2EAllowQuit === true) {
+          process.exit(0);
+        }
+      });
+    })
+    .catch(() => {});
+};
+
 const createWorkspaceCopy = async () => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "tex64-e2e-viewer-ops-"));
   const workspacePath = path.join(tempDir, "workspace");
@@ -45,12 +81,14 @@ const launchApp = async ({ workspacePath, userDataPath }) => {
     env: {
       ...process.env,
       TEX64_E2E: "1",
+        TEX64_E2E_HEADLESS: "1",
       TEX64_E2E_USERDATA: userDataPath,
       TEX64_E2E_DIALOG_QUEUE: JSON.stringify({
         openWorkspace: [toPosix(workspacePath)],
       }),
     },
   });
+  await installE2EQuitGuard(app);
   const page = await app.firstWindow();
   await page.setViewportSize({ width: 1680, height: 980 });
   await page.waitForSelector("body.is-ready", { timeout: 25000 });
@@ -1027,6 +1065,7 @@ const run = async () => {
     log("viewer e2e completed");
   } finally {
     if (app) {
+      await allowE2EQuit(app);
       await app.close().catch(() => {});
     }
     if (!keepWorkspace) {

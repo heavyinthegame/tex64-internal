@@ -5,16 +5,19 @@ const MAX_RECENT_PROJECTS = 10;
 
 const DEFAULT_SETTINGS = {
   agent: {
+    model: "gemini-3-flash-preview",
+    inlineModel: "gemini-2.5-flash-lite",
     temperature: 0.2,
-    maxIterations: 30,
+    maxOutputTokens: 1024,
+    maxIterations: 12,
     stream: true,
     autoApply: false,
     autoBuild: false,
     allowRunCommand: false,
     maxFileBytes: 0,
-    maxReadFiles: 0,
+    maxReadFiles: 16,
     openFileMaxBytes: 0,
-    openFileMaxChars: 0,
+    openFileMaxChars: 12000,
     costInputPerMillion: 0,
     costOutputPerMillion: 0,
   },

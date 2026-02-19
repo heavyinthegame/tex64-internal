@@ -24,6 +24,7 @@ const { UserSettingsService } = require("./services/user-settings.cjs");
 const { MathOcrService } = require("./services/math-ocr.cjs");
 const { AgentService } = require("./services/agent.cjs");
 const { ApiUsageService } = require("./services/api-usage.cjs");
+const { PlatformAccessService } = require("./services/platform-access.cjs");
 const { createWorkspaceHandlers } = require("./handlers/workspace.cjs");
 const { createBuildHandlers } = require("./handlers/build.cjs");
 
@@ -34,6 +35,7 @@ const e2eUserDataPath =
   typeof process.env.TEX64_E2E_USERDATA === "string"
     ? process.env.TEX64_E2E_USERDATA.trim()
     : "";
+const e2eHeadless = process.env.TEX64_E2E_HEADLESS === "1";
 if (e2eUserDataPath) {
   app.setPath("userData", path.resolve(e2eUserDataPath));
 }
@@ -60,11 +62,14 @@ const blocksStore = new BlocksStore();
 const envService = new EnvService();
 let mathOcrService = null;
 let apiUsageService = null;
+let platformAccessService = null;
 
 const getMathOcrService = () => {
   if (!mathOcrService) {
     mathOcrService = new MathOcrService({
       appPath: app.getAppPath(),
+      isPackaged: app.isPackaged,
+      resourcesPath: process.resourcesPath,
       userDataPath: app.getPath("userData"),
     });
   }
@@ -80,6 +85,7 @@ const createMainWindow = () => {
     height: 820,
     minWidth: 960,
     minHeight: 600,
+    show: !e2eHeadless,
     backgroundColor: "#1c2129",
     title: "TeX64",
     webPreferences: {
@@ -139,6 +145,15 @@ const getApiUsageService = () => {
   return apiUsageService;
 };
 
+const getPlatformAccessService = () => {
+  if (!platformAccessService) {
+    platformAccessService = new PlatformAccessService({
+      userDataPath: app.getPath("userData"),
+    });
+  }
+  return platformAccessService;
+};
+
 const workspaceHandlers = createWorkspaceHandlers({
   dialog,
   shell,
@@ -173,6 +188,8 @@ const agentService = new AgentService({
   sendIssues,
   indexerService,
   apiUsageService: getApiUsageService(),
+  requestAiChat: (payload, options) =>
+    getPlatformAccessService().requestAiChat(payload, options),
 });
 
 const buildHandlers = createBuildHandlers({
@@ -200,19 +217,69 @@ const miscHandlers = createMiscHandlers({
   envService,
   ensureUserSettings,
   workspace,
+  shell,
   sendToRenderer,
   blocksStore,
   apiUsageService: getApiUsageService(),
+  platformService: getPlatformAccessService(),
+  runtimeInfo: {
+    version: app.getVersion(),
+    platform: process.platform,
+    arch: process.arch,
+    userDataPath: app.getPath("userData"),
+  },
 });
 
 const agentHandlers = createAgentHandlers({
   agentService,
   ensureUserSettings,
   sendToRenderer,
+  platformService: getPlatformAccessService(),
+});
+
+const looksLikeOAuthCallbackUrl = (value) => {
+  if (typeof value !== "string" || !value.trim().startsWith("tex64://")) {
+    return false;
+  }
+  try {
+    const parsed = new URL(value.trim());
+    return parsed.hostname === "oauth" && parsed.pathname === "/callback";
+  } catch {
+    return false;
+  }
+};
+
+const pendingOAuthCallbackUrls = [];
+
+const queueOAuthCallbackUrl = (value) => {
+  if (!looksLikeOAuthCallbackUrl(value)) {
+    return;
+  }
+  const url = value.trim();
+  if (app.isReady()) {
+    miscHandlers.handleAuthGoogleCallback(url).catch(() => {});
+    return;
+  }
+  pendingOAuthCallbackUrls.push(url);
+};
+
+app.on("open-url", (event, url) => {
+  event.preventDefault();
+  queueOAuthCallbackUrl(url);
 });
 
 app.whenReady().then(() => {
   createMainWindow();
+  app.setAsDefaultProtocolClient("tex64");
+  while (pendingOAuthCallbackUrls.length > 0) {
+    const url = pendingOAuthCallbackUrls.shift();
+    if (url) {
+      miscHandlers.handleAuthGoogleCallback(url).catch(() => {});
+    }
+  }
+  process.argv.forEach((arg) => {
+    queueOAuthCallbackUrl(arg);
+  });
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -384,6 +451,10 @@ ipcMain.on("tex64", (_event, message) => {
     });
     return;
   }
+  if (type === "build:cancel") {
+    buildHandlers.handleBuildCancel();
+    return;
+  }
   if (type === "build:clean") {
     buildHandlers.handleClean(message.mainFile, {
       deep: message.deep === true,
@@ -488,6 +559,50 @@ ipcMain.on("tex64", (_event, message) => {
 
   if (type === "blocks:save") {
     miscHandlers.handleBlocksSave(message.entry);
+    return;
+  }
+  if (type === "platform:state:get") {
+    miscHandlers.handlePlatformStateGet();
+    return;
+  }
+  if (type === "feature:check") {
+    miscHandlers.handleFeatureCheck(message);
+    return;
+  }
+  if (type === "platform:usage:get") {
+    miscHandlers.handlePlatformUsageGet(message);
+    return;
+  }
+  if (type === "update:check") {
+    miscHandlers.handleUpdateCheck(message);
+    return;
+  }
+  if (type === "update:download") {
+    miscHandlers.handleUpdateDownload(message);
+    return;
+  }
+  if (type === "update:install") {
+    miscHandlers.handleUpdateInstall(message);
+    return;
+  }
+  if (type === "update:status:get") {
+    miscHandlers.handleUpdateStatusGet();
+    return;
+  }
+  if (type === "auth:google:start") {
+    miscHandlers.handleAuthGoogleStart();
+    return;
+  }
+  if (type === "auth:signout") {
+    miscHandlers.handleAuthSignOut();
+    return;
+  }
+  if (type === "shell:openExternal") {
+    miscHandlers.handleOpenExternal(message.url);
+    return;
+  }
+  if (type === "feedback:send") {
+    miscHandlers.handleFeedbackSend(message);
     return;
   }
   if (type === "api:usage:get") {

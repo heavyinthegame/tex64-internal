@@ -80,12 +80,10 @@ const ENV_SNIPPETS = {
     itemize: `itemize}\n  \\item \${0}\n\\end{itemize}`,
 };
 export const registerCompletionProvider = (monaco, deps, state) => {
-    var _a, _b, _c, _d, _e;
+    var _a;
     if (state.registered || !((_a = monaco.languages) === null || _a === void 0 ? void 0 : _a.registerCompletionItemProvider)) {
         return;
     }
-    (_c = (_b = monaco.languages).register) === null || _c === void 0 ? void 0 : _c.call(_b, { id: "latex" });
-    (_e = (_d = monaco.languages).register) === null || _e === void 0 ? void 0 : _e.call(_d, { id: "bibtex" });
     const provideItems = (model, position) => {
         var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t;
         const activePath = deps.getActiveFilePath();

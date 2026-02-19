@@ -20,17 +20,17 @@ export const createInlineCompletionController = (deps) => {
         minPrefix: 10,
         idleMs: 550,
         cooldownMs: 3000,
-        maxPerMinute: 12,
+        maxPerMinute: 8,
         timeoutMs: 3500,
         cacheTtlMs: 120000,
         negativeCacheTtlMs: 10000,
         maxCacheEntries: 120,
-        maxOutputTokens: 80,
+        maxOutputTokens: 48,
         temperature: 0.2,
         topP: 0.9,
         topK: 40,
-        contextBeforeLines: 16,
-        contextAfterLines: 6,
+        contextBeforeLines: 10,
+        contextAfterLines: 4,
     };
     const clampInlineNumber = (value, min, max, fallback) => {
         if (!Number.isFinite(value)) {

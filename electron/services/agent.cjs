@@ -56,7 +56,44 @@ const TOOL_STATUS_LABELS = {
 const MAX_USER_INLINE_DATA_BYTES = 5 * 1024 * 1024;
 const MAX_USER_INLINE_DATA_TOTAL_BYTES = 8 * 1024 * 1024;
 const MAX_APPLY_UNDO_ENTRIES = 40;
+const DEFAULT_CHAT_MODEL = "gemini-3-flash-preview";
+const DEFAULT_MAX_OUTPUT_TOKENS = 1024;
+const REQUEST_HISTORY_MAX_MESSAGES = 24;
+const REQUEST_HISTORY_MAX_CHARS = 64_000;
 const BASE64_DATA_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+const parseNumber = (value, fallback = 0) => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number.parseFloat(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return fallback;
+};
+const parseInteger = (value, fallback = 0) => Math.round(parseNumber(value, fallback));
+
+const resolveResponseModel = (response) => {
+  if (!response || typeof response !== "object") {
+    return "";
+  }
+  const candidates = [
+    response.resolvedModel,
+    response.modelVersion,
+    response.model,
+    response.output?.model,
+    response.usage?.model,
+    response.usageMetadata?.model,
+  ];
+  for (const value of candidates) {
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+  return "";
+};
 
 const buildSystemPrompt = (context, rootPath, policy, options) => {
   const activeFilePath = context?.activeFilePath ?? "";
@@ -358,6 +395,7 @@ class AgentService {
     sendIssues,
     indexerService,
     apiUsageService,
+    requestAiChat,
   }) {
     this.workspace = workspace;
     this.searchService = searchService;
@@ -371,6 +409,7 @@ class AgentService {
     this.sendIssues = sendIssues;
     this.indexerService = indexerService;
     this.apiUsageService = apiUsageService;
+    this.requestAiChat = typeof requestAiChat === "function" ? requestAiChat : null;
     this.conversations = new Map();
     this.proposals = new Map();
     this.contextByConversation = new Map();
@@ -462,7 +501,7 @@ class AgentService {
       maxIterations: clampNumber(
         settings?.maxIterations,
         DEFAULT_MAX_ITERATIONS,
-        { min: 1, max: 100 }
+        { min: 1, max: 30 }
       ),
       stream: settings?.stream !== false,
       autoApply: settings?.autoApply === true,
@@ -945,6 +984,102 @@ class AgentService {
     return `思考中: ${label}`;
   }
 
+  buildPlatformUsageFromQuota(quota, plan, source = "chat") {
+    if (!quota || typeof quota !== "object") {
+      return null;
+    }
+    const limitTokens = Math.max(0, parseInteger(quota.limitTokens, 0));
+    const usedTokens = Math.max(0, parseInteger(quota.usedTokens, 0));
+    const maxRemainingTokens = Math.max(0, limitTokens - usedTokens);
+    const rawRemainingTokens = parseNumber(quota.remainingTokens, Number.NaN);
+    const normalizedRemainingTokens = Number.isFinite(rawRemainingTokens)
+      ? Math.max(0, Math.round(rawRemainingTokens))
+      : maxRemainingTokens;
+    return {
+      source,
+      usage: {
+        authenticated: true,
+        plan: typeof plan === "string" && plan ? plan : null,
+        period: null,
+        summary: {
+          limitTokens,
+          usedTokens,
+          remainingTokens: Math.min(normalizedRemainingTokens, maxRemainingTokens),
+          usedRequests: Math.max(0, parseInteger(quota.usedRequests, 0)),
+          remainingRequests: Math.max(0, parseInteger(quota.remainingRequests, 0)),
+          periodStart:
+            typeof quota.periodStart === "string" ? quota.periodStart : null,
+          periodEnd: typeof quota.periodEnd === "string" ? quota.periodEnd : null,
+        },
+        byFeature: null,
+        errorCode: null,
+        message: null,
+        fetchedAt: Date.now(),
+      },
+    };
+  }
+
+  extractUsageMetadata(response) {
+    if (!response || typeof response !== "object") {
+      return null;
+    }
+    const usage = response.usageMetadata ?? response.usage ?? null;
+    if (!usage || typeof usage !== "object") {
+      return null;
+    }
+    const promptTokenCount = parseInteger(
+      usage.promptTokenCount ??
+        usage.promptTokens ??
+        usage.inputTokenCount ??
+        usage.inputTokens ??
+        usage.input_tokens,
+      0
+    );
+    const candidatesTokenCount = parseInteger(
+      usage.candidatesTokenCount ??
+        usage.outputTokenCount ??
+        usage.outputTokens ??
+        usage.output_tokens,
+      0
+    );
+    const totalTokenCount = parseInteger(
+      usage.totalTokenCount ??
+        usage.totalTokens ??
+        usage.quotaConsumedTokens ??
+        promptTokenCount + candidatesTokenCount,
+      promptTokenCount + candidatesTokenCount
+    );
+    return {
+      promptTokenCount: Math.max(0, promptTokenCount),
+      candidatesTokenCount: Math.max(0, candidatesTokenCount),
+      totalTokenCount: Math.max(0, totalTokenCount),
+    };
+  }
+
+  normalizeModelCandidate(response) {
+    if (!response || typeof response !== "object") {
+      return null;
+    }
+    const directCandidate = response?.candidates?.[0]?.content ?? null;
+    if (directCandidate && Array.isArray(directCandidate.parts)) {
+      return directCandidate;
+    }
+    const output = response.output && typeof response.output === "object" ? response.output : {};
+    if (Array.isArray(output.parts) && output.parts.length > 0) {
+      return { role: "model", parts: output.parts };
+    }
+    const text =
+      typeof output.text === "string"
+        ? output.text
+        : typeof response.text === "string"
+        ? response.text
+        : "";
+    if (text.trim()) {
+      return { role: "model", parts: [{ text }] };
+    }
+    return null;
+  }
+
   async executeToolCall(toolCall, conversationId) {
     try {
       const name = toolCall?.name ?? "";
@@ -1231,6 +1366,11 @@ class AgentService {
         if (result.log) {
           this.sendBuildLog?.(result.log);
         }
+        if (result.kind === "cancelled") {
+          this.sendBuildState?.("idle", result.summary ?? "ビルドをキャンセルしました。");
+          this.sendIssues?.(0, result.summary ?? "ビルドをキャンセルしました。", "info", []);
+          return { status: "cancelled", summary: result.summary ?? "ビルドをキャンセルしました。" };
+        }
         if (result.kind === "success") {
           const warningIssues = result.issues.filter(
             (issue) => issue.severity === "warning"
@@ -1468,6 +1608,139 @@ class AgentService {
     }
   }
 
+  resolveChatModel(settings) {
+    const configured = typeof settings?.model === "string" ? settings.model.trim() : "";
+    return configured || DEFAULT_CHAT_MODEL;
+  }
+
+  resolveMaxOutputTokens(settings) {
+    return clampNumber(
+      settings?.maxOutputTokens,
+      DEFAULT_MAX_OUTPUT_TOKENS,
+      { min: 64, max: 4096 }
+    );
+  }
+
+  estimateRequestPartSize(part) {
+    if (!part || typeof part !== "object") {
+      return 0;
+    }
+    if (typeof part.text === "string") {
+      return part.text.length;
+    }
+    if (part.inlineData && typeof part.inlineData === "object") {
+      const data = typeof part.inlineData.data === "string" ? part.inlineData.data : "";
+      // base64 payloads dominate cost; approximate bytes for budgeting.
+      return Math.round(data.length * 0.75);
+    }
+    if (part.functionCall && typeof part.functionCall === "object") {
+      return JSON.stringify(part.functionCall).length;
+    }
+    if (part.functionResponse && typeof part.functionResponse === "object") {
+      return JSON.stringify(part.functionResponse).length;
+    }
+    return 0;
+  }
+
+  estimateRequestMessageSize(message) {
+    if (!message || typeof message !== "object") {
+      return 0;
+    }
+    const parts = Array.isArray(message.parts) ? message.parts : [];
+    return parts.reduce((sum, part) => sum + this.estimateRequestPartSize(part), 0);
+  }
+
+  sanitizeMessageForRequest(message, { includeInlineData = false } = {}) {
+    if (!message || typeof message !== "object") {
+      return null;
+    }
+    const role =
+      typeof message.role === "string" && message.role.trim()
+        ? message.role.trim()
+        : "user";
+    const parts = Array.isArray(message.parts) ? message.parts : [];
+    const normalizedParts = [];
+    parts.forEach((part) => {
+      if (!part || typeof part !== "object") {
+        return;
+      }
+      if (typeof part.text === "string" && part.text.length > 0) {
+        normalizedParts.push({ text: part.text });
+        return;
+      }
+      if (part.functionCall && typeof part.functionCall === "object") {
+        const callPart = { functionCall: part.functionCall };
+        if (typeof part.thoughtSignature === "string" && part.thoughtSignature) {
+          callPart.thoughtSignature = part.thoughtSignature;
+        }
+        if (part.thought === true) {
+          callPart.thought = true;
+        }
+        normalizedParts.push(callPart);
+        return;
+      }
+      if (part.functionResponse && typeof part.functionResponse === "object") {
+        normalizedParts.push({ functionResponse: part.functionResponse });
+        return;
+      }
+      if (includeInlineData && part.inlineData && typeof part.inlineData === "object") {
+        const mimeType =
+          typeof part.inlineData.mimeType === "string" ? part.inlineData.mimeType : "";
+        const data = typeof part.inlineData.data === "string" ? part.inlineData.data : "";
+        if (mimeType && data) {
+          normalizedParts.push({ inlineData: { mimeType, data } });
+        }
+      }
+    });
+    if (normalizedParts.length === 0) {
+      return null;
+    }
+    return { role, parts: normalizedParts };
+  }
+
+  buildRequestContents(conversation, iteration, settings) {
+    const source = Array.isArray(conversation) ? conversation : [];
+    if (source.length === 0) {
+      return [];
+    }
+    const maxMessages = clampNumber(
+      settings?.maxConversationMessages,
+      REQUEST_HISTORY_MAX_MESSAGES,
+      { min: 6, max: 80 }
+    );
+    const maxChars = clampNumber(
+      settings?.maxConversationChars,
+      REQUEST_HISTORY_MAX_CHARS,
+      { min: 8_000, max: 200_000 }
+    );
+    const startIndex = Math.max(0, source.length - maxMessages);
+    const windowed = source.slice(startIndex);
+    const latestIndex = windowed.length - 1;
+    const shouldKeepInlineData = iteration === 0;
+    const entries = [];
+    let totalChars = 0;
+    windowed.forEach((message, index) => {
+      const includeInlineData =
+        shouldKeepInlineData && index === latestIndex && message?.role === "user";
+      const normalized = this.sanitizeMessageForRequest(message, { includeInlineData });
+      if (!normalized) {
+        return;
+      }
+      const size = this.estimateRequestMessageSize(normalized);
+      entries.push({ message: normalized, size });
+      totalChars += size;
+    });
+    while (entries.length > 1 && totalChars > maxChars) {
+      const removed = entries.shift();
+      totalChars -= removed?.size ?? 0;
+    }
+    while (entries.length > 1 && entries[0]?.message?.role === "tool") {
+      const removed = entries.shift();
+      totalChars -= removed?.size ?? 0;
+    }
+    return entries.map((entry) => entry.message);
+  }
+
   async run({ message, parts, context, conversationId = "default" }) {
     const targetConversationId =
       typeof conversationId === "string" && conversationId.trim()
@@ -1485,6 +1758,8 @@ class AgentService {
 
     this.sendStatus("running", this.buildProgressMessage("準備中"), targetConversationId);
     const settings = await this.ensureUserSettings().getAgentSettings();
+    const chatModel = this.resolveChatModel(settings);
+    const maxOutputTokens = this.resolveMaxOutputTokens(settings);
     const policy = this.resolveAgentPolicy(settings);
     const options = this.resolveAgentOptions(settings);
     this.contextByConversation.set(targetConversationId, context ?? {});
@@ -1516,12 +1791,35 @@ class AgentService {
     const tools = [{ functionDeclarations }];
     const generationConfig = {
       temperature: settings.temperature ?? 0.2,
+      maxOutputTokens,
     };
 
     this.sendStatus("running", this.buildProgressMessage("文脈整理中"), targetConversationId);
     const run = this.startConversationRun(targetConversationId);
 
     const isCurrentRun = () => this.isRunCurrent(targetConversationId, run.token);
+    const callAiChat = async (payload, signal, onDelta) => {
+      if (this.requestAiChat) {
+        return this.requestAiChat(
+          {
+            ...payload,
+            stream: Boolean(onDelta),
+          },
+          { signal, onDelta }
+        );
+      }
+      return requestGemini({
+        proxyUrl: resolvedProxyUrl,
+        model: payload.model,
+        contents: payload.contents,
+        systemInstruction: payload.systemInstruction,
+        tools: payload.tools,
+        toolConfig: payload.toolConfig,
+        generationConfig: payload.generationConfig,
+        signal,
+        onDelta,
+      });
+    };
 
     try {
       for (let i = 0; i < options.maxIterations; i += 1) {
@@ -1542,52 +1840,50 @@ class AgentService {
                   }
                 }
               : null;
-          const response = await requestGemini({
-            proxyUrl: resolvedProxyUrl,
-            contents: conversation,
-            systemInstruction: { parts: [{ text: systemPrompt }] },
-            tools,
-            toolConfig: { functionCallingConfig: { mode: "AUTO" } },
-            generationConfig,
-            signal: run.controller.signal,
-            onDelta: handleDelta,
-          });
+          const requestContents = this.buildRequestContents(conversation, i, settings);
+          if (!Array.isArray(requestContents) || requestContents.length === 0) {
+            throw new Error("送信可能な会話コンテキストがありません。");
+          }
+          const response = await callAiChat(
+            {
+              model: chatModel,
+              contents: requestContents,
+              systemInstruction: { parts: [{ text: systemPrompt }] },
+              tools,
+              toolConfig: { functionCallingConfig: { mode: "AUTO" } },
+              generationConfig,
+            },
+            run.controller.signal,
+            handleDelta
+          );
 
           try {
-            const usage = response?.usageMetadata ?? response?.usage ?? null;
+            const usage = this.extractUsageMetadata(response);
             if (usage && this.apiUsageService) {
-              const promptTokens =
-                usage.promptTokenCount ??
-                usage.promptTokens ??
-                usage.inputTokenCount ??
-                usage.input_tokens;
-              const outputTokens =
-                usage.candidatesTokenCount ??
-                usage.outputTokenCount ??
-                usage.outputTokens ??
-                usage.output_tokens;
-              const totalTokens =
-                usage.totalTokenCount ??
-                usage.totalTokens ??
-                (Number.isFinite(promptTokens) && Number.isFinite(outputTokens)
-                  ? promptTokens + outputTokens
-                  : undefined);
               const snapshot = await this.apiUsageService.recordUsage({
-                model: response?.modelVersion ?? response?.model ?? "gemini-3-flash-preview",
-                promptTokens,
-                outputTokens,
-                totalTokens,
+                model: resolveResponseModel(response) || "unknown",
+                promptTokens: usage.promptTokenCount,
+                outputTokens: usage.candidatesTokenCount,
+                totalTokens: usage.totalTokenCount,
                 source: "agent",
               });
               if (snapshot) {
                 this.sendToRenderer("api:usage", { snapshot });
               }
             }
+            const platformUsage = this.buildPlatformUsageFromQuota(
+              response?.quota ?? response?.output?.quota ?? null,
+              response?.plan ?? null,
+              "chat"
+            );
+            if (platformUsage) {
+              this.sendToRenderer("platform:usage", platformUsage);
+            }
           } catch {
             // ignore usage recording failures
           }
 
-          const candidate = response?.candidates?.[0]?.content ?? null;
+          const candidate = this.normalizeModelCandidate(response);
           const parts = candidate?.parts ?? [];
           const functionCalls = parts.filter((part) => part.functionCall);
           const textParts = parts

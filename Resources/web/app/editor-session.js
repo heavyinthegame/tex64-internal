@@ -481,7 +481,7 @@ export const initEditorSession = (context, deps) => {
         jumpDecorationClassNames[group.key] = null;
     };
     const revealLine = (group, line, options = {}) => {
-        var _a;
+        var _a, _b, _c, _d;
         const monacoApi = deps.getMonacoApi();
         if (!group.editor || !monacoApi) {
             return;
@@ -489,10 +489,27 @@ export const initEditorSession = (context, deps) => {
         clearJumpHighlight(group);
         const monacoApiAny = monacoApi;
         const editor = group.editor;
-        const className = (_a = options.className) !== null && _a !== void 0 ? _a : "jump-line-highlight";
+        const normalizedLine = Number.isFinite(line) ? Math.max(1, Math.trunc(line)) : 1;
+        const normalizedColumn = Number.isFinite(options.column) && ((_a = options.column) !== null && _a !== void 0 ? _a : 0) > 0
+            ? Math.trunc((_b = options.column) !== null && _b !== void 0 ? _b : 1)
+            : 1;
+        let lineNumber = normalizedLine;
+        let columnNumber = normalizedColumn;
+        const model = (_c = editor.getModel) === null || _c === void 0 ? void 0 : _c.call(editor);
+        if (model) {
+            const maxLine = model.getLineCount();
+            if (Number.isFinite(maxLine) && maxLine >= 1) {
+                lineNumber = Math.min(normalizedLine, maxLine);
+            }
+            const maxColumn = model.getLineMaxColumn(lineNumber);
+            if (Number.isFinite(maxColumn) && maxColumn >= 1) {
+                columnNumber = Math.min(normalizedColumn, maxColumn);
+            }
+        }
+        const className = (_d = options.className) !== null && _d !== void 0 ? _d : "jump-line-highlight";
         jumpDecorations[group.key] = editor.deltaDecorations(jumpDecorations[group.key], [
             {
-                range: new monacoApiAny.Range(line, 1, line, 1),
+                range: new monacoApiAny.Range(lineNumber, 1, lineNumber, 1),
                 options: {
                     isWholeLine: true,
                     className,
@@ -500,8 +517,8 @@ export const initEditorSession = (context, deps) => {
             },
         ]);
         jumpDecorationClassNames[group.key] = className;
-        editor.revealLineInCenter(line);
-        editor.setPosition({ lineNumber: line, column: 1 });
+        editor.revealLineInCenter(lineNumber);
+        editor.setPosition({ lineNumber, column: columnNumber });
         if (options.focus !== false) {
             editor.focus();
         }
@@ -916,17 +933,18 @@ export const initEditorSession = (context, deps) => {
         const forceOpen = options.force === true;
         const focus = options.focus;
         const className = options.className;
+        const column = options.column;
         const targetGroupKey = forceOpen
             ? groupKey
             : resolveOpenTargetGroupKey(path, groupKey);
         const targetGroup = getEditorGroup(targetGroupKey);
         if (targetGroup.currentFilePath === path) {
-            revealLine(targetGroup, line, { focus, className });
+            revealLine(targetGroup, line, { focus, className, column });
             return;
         }
         const requested = requestOpenFile(path, targetGroupKey, forceOpen);
         if (requested) {
-            fileOpsState.pendingReveal = { path, line, group: targetGroupKey, focus, className };
+            fileOpsState.pendingReveal = { path, line, column, group: targetGroupKey, focus, className };
         }
     };
     const jumpToLocation = (entry) => {

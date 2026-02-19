@@ -1,6 +1,7 @@
 import { registerCompletionProvider } from "./monaco-completion.js";
 import { registerHoverProvider, } from "./monaco-hover.js";
 import { createInlineCompletionController } from "./monaco-inline.js";
+import { registerTexLanguages } from "./monaco-language.js";
 import { applyMonacoTheme } from "./monaco-theme.js";
 export const initMonacoSetup = (context, deps) => {
     const { editorHost, editorHostSecondary } = context.dom;
@@ -59,6 +60,7 @@ export const initMonacoSetup = (context, deps) => {
             return;
         }
         deps.setMonacoApi(monacoWindow.monaco);
+        registerTexLanguages(monacoWindow.monaco);
         registerCompletionProvider(monacoWindow.monaco, {
             getActiveFilePath: deps.editorSession.getActiveFilePath,
             getIndexLabels: deps.getIndexLabels,

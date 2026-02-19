@@ -32,7 +32,7 @@ const run = async () => {
       args: ["."],
       cwd: repoRoot,
       slowMo: 60,
-      env: { ...process.env },
+      env: { ...process.env, TEX64_E2E_HEADLESS: "1" },
     });
     const page = await app.firstWindow();
     await page.setViewportSize({ width: 1640, height: 980 });

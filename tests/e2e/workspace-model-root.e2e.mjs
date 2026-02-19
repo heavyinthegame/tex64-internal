@@ -25,6 +25,64 @@ const pause = async (ms = stepDelayMs) => {
   await new Promise((resolve) => setTimeout(resolve, ms));
 };
 
+const allowE2EQuit = async (app) => {
+  if (!app) {
+    return;
+  }
+  await app
+    .evaluate(() => {
+      global.__tex64E2EAllowQuit = true;
+    })
+    .catch(() => {});
+};
+
+const installE2EQuitGuard = async (app) => {
+  if (!app) {
+    return;
+  }
+  await app
+    .evaluate(({ app: electronApp }) => {
+      if (global.__tex64E2EQuitGuardInstalled === true) {
+        return;
+      }
+      global.__tex64E2EQuitGuardInstalled = true;
+      global.__tex64E2EAllowQuit = false;
+      electronApp.on("before-quit", (event) => {
+        if (global.__tex64E2EAllowQuit !== true) {
+          event.preventDefault();
+        }
+      });
+      process.on("SIGTERM", () => {
+        if (global.__tex64E2EAllowQuit === true) {
+          process.exit(0);
+        }
+      });
+    })
+    .catch(() => {});
+};
+
+const closeElectron = async (app) => {
+  if (!app) {
+    return;
+  }
+  await allowE2EQuit(app);
+  try {
+    await Promise.race([
+      app.close(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("electronApp.close timeout")), 6000)
+      ),
+    ]);
+  } catch (error) {
+    log(`close fallback: ${error instanceof Error ? error.message : String(error)}`);
+    try {
+      app.process()?.kill("SIGKILL");
+    } catch {
+      // ignore
+    }
+  }
+};
+
 const toPosix = (value) => value.split(path.sep).join("/");
 
 const createWorkspaceScenario = async (workspacePath) => {
@@ -113,12 +171,14 @@ const launchApp = async ({ userDataPath, workspacePath }) => {
     env: {
       ...process.env,
       TEX64_E2E: "1",
+        TEX64_E2E_HEADLESS: "1",
       TEX64_E2E_USERDATA: userDataPath,
       TEX64_E2E_DIALOG_QUEUE: JSON.stringify({
         openWorkspace: [toPosix(workspacePath)],
       }),
     },
   });
+  await installE2EQuitGuard(app);
   const page = await app.firstWindow();
   await page.setViewportSize({ width: 1600, height: 980 });
   await page.waitForSelector("body.is-ready", { timeout: 20000 });
@@ -300,7 +360,7 @@ const run = async () => {
     log("workspace model root e2e passed");
   } finally {
     if (app) {
-      await app.close().catch(() => {});
+      await closeElectron(app).catch(() => {});
     }
     if (!keepWorkspace) {
       await fs.rm(tempDir, { recursive: true, force: true });
@@ -311,7 +371,34 @@ const run = async () => {
   }
 };
 
-run().catch((error) => {
+const isTransientElectronError = (error) => {
+  const message = error?.message ?? String(error);
+  return (
+    message.includes("Target page, context or browser has been closed") ||
+    message.includes("Target closed") ||
+    message.includes("Process failed to launch")
+  );
+};
+
+const runWithRetry = async () => {
+  let lastError = null;
+  for (let attempt = 1; attempt <= 5; attempt += 1) {
+    try {
+      await run();
+      return;
+    } catch (error) {
+      lastError = error;
+      if (!isTransientElectronError(error) || attempt >= 5) {
+        throw error;
+      }
+      log(`transient error detected, retrying (${attempt}/5)`);
+      await pause(320);
+    }
+  }
+  throw lastError;
+};
+
+runWithRetry().catch((error) => {
   console.error("[workspace-model-e2e] failed:", error);
   process.exitCode = 1;
 });

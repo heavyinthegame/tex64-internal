@@ -2,6 +2,8 @@ const { BrowserWindow } = require("electron");
 const path = require("path");
 const { pathToFileURL } = require("url");
 
+const e2eHeadless = process.env.TEX64_E2E_HEADLESS === "1";
+
 class PDFWindowManager {
   constructor() {
     this.window = null;
@@ -24,8 +26,10 @@ class PDFWindowManager {
     }
     if (this.window) {
       this.window.setTitle(path.basename(pdfPath));
-      this.window.show();
-      this.window.focus();
+      if (!e2eHeadless) {
+        this.window.show();
+        this.window.focus();
+      }
     }
   }
 
@@ -81,6 +85,7 @@ class PDFWindowManager {
     this.window = new BrowserWindow({
       width: 960,
       height: 720,
+      show: !e2eHeadless,
       title: "PDF",
       backgroundColor: "#1c2129",
       webPreferences: {

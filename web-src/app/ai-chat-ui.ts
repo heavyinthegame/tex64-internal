@@ -5,6 +5,11 @@ import type {
   AgentStatusState,
   IssueItem,
   IssuesStatus,
+  PlatformAiAccessSnapshot,
+  PlatformAuthSnapshot,
+  PlatformQuotaSummary,
+  PlatformUsageSnapshot,
+  PlatformUpdateSnapshot,
 } from "./types.js";
 import { getIssueResolution } from "./issue-resolution.js";
 import type { DiffContext } from "./diff-modal.js";
@@ -17,6 +22,7 @@ import {
 } from "./ai-chat-state.js";
 import { createMessageElement, updateMessageElement } from "./ai-chat-message.js";
 import { createProposalCard } from "./ai-chat-proposal.js";
+import { TEX64_LINKS } from "./platform-links.js";
 
 type AiChatDeps = {
   postToNative: (payload: { type: string; [key: string]: unknown }, silent?: boolean) => boolean;
@@ -52,26 +58,53 @@ export type AiChatApi = {
   handleApplyResult: (payload: { proposalId: string; ok: boolean; error?: string; conflict?: boolean }) => void;
   handleUndoResult: (payload: { ok: boolean; message?: string; path?: string; conversationId?: string }) => void;
   handleError: (message: string, conversationId?: string) => void;
+  handlePlatformAuth: (payload: {
+    auth: PlatformAuthSnapshot;
+    error?: { code?: string; message?: string };
+  }) => void;
+  handlePlatformAiAccess: (payload: { source?: string; access: PlatformAiAccessSnapshot }) => void;
+  handlePlatformUsage: (payload: { source?: string; usage: PlatformUsageSnapshot }) => void;
+  handlePlatformUpdate: (payload: {
+    source?: string;
+    update: PlatformUpdateSnapshot | null;
+    error?: { code?: string; message?: string };
+  }) => void;
   applyPendingFromDiffModal: () => void;
   clearPending: () => void;
 };
 
-const MAX_ACTIVE_FILE_CONTEXT_CHARS = 12000;
-const MAX_OPEN_FILE_CONTEXT_CHARS = 12000;
-const MAX_SELECTION_CONTEXT_CHARS = 6000;
-const MAX_OPEN_FILE_SNAPSHOTS = Number.POSITIVE_INFINITY;
+const MAX_ACTIVE_FILE_CONTEXT_CHARS = 10000;
+const MAX_OPEN_FILE_CONTEXT_CHARS = 8000;
+const MAX_SELECTION_CONTEXT_CHARS = 4000;
+const MAX_OPEN_FILE_SNAPSHOTS = 4;
+const MAX_OPEN_FILES_METADATA = 12;
 const MAX_RECENT_ISSUES = 5;
 const AUTONOMOUS_LOOP_LIMIT = 8;
 const AUTONOMOUS_CONTINUE_DELAY_MS = 120;
 const MAX_IMAGE_ATTACHMENTS = 4;
 const MAX_IMAGE_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 const MAX_IMAGE_ATTACHMENT_TOTAL_BYTES = 8 * 1024 * 1024;
+const AI_ACCESS_STALE_MS = 60_000;
+const USAGE_REFRESH_DELAY_MS = 300;
+const LOCAL_FALLBACK_NOTE =
+  "AIが利用できない間も、編集・ビルド・保存などローカル機能は利用できます。";
 
 type AiImageAttachment = {
   mimeType: string;
   data: string;
   name: string;
   size: number;
+};
+
+type AiRequestPart = {
+  text?: string;
+  inlineData?: { mimeType: string; data: string };
+};
+
+type PendingAiRequest = {
+  message: string;
+  parts?: AiRequestPart[];
+  contextPayload?: Record<string, unknown>;
 };
 
 export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi => {
@@ -90,9 +123,198 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
   const continueAfterApply = new Set<string>();
   const streamingMessages = new Map<string, { message: ChatMessage; element: HTMLElement | null }>();
   const thinkingMessages = new Map<string, { text: string; element: HTMLElement | null }>();
+  const pendingAgentRequests = new Map<string, PendingAiRequest>();
   let pendingAttachments: AiImageAttachment[] = [];
+  let platformAuth: PlatformAuthSnapshot | null = null;
+  let platformAiAccess: PlatformAiAccessSnapshot | null = null;
+  let platformUsage: PlatformUsageSnapshot | null = null;
+  let platformError: { code?: string; message?: string } | null = null;
+  let usageRefreshTimer: number | null = null;
+  let requestedInitialUsage = false;
 
   const makeChatId = () => `chat-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`;
+  const numberFormat = new Intl.NumberFormat("en-US");
+  const PLAN_LABELS: Record<string, string> = {
+    free: "Free",
+    basic: "Basic",
+    pro: "Pro",
+  };
+
+  const requestPlatformState = () => {
+    deps.postToNative({ type: "platform:state:get" }, true);
+  };
+  const requestAiAccessCheck = (force = false) => {
+    deps.postToNative({ type: "feature:check", names: ["ai"], force }, true);
+  };
+  const requestPlatformUsage = (force = false) => {
+    deps.postToNative({ type: "platform:usage:get", force }, true);
+  };
+  const openPricingPage = () => {
+    const url =
+      platformAiAccess?.pricingUrl ??
+      platformAuth?.pricingUrl ??
+      TEX64_LINKS.pricing;
+    deps.postToNative({ type: "shell:openExternal", url }, true);
+  };
+  const formatTokens = (value?: number | null) =>
+    Number.isFinite(value) ? numberFormat.format(Math.max(0, Math.round(value as number))) : "0";
+  const formatDate = (iso?: string | null) => {
+    if (!iso) return "";
+    const timestamp = Date.parse(iso);
+    if (!Number.isFinite(timestamp)) return "";
+    const date = new Date(timestamp);
+    const year = date.getFullYear();
+    const month = `${date.getMonth() + 1}`.padStart(2, "0");
+    const day = `${date.getDate()}`.padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+  const formatPlan = (plan?: string | null) => {
+    if (!plan || typeof plan !== "string") {
+      return "未設定";
+    }
+    return PLAN_LABELS[plan] ?? plan;
+  };
+  const parseCounter = (value: unknown, fallback = Number.NaN) => {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+    if (typeof value === "string" && value.trim()) {
+      const parsed = Number.parseFloat(value);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+    return fallback;
+  };
+  const normalizeQuotaSummary = (quota?: PlatformQuotaSummary | null): PlatformQuotaSummary | null => {
+    if (!quota || typeof quota !== "object") {
+      return null;
+    }
+    const limitTokens = Math.max(0, Math.round(parseCounter(quota.limitTokens, 0)));
+    const usedTokens = Math.max(0, Math.round(parseCounter(quota.usedTokens, 0)));
+    const maxRemainingTokens = Math.max(0, limitTokens - usedTokens);
+    const rawRemainingTokens = parseCounter(quota.remainingTokens, Number.NaN);
+    const normalizedRemainingTokens = Number.isFinite(rawRemainingTokens)
+      ? Math.max(0, Math.round(rawRemainingTokens))
+      : maxRemainingTokens;
+    return {
+      limitTokens,
+      usedTokens,
+      remainingTokens: Math.min(normalizedRemainingTokens, maxRemainingTokens),
+      usedRequests: Math.max(0, Math.round(parseCounter(quota.usedRequests, 0))),
+      remainingRequests: Math.max(0, Math.round(parseCounter(quota.remainingRequests, 0))),
+      periodStart: typeof quota.periodStart === "string" ? quota.periodStart : null,
+      periodEnd: typeof quota.periodEnd === "string" ? quota.periodEnd : null,
+    };
+  };
+  const normalizeUsageSnapshot = (
+    usage?: PlatformUsageSnapshot | null
+  ): PlatformUsageSnapshot | null => {
+    if (!usage || typeof usage !== "object") {
+      return null;
+    }
+    return {
+      ...usage,
+      summary: normalizeQuotaSummary(usage.summary),
+      fetchedAt:
+        typeof usage.fetchedAt === "number" && Number.isFinite(usage.fetchedAt)
+          ? usage.fetchedAt
+          : Date.now(),
+    };
+  };
+  const scheduleUsageRefresh = (force = true) => {
+    if (usageRefreshTimer !== null) {
+      window.clearTimeout(usageRefreshTimer);
+      usageRefreshTimer = null;
+    }
+    usageRefreshTimer = window.setTimeout(() => {
+      usageRefreshTimer = null;
+      requestPlatformUsage(force);
+    }, USAGE_REFRESH_DELAY_MS);
+  };
+  const isAccessFresh = () => {
+    const fetchedAt = platformAiAccess?.fetchedAt;
+    if (!Number.isFinite(fetchedAt)) {
+      return false;
+    }
+    return Date.now() - (fetchedAt as number) <= AI_ACCESS_STALE_MS;
+  };
+  const isAiBlocked = () =>
+    Boolean(platformAiAccess && platformAiAccess.allowed === false && isAccessFresh());
+  const needsLogin = () =>
+    Boolean(
+      (platformAiAccess &&
+        platformAiAccess.allowed === false &&
+        (!platformAiAccess.authenticated ||
+          platformAiAccess.reason === "AUTH_REQUIRED" ||
+          platformAiAccess.reason === "TOKEN_EXPIRED") &&
+        isAccessFresh())
+    );
+
+  type StatusAction =
+    | "login"
+    | "pricing"
+    | "refresh"
+    | "signout";
+
+  const withUtilityActions = (actions?: Array<{ action: StatusAction; label: string }>) => {
+    return Array.isArray(actions) ? [...actions] : [];
+  };
+
+  const mergeDetailWithUpdate = (detail?: string) => {
+    return detail ?? "";
+  };
+  const withLocalFallbackDetail = (detail?: string) => {
+    if (!detail) {
+      return LOCAL_FALLBACK_NOTE;
+    }
+    if (detail.includes(LOCAL_FALLBACK_NOTE)) {
+      return detail;
+    }
+    return `${detail} · ${LOCAL_FALLBACK_NOTE}`;
+  };
+
+  const renderStatus = (
+    headline: string,
+    detail?: string,
+    actions?: Array<{ action: StatusAction; label: string }>
+  ) => {
+    if (!(aiStatus instanceof HTMLElement)) {
+      return;
+    }
+    aiStatus.replaceChildren();
+    aiStatus.classList.remove("ai-status--error");
+    aiStatus.classList.remove("ai-status--warn");
+    aiStatus.classList.remove("ai-status--ok");
+    if (!headline && !detail) {
+      aiStatus.style.display = "none";
+      return;
+    }
+    aiStatus.style.display = "block";
+    const head = document.createElement("div");
+    head.className = "ai-status-line";
+    head.textContent = headline;
+    aiStatus.appendChild(head);
+    if (detail) {
+      const body = document.createElement("div");
+      body.className = "ai-status-detail";
+      body.textContent = detail;
+      aiStatus.appendChild(body);
+    }
+    if (Array.isArray(actions) && actions.length > 0) {
+      const actionWrap = document.createElement("div");
+      actionWrap.className = "ai-status-actions";
+      actions.forEach((item) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "ai-status-action";
+        button.dataset.aiStatusAction = item.action;
+        button.textContent = item.label;
+        actionWrap.appendChild(button);
+      });
+      aiStatus.appendChild(actionWrap);
+    }
+  };
 
   // ── Helpers ───────────────────────────────────────────
   const getChat = (chatId?: string | null) => getChatState(chatIndex, activeChatId, chatId);
@@ -395,8 +617,113 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
   };
 
   const updateStatusDisplay = () => {
-    if (!(aiStatus instanceof HTMLElement)) return;
-    aiStatus.textContent = "";
+    const active = getChat(activeChatId);
+    const isRunning = Boolean(active && runningConversations.has(active.id));
+    if (isRunning) {
+      renderStatus(
+        "AI実行中...",
+        mergeDetailWithUpdate("処理が終わるまでお待ちください。"),
+        withUtilityActions()
+      );
+      return;
+    }
+    const actions: Array<{
+      action: StatusAction;
+      label: string;
+    }> = [];
+    if (platformAuth?.authenticated) {
+      actions.push({ action: "refresh", label: "使用量を更新" });
+      actions.push({ action: "signout", label: "ログアウト" });
+    }
+
+    if (isAiBlocked()) {
+      const reason = platformAiAccess?.reason ?? "";
+      if (needsLogin()) {
+        renderStatus(
+          "AI機能を使うにはログインが必要です。",
+          mergeDetailWithUpdate(withLocalFallbackDetail("Google OAuthで認証してください。")),
+          withUtilityActions([{ action: "login", label: "Googleでログイン" }])
+        );
+        return;
+      }
+      if (reason === "QUOTA_EXCEEDED") {
+        const quota = platformAiAccess?.quota ?? null;
+        const periodEnd = formatDate(platformAiAccess?.periodEnd ?? quota?.periodEnd);
+        const detail = quota
+          ? `使用済み ${formatTokens(quota.usedTokens)} / ${formatTokens(
+              quota.limitTokens
+            )} tokens${periodEnd ? ` · 期間終了 ${periodEnd}` : ""}`
+          : "今月のトークン上限に達しました。";
+        renderStatus(
+          "今月のAIトークン上限に達しました。",
+          mergeDetailWithUpdate(withLocalFallbackDetail(detail)),
+          withUtilityActions([
+            { action: "pricing", label: "プランを見る" },
+            { action: "refresh", label: "再確認" },
+          ])
+        );
+        return;
+      }
+      renderStatus(
+        "現在の契約状態ではAI機能を利用できません。",
+        mergeDetailWithUpdate(
+          withLocalFallbackDetail(platformAiAccess?.message ?? "契約状態を確認してください。")
+        ),
+        withUtilityActions([
+          { action: "pricing", label: "プランを見る" },
+          { action: "refresh", label: "再確認" },
+        ])
+      );
+      return;
+    }
+
+    if (platformError?.message) {
+      const isOffline = typeof navigator !== "undefined" && navigator.onLine === false;
+      renderStatus(
+        isOffline ? "オフラインです。ネットワーク接続を確認してください。" : platformError.message,
+        mergeDetailWithUpdate(withLocalFallbackDetail(isOffline ? platformError.message : "")),
+        withUtilityActions([{ action: "refresh", label: "再試行" }])
+      );
+      return;
+    }
+
+    const usageSummary = normalizeQuotaSummary(
+      platformUsage?.summary ?? platformAiAccess?.quota ?? null
+    );
+    if (usageSummary) {
+      const plan = formatPlan(platformUsage?.plan ?? platformAiAccess?.plan ?? platformAuth?.plan);
+      const periodEnd = formatDate(
+        usageSummary.periodEnd ?? platformAiAccess?.periodEnd ?? null
+      );
+      const headline = `Plan ${plan} · ${formatTokens(usageSummary.usedTokens)} / ${formatTokens(
+        usageSummary.limitTokens
+      )} tokens`;
+      const detail = `残り ${formatTokens(usageSummary.remainingTokens)} tokens${
+        periodEnd ? ` · 期間終了 ${periodEnd}` : ""
+      }`;
+      renderStatus(headline, mergeDetailWithUpdate(detail), withUtilityActions(actions));
+      return;
+    }
+
+    if (platformAuth?.pending) {
+      renderStatus(
+        "Googleログイン待ちです。",
+        mergeDetailWithUpdate("ブラウザ認証後にこのアプリへ戻ってください。"),
+        withUtilityActions()
+      );
+      return;
+    }
+
+    if (platformAuth && !platformAuth.authenticated) {
+      renderStatus(
+        "AI機能はログイン後に利用できます。",
+        mergeDetailWithUpdate(withLocalFallbackDetail()),
+        withUtilityActions([{ action: "login", label: "Googleでログイン" }])
+      );
+      return;
+    }
+
+    renderStatus("", mergeDetailWithUpdate(""), withUtilityActions());
   };
 
   // ── Context Builders ──────────────────────────────────
@@ -447,7 +774,14 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
   const buildOpenFilesContext = () => {
     const maxChars = resolveMaxChars(agentSettings?.openFileMaxChars, MAX_OPEN_FILE_CONTEXT_CHARS);
     const s = deps.getOpenFileSnapshots?.({ maxFiles: MAX_OPEN_FILE_SNAPSHOTS, maxChars });
-    return s ? { openFiles: s.files, openFileSnapshots: s.snapshots } : {};
+    if (!s) {
+      return {};
+    }
+    const files =
+      s.files.length > MAX_OPEN_FILES_METADATA
+        ? s.files.slice(0, MAX_OPEN_FILES_METADATA)
+        : s.files;
+    return { openFiles: files, openFileSnapshots: s.snapshots };
   };
 
   const buildIssuesContext = () => {
@@ -642,36 +976,87 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
     scrollToBottom();
   };
 
+  const restoreDraftFromPending = (chatId: string, request: PendingAiRequest | null) => {
+    if (!request || chatId !== activeChatId) {
+      return;
+    }
+    if (!(aiInput instanceof HTMLTextAreaElement)) {
+      return;
+    }
+    if ((aiInput.value ?? "").trim().length > 0) {
+      return;
+    }
+    const restored = typeof request.message === "string" ? request.message : "";
+    if (!restored.trim()) {
+      return;
+    }
+    aiInput.value = restored;
+    autoGrow();
+    aiInput.focus();
+    appendMessage(
+      {
+        role: "system",
+        text: "送信できなかった入力を復元しました。内容を確認して再送信してください。",
+      },
+      chatId
+    );
+  };
+
   // ── Agent Communication ───────────────────────────────
   const requestAgentRun = (
     chatId: string,
     message: string,
-    parts?: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }>,
+    parts?: AiRequestPart[],
     contextPayload?: Record<string, unknown>
   ) => {
+    if (isAiBlocked() || needsLogin()) {
+      requestAiAccessCheck(true);
+      requestPlatformUsage(true);
+      updateStatusDisplay();
+      return false;
+    }
     const hasText = typeof message === "string" && message.trim().length > 0;
     const hasParts = Array.isArray(parts) && parts.length > 0;
     if (!hasText && !hasParts) return false;
     const chat = ensureChat(chatId);
     if (!chat) return false;
     if (runningConversations.has(chat.id)) return false;
+    const contextToSend = contextPayload ?? buildContextPayload();
+    pendingAgentRequests.set(chat.id, {
+      message,
+      parts: Array.isArray(parts) ? parts : undefined,
+      contextPayload: contextToSend,
+    });
     chat.statusMessage = "思考中...";
     runningConversations.add(chat.id);
     upsertThinkingMessage(chat.id, chat.statusMessage);
     renderHistoryList();
     updateSendState();
     updateStatusDisplay();
-    deps.postToNative({
+    const posted = deps.postToNative({
       type: "agent:run", message, parts, conversationId: chat.id,
-      context: contextPayload ?? buildContextPayload(),
+      context: contextToSend,
     });
+    if (!posted) {
+      runningConversations.delete(chat.id);
+      chat.statusMessage = "";
+      clearThinkingMessage(chat.id);
+      const pending = pendingAgentRequests.get(chat.id) ?? null;
+      pendingAgentRequests.delete(chat.id);
+      restoreDraftFromPending(chat.id, pending);
+      renderHistoryList();
+      updateSendState();
+      updateStatusDisplay();
+      return false;
+    }
     return true;
   };
 
   const buildAutonomousContinueMessage = () => [
-    "執筆を自律的に継続してください。",
-    "前進に必要なまとまった変更を自分で判断し、必要なら検証も実行してください。",
-    "変更提案は必要に応じて複数箇所をまとめて提示してください。",
+    "直前のユーザー指示と会話の目的を最優先して、自律的に継続してください。",
+    "まず run_build で検証してください。",
+    "ビルドが失敗した場合: 失敗理由を特定し、必要最小限の修正提案だけを出してください（軽微な気になる点は無理に直さない）。",
+    "ビルドが成功した場合: 次に進むための提案を1つだけ出してください（闇雲な大規模変更はしない）。",
   ].join("\n");
 
   const maybeContinueAutonomous = (chatId?: string | null, forceOnce = false) => {
@@ -689,6 +1074,12 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
     const text = aiInput.value.trim();
     const hasAttachments = pendingAttachments.length > 0;
     if (!text && !hasAttachments) return;
+    if (isAiBlocked() || needsLogin()) {
+      requestAiAccessCheck(true);
+      requestPlatformUsage(true);
+      updateStatusDisplay();
+      return;
+    }
 
     if (!activeChatId) { const c = createChat(); activeChatId = c.id; }
     const chat = getChat(activeChatId);
@@ -706,7 +1097,7 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
     aiInput.value = "";
     autoGrow();
     updateContextBar();
-    const requestParts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [];
+    const requestParts: AiRequestPart[] = [];
     if (text) {
       requestParts.push({ text });
     }
@@ -748,6 +1139,33 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
       void addImageFiles(aiAttachInput.files);
     });
   }
+  if (aiStatus instanceof HTMLElement) {
+    aiStatus.addEventListener("click", (event) => {
+      const target = event.target as HTMLElement | null;
+      const button = target?.closest<HTMLButtonElement>("[data-ai-status-action]");
+      if (!button) {
+        return;
+      }
+      const action = button.dataset.aiStatusAction;
+      if (action === "login") {
+        deps.postToNative({ type: "auth:google:start" });
+        return;
+      }
+      if (action === "pricing") {
+        openPricingPage();
+        return;
+      }
+      if (action === "refresh") {
+        requestAiAccessCheck(true);
+        requestPlatformUsage(true);
+        return;
+      }
+      if (action === "signout") {
+        deps.postToNative({ type: "auth:signout" });
+        return;
+      }
+    });
+  }
   const attachDropHost = aiAttach instanceof HTMLElement ? aiAttach.closest(".ai-chat-input") : null;
   if (attachDropHost instanceof HTMLElement) {
     attachDropHost.addEventListener("dragover", (event) => {
@@ -772,6 +1190,7 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
       if (!chat) return;
       disableAutonomous(chat.id);
       deps.postToNative({ type: "agent:abort", conversationId: chat.id }, true);
+      pendingAgentRequests.delete(chat.id);
       chat.statusMessage = "";
       runningConversations.delete(chat.id);
       clearThinkingMessage(chat.id);
@@ -804,6 +1223,7 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
       runningConversations.delete(chat.id);
       chat.statusMessage = "";
       clearThinkingMessage(chat.id);
+      scheduleUsageRefresh(true);
     }
     renderHistoryList();
     updateSendState();
@@ -812,6 +1232,9 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
 
   const handleMessage = (text: string, conversationId?: string) => {
     clearThinkingMessage(conversationId);
+    if (conversationId) {
+      pendingAgentRequests.delete(conversationId);
+    }
     if (conversationId && finalizeStreamingMessage(conversationId, text)) scrollToBottom();
     else appendMessage({ role: "assistant", text }, conversationId);
     if (conversationId) {
@@ -822,6 +1245,7 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
     const chat = ensureChat(conversationId);
     if (chat) chat.statusMessage = "";
     updateStatusDisplay();
+    scheduleUsageRefresh(true);
   };
 
   const handleMessageDelta = (text: string, conversationId?: string) => {
@@ -912,21 +1336,112 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
     }
     if (conversationId) streamingMessages.delete(conversationId);
     if (conversationId) {
+      const pending = pendingAgentRequests.get(conversationId) ?? null;
+      pendingAgentRequests.delete(conversationId);
+      restoreDraftFromPending(conversationId, pending);
+    }
+    if (conversationId) {
       runningConversations.delete(conversationId);
       renderHistoryList();
       updateSendState();
     }
     updateStatusDisplay();
+    scheduleUsageRefresh(true);
   };
+
+  const handlePlatformAuth = (payload: {
+    auth: PlatformAuthSnapshot;
+    error?: { code?: string; message?: string };
+  }) => {
+    platformAuth = payload?.auth ?? null;
+    platformError = payload?.error ?? null;
+    if (!platformAuth?.authenticated) {
+      platformAiAccess = null;
+      platformUsage = null;
+      requestedInitialUsage = false;
+    } else if (!platformAuth.pending && !requestedInitialUsage && !payload?.error?.message) {
+      requestedInitialUsage = true;
+      requestAiAccessCheck(false);
+      requestPlatformUsage(false);
+    }
+    updateStatusDisplay();
+  };
+
+  const handlePlatformAiAccess = (payload: {
+    source?: string;
+    access: PlatformAiAccessSnapshot;
+  }) => {
+    const access = payload?.access ?? null;
+    if (!access) {
+      return;
+    }
+    platformAiAccess = access;
+    if (access.allowed) {
+      platformError = null;
+    }
+    if (
+      access.quota &&
+      (!platformUsage?.summary ||
+        payload?.source === "auth" ||
+        payload?.source === "manual" ||
+        payload?.source === "chat")
+    ) {
+      const usageFromAccess = normalizeUsageSnapshot({
+        authenticated: Boolean(access.authenticated),
+        plan: access.plan ?? null,
+        period: null,
+        summary: access.quota,
+        byFeature: platformUsage?.byFeature ?? null,
+        errorCode: access.allowed ? null : access.reason ?? null,
+        message: access.message ?? null,
+        fetchedAt: access.fetchedAt ?? Date.now(),
+      });
+      if (usageFromAccess) {
+        const currentFetchedAt =
+          typeof platformUsage?.fetchedAt === "number" && Number.isFinite(platformUsage.fetchedAt)
+            ? platformUsage.fetchedAt
+            : 0;
+        const nextFetchedAt =
+          typeof usageFromAccess.fetchedAt === "number" &&
+          Number.isFinite(usageFromAccess.fetchedAt)
+            ? usageFromAccess.fetchedAt
+            : Date.now();
+        if (!platformUsage || nextFetchedAt >= currentFetchedAt) {
+          platformUsage = usageFromAccess;
+        }
+      }
+    }
+    updateStatusDisplay();
+  };
+
+  const handlePlatformUsage = (payload: {
+    source?: string;
+    usage: PlatformUsageSnapshot;
+  }) => {
+    platformUsage = normalizeUsageSnapshot(payload?.usage ?? null);
+    if (!platformUsage?.errorCode) {
+      platformError = null;
+    }
+    updateStatusDisplay();
+  };
+
+  const handlePlatformUpdate = (_payload: {
+    source?: string;
+    update: PlatformUpdateSnapshot | null;
+    error?: { code?: string; message?: string };
+  }) => {};
 
   // ── Init ──────────────────────────────────────────────
   resetToNewChatState();
   updateContextBar();
   renderAttachmentBar();
+  requestPlatformState();
 
   return {
     handleSettings, handleStatus, handleMessage, handleMessageDelta, handleTool,
     handleProposal, handleApplyResult, handleUndoResult, handleError,
+    handlePlatformAuth, handlePlatformAiAccess, handlePlatformUsage,
+    handlePlatformUpdate,
     applyPendingFromDiffModal: () => { if (pendingAiProposalId) { deps.postToNative({ type: "agent:apply", proposalId: pendingAiProposalId }); pendingAiProposalId = null; } },
     clearPending: () => { pendingAiProposalId = null; },
   };

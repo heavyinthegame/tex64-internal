@@ -5,6 +5,7 @@ export const initBuildOpsUi = (context, deps) => {
     let formatWarningShown = false;
     let formatInFlightSnapshot = null;
     let currentBuildLog = null;
+    let currentBuildState = "idle";
     let synctexForwardRequestOrder = 0;
     let synctexForwardLastAppliedOrder = 0;
     let synctexManualPriorityUntil = 0;
@@ -137,12 +138,14 @@ export const initBuildOpsUi = (context, deps) => {
     };
     const setBuildState = (state, message) => {
         var _a, _b;
+        currentBuildState = state;
         const isBusy = state === "building";
         if (buildButton instanceof HTMLButtonElement) {
-            buildButton.disabled = isBusy;
+            buildButton.disabled = false;
             buildButton.classList.toggle("is-busy", isBusy);
             buildButton.setAttribute("aria-busy", isBusy ? "true" : "false");
-            buildButton.setAttribute("aria-label", isBusy ? "ビルド中" : "ビルド");
+            buildButton.setAttribute("aria-label", isBusy ? "キャンセル" : "ビルド");
+            buildButton.title = isBusy ? "ビルドをキャンセル" : "ビルド (Cmd+B)";
         }
         if (state === "success") {
             const targetPath = (_b = (_a = deps.getLastBuildMainFile()) !== null && _a !== void 0 ? _a : deps.getRootFilePath()) !== null && _b !== void 0 ? _b : deps.getActiveFilePath();
@@ -167,6 +170,13 @@ export const initBuildOpsUi = (context, deps) => {
     };
     const startBuild = () => {
         var _a, _b;
+        if (currentBuildState === "building") {
+            const ok = deps.postToNative({ type: "build:cancel" });
+            if (ok) {
+                deps.updateIssues(0, "ビルドをキャンセルしています...", "info", []);
+            }
+            return;
+        }
         deps.cacheCurrentBuffer(deps.getActiveGroup());
         const mainFile = (_a = deps.getRootFilePath()) !== null && _a !== void 0 ? _a : (deps.getActiveFilePath() && ((_b = deps.getActiveFilePath()) === null || _b === void 0 ? void 0 : _b.endsWith(".tex"))
             ? deps.getActiveFilePath()
@@ -356,9 +366,6 @@ export const initBuildOpsUi = (context, deps) => {
     const setupActionButtons = () => {
         if (buildButton instanceof HTMLButtonElement) {
             buildButton.addEventListener("click", () => {
-                if (buildButton.disabled) {
-                    return;
-                }
                 startBuild();
             });
         }

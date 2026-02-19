@@ -204,18 +204,6 @@ const findWordToken = (text: string, cursorIndex: number): TokenIndexMatch | nul
   return { token, range: { start, end: cursorIndex }, kind: "word" };
 };
 
-const buildRawCommandCandidate = (token: string, priority: number): Candidate => {
-  const normalized = token.trim();
-  const latex = `\\${normalized}`;
-  return {
-    id: `raw-command:${normalized.toLowerCase()}`,
-    key: getKeyByLatex(latex, latex, latex),
-    label: latex,
-    hint: "入力コマンド",
-    priority,
-  };
-};
-
 export const initMathWysiwyg = (deps: MathWysiwygDeps): MathWysiwygApi => {
   let autoSuggest = deps.autoSuggest ?? true;
   let enabledPacks = new Set(deps.enabledPacks ?? []);
@@ -803,6 +791,8 @@ export const initMathWysiwyg = (deps: MathWysiwygDeps): MathWysiwygApi => {
         ? EXPLICIT_WORD_MIN_LENGTH
         : tokenMatch.kind === "command"
         ? AUTO_COMMAND_MIN_LENGTH
+        : isCommandToken(tokenMatch.token)
+        ? AUTO_COMMAND_MIN_LENGTH
         : AUTO_WORD_ALLOWLIST.has(normalized)
         ? 2
         : AUTO_WORD_MIN_LENGTH;
@@ -822,6 +812,7 @@ export const initMathWysiwyg = (deps: MathWysiwygDeps): MathWysiwygApi => {
         : buildWordCandidates(tokenMatch.token, {
             allowContainsMinLength: explicit ? 2 : AUTO_CONTAINS_MIN_LENGTH,
             allowedPacks,
+            dedupeByLatex: !explicit,
           });
 
     const allowSuffixRescue =
@@ -839,6 +830,7 @@ export const initMathWysiwyg = (deps: MathWysiwygDeps): MathWysiwygApi => {
         const suffixCandidates = buildWordCandidates(suffix, {
           allowContainsMinLength: explicit ? 2 : AUTO_CONTAINS_MIN_LENGTH,
           allowedPacks,
+          dedupeByLatex: !explicit,
         });
         if (suffixCandidates.length === 0) {
           continue;
@@ -853,16 +845,6 @@ export const initMathWysiwyg = (deps: MathWysiwygDeps): MathWysiwygApi => {
         };
         nextCandidates = suffixCandidates;
         break;
-      }
-    }
-
-    const canUseRawCommandFallback =
-      (tokenMatch.kind === "word" || tokenMatch.kind === "command") &&
-      isCommandToken(tokenMatch.token);
-    if (nextCandidates.length === 0 && canUseRawCommandFallback) {
-      const minLength = explicit ? 2 : 4;
-      if (tokenMatch.token.length >= minLength) {
-        nextCandidates = [buildRawCommandCandidate(tokenMatch.token, explicit ? 60 : 12)];
       }
     }
 
@@ -1174,13 +1156,15 @@ export const initMathWysiwyg = (deps: MathWysiwygDeps): MathWysiwygApi => {
           mathfieldApi,
           scopeRange.start,
           scopeRange.end,
-          match.range.start
+          match.range.start,
+          "floor"
         );
         const endOffset = indexToOffsetInRange(
           mathfieldApi,
           scopeRange.start,
           scopeRange.end,
-          match.range.end
+          match.range.end,
+          "ceil"
         );
         return { token: match.token, range: { start: startOffset, end: endOffset }, kind: match.kind };
       };
@@ -1396,8 +1380,7 @@ export const initMathWysiwyg = (deps: MathWysiwygDeps): MathWysiwygApi => {
     deps.insertKey(candidate.key);
     const hasPlaceholderTemplate =
       typeof candidate.key.latex === "string" && candidate.key.latex.includes("#?");
-    const isStyleWrapperTemplate = STYLE_WRAPPER_TEMPLATE_RE.test(insertedLatex);
-    if (hasPlaceholderTemplate && !isStyleWrapperTemplate) {
+    if (hasPlaceholderTemplate) {
       try {
         const ranges = getInternalSelectionRanges(mathfieldApi);
         const target =
@@ -1468,6 +1451,20 @@ export const initMathWysiwyg = (deps: MathWysiwygDeps): MathWysiwygApi => {
       event.preventDefault();
       selectedIndex =
         (selectedIndex - 1 + currentCandidates.length) % currentCandidates.length;
+      renderPanel();
+      return true;
+    }
+    if (event.key === "Tab") {
+      if (event.metaKey || event.ctrlKey || event.altKey) {
+        return false;
+      }
+      event.preventDefault();
+      if (event.shiftKey) {
+        selectedIndex =
+          (selectedIndex - 1 + currentCandidates.length) % currentCandidates.length;
+      } else {
+        selectedIndex = (selectedIndex + 1) % currentCandidates.length;
+      }
       renderPanel();
       return true;
     }

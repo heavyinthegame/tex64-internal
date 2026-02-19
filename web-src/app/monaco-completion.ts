@@ -129,8 +129,6 @@ export const registerCompletionProvider = (
   if (state.registered || !monaco.languages?.registerCompletionItemProvider) {
     return;
   }
-  monaco.languages.register?.({ id: "latex" });
-  monaco.languages.register?.({ id: "bibtex" });
 
   const provideItems = (
     model: { getLineContent: (lineNumber: number) => string },

@@ -140,6 +140,7 @@ export const createEditorSessionFileOps = (ctx) => {
             revealLine(group, state.pendingReveal.line, {
                 focus: state.pendingReveal.focus,
                 className: state.pendingReveal.className,
+                column: state.pendingReveal.column,
             });
             state.pendingReveal = null;
         }

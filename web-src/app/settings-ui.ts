@@ -5,6 +5,8 @@ import type {
   FormatSettingsPayload,
   AppSettingsSnapshot,
   BuildProfile,
+  PlatformUpdateSnapshot,
+  PlatformUpdateStatusSnapshot,
 } from "./types.js";
 import {
   buildFormatSettingsPayload as buildFormatSettingsPayloadFromSettings,
@@ -19,6 +21,7 @@ import {
 } from "./settings-completion.js";
 import { createEnvStatusManager } from "./settings-env.js";
 import { initBuildProfilesUi } from "./settings-build-profiles.js";
+import { TEX64_LINKS } from "./platform-links.js";
 
 type SettingsUiDeps = {
   envRegistry: EnvRegistryApi;
@@ -46,6 +49,20 @@ export type SettingsUiApi = {
   checkEnvironmentStatus: () => void;
   updateEnvStatus: (command: string, available: boolean) => void;
   refreshCompileEngine: () => void;
+  handlePlatformFeedback: (payload: {
+    ok: boolean;
+    feedbackId?: string | null;
+    error?: { code?: string; message?: string };
+  }) => void;
+  handlePlatformUpdate: (payload: {
+    source?: string;
+    update: PlatformUpdateSnapshot | null;
+    error?: { code?: string; message?: string };
+  }) => void;
+  handlePlatformUpdateStatus: (payload: {
+    source?: string;
+    status: PlatformUpdateStatusSnapshot;
+  }) => void;
   openSettingsPage: (pageId: string | null) => void;
   loadStartupSettings: () => void;
   loadWorkspaceSettings: () => void;
@@ -81,6 +98,27 @@ export const initSettingsUi = (
     editorGhostCompletionDebounce,
     editorGhostCompletionMaxChars,
     editorPdfWindowToggle,
+    settingsUpdateCurrent,
+    settingsUpdateLatest,
+    settingsUpdateStatus,
+    settingsUpdateProgress,
+    settingsUpdateProgressFill,
+    settingsUpdateCheck,
+    settingsUpdateDownload,
+    settingsUpdateInstall,
+    settingsUpdateOpen,
+    settingsFeedbackCategory,
+    settingsFeedbackMessage,
+    settingsFeedbackEmail,
+    settingsFeedbackSend,
+    settingsFeedbackStatus,
+    settingsLinkTerms,
+    settingsLinkPrivacy,
+    settingsLinkCommercial,
+    settingsLinkRefund,
+    settingsLinkSupport,
+    settingsLinkContact,
+    settingsLinkReleases,
   } = context.dom;
 
   let activeSettingsPage: string | null = null;
@@ -94,6 +132,9 @@ export const initSettingsUi = (
   let ghostCompletionDebounceMs = 120;
   let ghostCompletionMaxChars = 140;
   let pdfViewerMode: "window" | "tab" = "window";
+  let platformUpdate: PlatformUpdateSnapshot | null = null;
+  let platformUpdateStatus: PlatformUpdateStatusSnapshot | null = null;
+  let feedbackPending = false;
 
   const compileEngineKey = "tex64.compileEngine";
   const editorAutoSynctexOnBuildKey = "tex64.editor.autoSynctexOnBuild";
@@ -326,6 +367,8 @@ export const initSettingsUi = (
     }
     if (pageId === "runtime") {
       checkEnvironmentStatus();
+      deps.postToNative({ type: "update:status:get" }, true);
+      deps.postToNative({ type: "update:check", force: false }, true);
     }
   };
 
@@ -486,6 +529,278 @@ export const initSettingsUi = (
     }
     localStorage.setItem(compileEngineKey, engine);
     updateEngineUI();
+  };
+
+  const openExternalUrl = (url: string) => {
+    const normalized = typeof url === "string" ? url.trim() : "";
+    if (!/^https?:\/\//i.test(normalized)) {
+      return;
+    }
+    deps.postToNative({ type: "shell:openExternal", url: normalized }, true);
+  };
+
+  const formatBytes = (value?: number | null) => {
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+      return "0 B";
+    }
+    if (value < 1024) {
+      return `${Math.round(value)} B`;
+    }
+    if (value < 1024 * 1024) {
+      return `${(value / 1024).toFixed(1)} KB`;
+    }
+    if (value < 1024 * 1024 * 1024) {
+      return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+    }
+    return `${(value / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+  };
+
+  const resolveUpdateStatusText = () => {
+    const phase = platformUpdateStatus?.phase ?? "idle";
+    const latest = platformUpdate?.latestVersion ?? platformUpdateStatus?.latestVersion ?? null;
+    if (platformUpdateStatus?.message && platformUpdateStatus.message.trim()) {
+      return platformUpdateStatus.message.trim();
+    }
+    if (phase === "checking") {
+      return "更新を確認しています。";
+    }
+    if (phase === "up-to-date") {
+      return latest ? `最新バージョン ${latest} です。` : "最新状態です。";
+    }
+    if (phase === "available") {
+      return latest ? `新しいバージョン ${latest} を利用できます。` : "新しいバージョンを利用できます。";
+    }
+    if (phase === "downloading") {
+      const transferred = formatBytes(platformUpdateStatus?.transferredBytes ?? 0);
+      const total = formatBytes(platformUpdateStatus?.totalBytes ?? 0);
+      return `更新をダウンロード中です（${transferred} / ${total}）。`;
+    }
+    if (phase === "downloaded") {
+      return "ダウンロード完了。適用ボタンでインストーラを起動できます。";
+    }
+    if (phase === "installing") {
+      return "インストーラを起動しました。画面の手順に沿って更新してください。";
+    }
+    if (phase === "error") {
+      const message = platformUpdateStatus?.error?.message;
+      return message && message.trim()
+        ? message.trim()
+        : "アップデート処理に失敗しました。";
+    }
+    return "更新確認待ちです。";
+  };
+
+  const updatePlatformUpdateUi = () => {
+    const currentVersion =
+      platformUpdate?.currentVersion ??
+      platformUpdateStatus?.currentVersion ??
+      "-";
+    const latestVersion =
+      platformUpdate?.latestVersion ??
+      platformUpdateStatus?.latestVersion ??
+      "-";
+    if (settingsUpdateCurrent instanceof HTMLElement) {
+      settingsUpdateCurrent.textContent = currentVersion;
+    }
+    if (settingsUpdateLatest instanceof HTMLElement) {
+      settingsUpdateLatest.textContent = latestVersion;
+    }
+    const statusText = resolveUpdateStatusText();
+    if (settingsUpdateStatus instanceof HTMLElement) {
+      settingsUpdateStatus.textContent = statusText;
+      const phase = platformUpdateStatus?.phase ?? "idle";
+      settingsUpdateStatus.classList.toggle("is-error", phase === "error");
+      settingsUpdateStatus.classList.toggle("is-success", phase === "downloaded");
+    }
+    const progress =
+      typeof platformUpdateStatus?.progressPercent === "number" &&
+      Number.isFinite(platformUpdateStatus.progressPercent)
+        ? Math.max(0, Math.min(100, platformUpdateStatus.progressPercent))
+        : 0;
+    const showProgress = (platformUpdateStatus?.phase ?? "") === "downloading";
+    if (settingsUpdateProgress instanceof HTMLElement) {
+      settingsUpdateProgress.classList.toggle("is-hidden", !showProgress);
+      settingsUpdateProgress.setAttribute("aria-hidden", showProgress ? "false" : "true");
+    }
+    if (settingsUpdateProgressFill instanceof HTMLElement) {
+      settingsUpdateProgressFill.style.width = `${progress}%`;
+    }
+    const phase = platformUpdateStatus?.phase ?? "idle";
+    const hasUpdate = Boolean(platformUpdate?.hasUpdate);
+    const hasDownloadedInstaller = Boolean(platformUpdateStatus?.downloadedPath);
+    if (settingsUpdateCheck instanceof HTMLButtonElement) {
+      settingsUpdateCheck.disabled = phase === "checking" || phase === "downloading";
+    }
+    if (settingsUpdateDownload instanceof HTMLButtonElement) {
+      settingsUpdateDownload.disabled =
+        !hasUpdate || phase === "checking" || phase === "downloading";
+    }
+    if (settingsUpdateInstall instanceof HTMLButtonElement) {
+      settingsUpdateInstall.disabled =
+        phase === "checking" ||
+        phase === "downloading" ||
+        (!hasDownloadedInstaller && phase !== "downloaded");
+    }
+    if (settingsUpdateOpen instanceof HTMLButtonElement) {
+      settingsUpdateOpen.disabled = false;
+    }
+  };
+
+  const handlePlatformUpdate = (payload: {
+    source?: string;
+    update: PlatformUpdateSnapshot | null;
+    error?: { code?: string; message?: string };
+  }) => {
+    platformUpdate = payload?.update ?? null;
+    if (platformUpdateStatus) {
+      platformUpdateStatus = {
+        ...platformUpdateStatus,
+        latestVersion:
+          platformUpdate?.latestVersion ??
+          platformUpdateStatus.latestVersion ??
+          null,
+        currentVersion:
+          platformUpdate?.currentVersion ??
+          platformUpdateStatus.currentVersion ??
+          null,
+      };
+    }
+    if (payload?.error?.message) {
+      platformUpdateStatus = {
+        phase: "error",
+        mode: platformUpdateStatus?.mode ?? null,
+        message: payload.error.message,
+        progressPercent: null,
+        transferredBytes: null,
+        totalBytes: null,
+        downloadedPath: platformUpdateStatus?.downloadedPath ?? null,
+        currentVersion:
+          platformUpdate?.currentVersion ??
+          platformUpdateStatus?.currentVersion ??
+          null,
+        latestVersion:
+          platformUpdate?.latestVersion ??
+          platformUpdateStatus?.latestVersion ??
+          null,
+        checkedAt: platformUpdate?.checkedAt ?? Date.now(),
+        updatedAt: Date.now(),
+        error: {
+          code: payload.error.code ?? null,
+          message: payload.error.message,
+        },
+      };
+    }
+    updatePlatformUpdateUi();
+  };
+
+  const handlePlatformUpdateStatus = (payload: {
+    source?: string;
+    status: PlatformUpdateStatusSnapshot;
+  }) => {
+    const status = payload?.status ?? null;
+    if (!status) {
+      return;
+    }
+    platformUpdateStatus = {
+      ...status,
+      updatedAt:
+        typeof status.updatedAt === "number" && Number.isFinite(status.updatedAt)
+          ? status.updatedAt
+          : Date.now(),
+    };
+    updatePlatformUpdateUi();
+  };
+
+  const setFeedbackStatus = (
+    message: string,
+    tone: "neutral" | "success" | "error" = "neutral"
+  ) => {
+    if (!(settingsFeedbackStatus instanceof HTMLElement)) {
+      return;
+    }
+    settingsFeedbackStatus.textContent = message;
+    settingsFeedbackStatus.classList.toggle("is-hidden", message.trim().length === 0);
+    settingsFeedbackStatus.classList.toggle("is-success", tone === "success");
+    settingsFeedbackStatus.classList.toggle("is-error", tone === "error");
+  };
+
+  const updateFeedbackSendState = () => {
+    if (!(settingsFeedbackSend instanceof HTMLButtonElement)) {
+      return;
+    }
+    settingsFeedbackSend.disabled = feedbackPending;
+    settingsFeedbackSend.textContent = feedbackPending ? "送信中..." : "送信";
+  };
+
+  const sendFeedback = () => {
+    if (!(settingsFeedbackMessage instanceof HTMLTextAreaElement)) {
+      return;
+    }
+    const message = settingsFeedbackMessage.value.trim();
+    if (!message) {
+      setFeedbackStatus("フィードバック内容を入力してください。", "error");
+      settingsFeedbackMessage.focus();
+      return;
+    }
+    const rawCategory =
+      settingsFeedbackCategory instanceof HTMLSelectElement
+        ? settingsFeedbackCategory.value
+        : "";
+    const category =
+      rawCategory === "bug" || rawCategory === "idea" || rawCategory === "other"
+        ? rawCategory
+        : "other";
+    const contactEmail =
+      settingsFeedbackEmail instanceof HTMLInputElement
+        ? settingsFeedbackEmail.value.trim()
+        : "";
+    if (
+      contactEmail &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail)
+    ) {
+      setFeedbackStatus("連絡先メールアドレスの形式を確認してください。", "error");
+      settingsFeedbackEmail.focus();
+      return;
+    }
+    feedbackPending = true;
+    updateFeedbackSendState();
+    setFeedbackStatus("フィードバックを送信しています...");
+    const posted = deps.postToNative(
+      {
+        type: "feedback:send",
+        category,
+        message,
+        contactEmail: contactEmail || undefined,
+      },
+      true
+    );
+    if (!posted) {
+      feedbackPending = false;
+      updateFeedbackSendState();
+      setFeedbackStatus("フィードバック送信を開始できませんでした。", "error");
+    }
+  };
+
+  const handlePlatformFeedback = (payload: {
+    ok: boolean;
+    feedbackId?: string | null;
+    error?: { code?: string; message?: string };
+  }) => {
+    feedbackPending = false;
+    updateFeedbackSendState();
+    if (payload?.ok) {
+      if (settingsFeedbackMessage instanceof HTMLTextAreaElement) {
+        settingsFeedbackMessage.value = "";
+      }
+      const suffix = payload.feedbackId ? ` (ID: ${payload.feedbackId})` : "";
+      setFeedbackStatus(`フィードバックを送信しました${suffix}`, "success");
+      return;
+    }
+    const message =
+      payload?.error?.message && payload.error.message.trim()
+        ? payload.error.message.trim()
+        : "フィードバック送信に失敗しました。";
+    setFeedbackStatus(message, "error");
   };
 
   const setEditorAlignEnvEnabled = (enabled: boolean) => {
@@ -837,6 +1152,71 @@ export const initSettingsUi = (
     });
   }
 
+  if (settingsUpdateCheck instanceof HTMLButtonElement) {
+    settingsUpdateCheck.addEventListener("click", () => {
+      deps.postToNative({ type: "update:check", force: true }, true);
+    });
+  }
+
+  if (settingsUpdateDownload instanceof HTMLButtonElement) {
+    settingsUpdateDownload.addEventListener("click", () => {
+      deps.postToNative({ type: "update:download" }, true);
+    });
+  }
+
+  if (settingsUpdateInstall instanceof HTMLButtonElement) {
+    settingsUpdateInstall.addEventListener("click", () => {
+      deps.postToNative({ type: "update:install" }, true);
+    });
+  }
+
+  if (settingsUpdateOpen instanceof HTMLButtonElement) {
+    settingsUpdateOpen.addEventListener("click", () => {
+      const fallbackUrl =
+        platformUpdate?.artifactUrl ??
+        platformUpdate?.notesUrl ??
+        TEX64_LINKS.download;
+      openExternalUrl(fallbackUrl);
+    });
+  }
+
+  const settingsLinkEntries: Array<{ button: HTMLElement | null; url: string }> = [
+    { button: settingsLinkTerms, url: TEX64_LINKS.legalTerms },
+    { button: settingsLinkPrivacy, url: TEX64_LINKS.legalPrivacy },
+    { button: settingsLinkCommercial, url: TEX64_LINKS.legalCommercial },
+    { button: settingsLinkRefund, url: TEX64_LINKS.legalRefund },
+    { button: settingsLinkSupport, url: TEX64_LINKS.support },
+    { button: settingsLinkContact, url: TEX64_LINKS.contact },
+    { button: settingsLinkReleases, url: TEX64_LINKS.releases },
+  ];
+  settingsLinkEntries.forEach((entry) => {
+    if (!(entry.button instanceof HTMLButtonElement)) {
+      return;
+    }
+    entry.button.addEventListener("click", () => {
+      openExternalUrl(entry.url);
+    });
+  });
+
+  if (settingsFeedbackSend instanceof HTMLButtonElement) {
+    settingsFeedbackSend.addEventListener("click", () => {
+      sendFeedback();
+    });
+  }
+
+  if (settingsFeedbackMessage instanceof HTMLTextAreaElement) {
+    settingsFeedbackMessage.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        sendFeedback();
+      }
+    });
+  }
+
+  updateFeedbackSendState();
+  setFeedbackStatus("");
+  updatePlatformUpdateUi();
+
   return {
     getEditorAlignEnvEnabled: () => editorAlignEnvEnabled,
     getAutoSynctexOnBuildEnabled: () => autoSynctexOnBuildEnabled,
@@ -853,6 +1233,9 @@ export const initSettingsUi = (
     checkEnvironmentStatus,
     updateEnvStatus,
     refreshCompileEngine: updateEngineUI,
+    handlePlatformFeedback,
+    handlePlatformUpdate,
+    handlePlatformUpdateStatus,
     openSettingsPage: (pageId) => setSettingsPage(pageId),
     loadStartupSettings,
     loadWorkspaceSettings,

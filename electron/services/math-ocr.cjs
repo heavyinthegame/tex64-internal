@@ -900,10 +900,19 @@ const buildDecodeCandidates = (config) => {
 };
 
 class MathOcrService {
-  constructor({ appPath, userDataPath }) {
+  constructor({ appPath, userDataPath, isPackaged, resourcesPath }) {
     this.appPath = appPath;
     this.userDataPath = userDataPath;
-    this.basePath = path.join(appPath, "Resources", "math-ocr");
+    this.isPackaged = isPackaged === true;
+    this.resourcesPath = typeof resourcesPath === "string" ? resourcesPath : "";
+    this.basePathCandidates = [];
+    if (this.isPackaged && this.resourcesPath) {
+      this.basePathCandidates.push(
+        path.join(this.resourcesPath, "app.asar.unpacked", "Resources", "math-ocr")
+      );
+    }
+    this.basePathCandidates.push(path.join(appPath, "Resources", "math-ocr"));
+    this.basePath = this.basePathCandidates[0];
     this.config = null;
     this.idToToken = [];
     this.encoderSession = null;
@@ -923,8 +932,15 @@ class MathOcrService {
       return;
     }
     this.loading = (async () => {
-      const configPath = path.join(this.basePath, "config.json");
-      const rawConfig = await fsp.readFile(configPath, "utf8").catch(() => null);
+      let rawConfig = null;
+      for (const candidateBasePath of this.basePathCandidates) {
+        const configPath = path.join(candidateBasePath, "config.json");
+        rawConfig = await fsp.readFile(configPath, "utf8").catch(() => null);
+        if (rawConfig) {
+          this.basePath = candidateBasePath;
+          break;
+        }
+      }
       if (!rawConfig) {
         throw new Error(
           "Math OCR model is not installed. See Resources/math-ocr/README.md."

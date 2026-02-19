@@ -1889,6 +1889,18 @@ math-field.block-math-field::placeholder {
   margin-bottom: 14px;
 }
 
+.settings-help-text.is-success {
+  color: #7dd38b;
+  border-color: rgba(125, 211, 139, 0.35);
+  background: rgba(125, 211, 139, 0.08);
+}
+
+.settings-help-text.is-error {
+  color: #ff9b9b;
+  border-color: rgba(255, 155, 155, 0.35);
+  background: rgba(255, 155, 155, 0.08);
+}
+
 /* Settings Subsection */
 .settings-subsection {
   display: flex;
@@ -1992,8 +2004,28 @@ math-field.block-math-field::placeholder {
   width: 100%;
 }
 
+.settings-inline-wrap {
+  flex-wrap: wrap;
+}
+
 .settings-inline-compact {
   justify-content: flex-end;
+}
+
+.settings-update-progress {
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  margin-top: 10px;
+}
+
+.settings-update-progress-fill {
+  width: 0%;
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), #7aa2ff);
+  transition: width 0.2s ease;
 }
 
 /* Settings Input */
@@ -4654,7 +4686,46 @@ body.has-editor .editor-group:not(.is-empty) .editor-placeholder {
 
 /* ── Status ────────────────────────────────────────────── */
 .ai-status {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.18);
+  color: rgba(226, 232, 240, 0.92);
+}
+.ai-status:empty {
   display: none;
+}
+.ai-status-line {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.ai-status-detail {
+  margin-top: 3px;
+  font-size: 11.5px;
+  color: rgba(203, 213, 225, 0.9);
+  line-height: 1.45;
+}
+.ai-status-actions {
+  margin-top: 8px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.ai-status-action {
+  border: 1px solid rgba(148, 163, 184, 0.38);
+  background: rgba(15, 23, 42, 0.48);
+  color: rgba(226, 232, 240, 0.95);
+  border-radius: 8px;
+  font-size: 11px;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+.ai-status-action:hover {
+  border-color: rgba(165, 180, 252, 0.7);
+  background: rgba(99, 102, 241, 0.2);
 }
 
 /* Capture Window - Premium Redesign */

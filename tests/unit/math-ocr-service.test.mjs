@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
+import test from "node:test";
 
 const require = createRequire(import.meta.url);
 const { MathOcrService } = require("../../electron/services/math-ocr.cjs");
@@ -69,48 +70,39 @@ const createMockService = ({ decodeOutputs = [], fallbackByImage = {} } = {}) =>
   return service;
 };
 
-const run = async () => {
+test("MathOcrService selects best decode candidate", async () => {
+  const primaryImage = makeDataUrl("primary");
+  const service = createMockService({
+    decodeOutputs: ["\\begin{array}", "\\frac{a}{b}", "\\frac{a}{b}"],
+  });
+  const result = await service.recognize(createPayload(primaryImage));
+  assert.equal(result.latex, "\\frac{a}{b}");
+});
+
+test("MathOcrService selects best fallback candidate", async () => {
   const primaryImage = makeDataUrl("primary");
   const fallbackA = makeDataUrl("fallback-a");
   const fallbackB = makeDataUrl("fallback-b");
+  const service = createMockService({
+    decodeOutputs: ["\\begin{array}"],
+    fallbackByImage: {
+      [primaryImage]: { text: "x2+1", confidence: 61 },
+      [fallbackA]: { text: "x2+1", confidence: 74 },
+      [fallbackB]: { text: "x^2+1", confidence: 92 },
+    },
+  });
+  const result = await service.recognize(createPayload(primaryImage, [fallbackA, fallbackB]));
+  assert.equal(result.latex, "x^2+1");
+});
 
-  {
-    const service = createMockService({
-      decodeOutputs: ["\\begin{array}", "\\frac{a}{b}", "\\frac{a}{b}"],
-    });
-    const result = await service.recognize(createPayload(primaryImage));
-    assert.equal(result.latex, "\\frac{a}{b}", "best decode candidate should be selected");
-  }
-
-  {
-    const service = createMockService({
-      decodeOutputs: ["\\begin{array}"],
-      fallbackByImage: {
-        [primaryImage]: { text: "x2+1", confidence: 61 },
-        [fallbackA]: { text: "x2+1", confidence: 74 },
-        [fallbackB]: { text: "x^2+1", confidence: 92 },
-      },
-    });
-    const result = await service.recognize(createPayload(primaryImage, [fallbackA, fallbackB]));
-    assert.equal(result.latex, "x^2+1", "best fallback candidate should be selected");
-  }
-
-  {
-    const service = createMockService({
-      decodeOutputs: ["\\frac{a}{b}"],
-      fallbackByImage: {
-        [primaryImage]: { text: "x^2+1", confidence: 99 },
-      },
-    });
-    const result = await service.recognize(createPayload(primaryImage));
-    assert.equal(result.latex, "\\frac{a}{b}", "valid pix2tex output should be preserved");
-  }
-
-  console.log("[math-ocr-service-e2e] passed");
-};
-
-run().catch((error) => {
-  console.error("[math-ocr-service-e2e] FAILED");
-  console.error(error);
-  process.exitCode = 1;
+test("MathOcrService preserves valid pix2tex output over fallback", async () => {
+  const primaryImage = makeDataUrl("primary");
+  const service = createMockService({
+    decodeOutputs: ["\\frac{a}{b}"],
+    fallbackByImage: {
+      [primaryImage]: { text: "x^2+1", confidence: 99 },
+    },
+  });
+  const result = await service.recognize(createPayload(primaryImage));
+  assert.equal(result.latex, "\\frac{a}{b}");
 });

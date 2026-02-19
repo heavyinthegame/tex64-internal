@@ -17,6 +17,7 @@ type PendingSave = {
 type PendingReveal = {
   path: string;
   line: number;
+  column?: number;
   group: EditorGroupKey;
   focus?: boolean;
   className?: string;
@@ -55,7 +56,7 @@ type FileOpsDeps = {
   revealLine: (
     group: EditorGroupState,
     line: number,
-    options?: { focus?: boolean; className?: string }
+    options?: { focus?: boolean; className?: string; column?: number }
   ) => void;
   forEachEditorGroup: (handler: (group: EditorGroupState) => void) => void;
   scheduleAfterComposition: (group: EditorGroupState, action: () => void) => void;
@@ -255,6 +256,7 @@ export const createEditorSessionFileOps = (ctx: FileOpsDeps) => {
       revealLine(group, state.pendingReveal.line, {
         focus: state.pendingReveal.focus,
         className: state.pendingReveal.className,
+        column: state.pendingReveal.column,
       });
       state.pendingReveal = null;
     }

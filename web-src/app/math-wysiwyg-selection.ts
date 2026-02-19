@@ -122,7 +122,8 @@ export const indexToOffsetInRange = (
   mathfieldApi: any,
   rangeStart: number,
   rangeEnd: number,
-  targetIndex: number
+  targetIndex: number,
+  bias: "ceil" | "floor" = "ceil"
 ) => {
   if (typeof mathfieldApi?.getValue !== "function") {
     return rangeStart + targetIndex;
@@ -151,5 +152,12 @@ export const indexToOffsetInRange = (
       high = mid;
     }
   }
-  return low;
+  if (bias === "ceil") {
+    return low;
+  }
+  const mappedLength = offsetToIndexInRange(mathfieldApi, rangeStart, low);
+  if (mappedLength <= targetIndex) {
+    return low;
+  }
+  return Math.max(rangeStart, low - 1);
 };

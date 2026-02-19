@@ -7,6 +7,7 @@ import {
   type HoverState,
 } from "./monaco-hover.js";
 import { createInlineCompletionController } from "./monaco-inline.js";
+import { registerTexLanguages } from "./monaco-language.js";
 import { applyMonacoTheme } from "./monaco-theme.js";
 
 type FileExcerptResult =
@@ -185,6 +186,7 @@ export const initMonacoSetup = (
       }
 
       deps.setMonacoApi(monacoWindow.monaco as Record<string, unknown>);
+      registerTexLanguages(monacoWindow.monaco);
       registerCompletionProvider(
         monacoWindow.monaco,
         {

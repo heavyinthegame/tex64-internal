@@ -157,7 +157,7 @@ export type EditorSessionApi = {
     path: string,
     line: number,
     groupKey: EditorGroupKey,
-    options?: { force?: boolean; focus?: boolean; className?: string }
+    options?: { force?: boolean; focus?: boolean; className?: string; column?: number }
   ) => void;
   jumpToLocation: (entry: IndexEntry) => void;
   applyFormattedContent: (
@@ -786,7 +786,7 @@ export const initEditorSession = (
   const revealLine = (
     group: EditorGroupState,
     line: number,
-    options: { focus?: boolean; className?: string } = {}
+    options: { focus?: boolean; className?: string; column?: number } = {}
   ) => {
     const monacoApi = deps.getMonacoApi();
     if (!group.editor || !monacoApi) {
@@ -801,11 +801,33 @@ export const initEditorSession = (
       revealLineInCenter: (lineNumber: number) => void;
       setPosition: (position: { lineNumber: number; column: number }) => void;
       focus: () => void;
+      getModel?: () => {
+        getLineCount: () => number;
+        getLineMaxColumn: (lineNumber: number) => number;
+      } | null;
     };
+    const normalizedLine = Number.isFinite(line) ? Math.max(1, Math.trunc(line)) : 1;
+    const normalizedColumn =
+      Number.isFinite(options.column) && (options.column ?? 0) > 0
+        ? Math.trunc(options.column ?? 1)
+        : 1;
+    let lineNumber = normalizedLine;
+    let columnNumber = normalizedColumn;
+    const model = editor.getModel?.();
+    if (model) {
+      const maxLine = model.getLineCount();
+      if (Number.isFinite(maxLine) && maxLine >= 1) {
+        lineNumber = Math.min(normalizedLine, maxLine);
+      }
+      const maxColumn = model.getLineMaxColumn(lineNumber);
+      if (Number.isFinite(maxColumn) && maxColumn >= 1) {
+        columnNumber = Math.min(normalizedColumn, maxColumn);
+      }
+    }
     const className = options.className ?? "jump-line-highlight";
     jumpDecorations[group.key] = editor.deltaDecorations(jumpDecorations[group.key], [
       {
-        range: new monacoApiAny.Range(line, 1, line, 1),
+        range: new monacoApiAny.Range(lineNumber, 1, lineNumber, 1),
         options: {
           isWholeLine: true,
           className,
@@ -813,8 +835,8 @@ export const initEditorSession = (
       },
     ]);
     jumpDecorationClassNames[group.key] = className;
-    editor.revealLineInCenter(line);
-    editor.setPosition({ lineNumber: line, column: 1 });
+    editor.revealLineInCenter(lineNumber);
+    editor.setPosition({ lineNumber, column: columnNumber });
     if (options.focus !== false) {
       editor.focus();
     }
@@ -1274,22 +1296,23 @@ export const initEditorSession = (
     path: string,
     line: number,
     groupKey: EditorGroupKey,
-    options: { force?: boolean; focus?: boolean; className?: string } = {}
+    options: { force?: boolean; focus?: boolean; className?: string; column?: number } = {}
   ) => {
     const forceOpen = options.force === true;
     const focus = options.focus;
     const className = options.className;
+    const column = options.column;
     const targetGroupKey = forceOpen
       ? groupKey
       : resolveOpenTargetGroupKey(path, groupKey);
     const targetGroup = getEditorGroup(targetGroupKey);
     if (targetGroup.currentFilePath === path) {
-      revealLine(targetGroup, line, { focus, className });
+      revealLine(targetGroup, line, { focus, className, column });
       return;
     }
     const requested = requestOpenFile(path, targetGroupKey, forceOpen);
     if (requested) {
-      fileOpsState.pendingReveal = { path, line, group: targetGroupKey, focus, className };
+      fileOpsState.pendingReveal = { path, line, column, group: targetGroupKey, focus, className };
     }
   };
 

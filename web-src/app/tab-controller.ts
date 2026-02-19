@@ -22,7 +22,7 @@ export const initTabController = (
     sidebarPanels,
   } = context.dom;
 
-  let activeTab: TabKey = "files";
+  const activeTabStorageKey = "tex64.activeTab";
 
   const normalizeTabKey = (key: string | undefined): TabKey => {
     if (key && key in tabConfig) {
@@ -30,6 +30,25 @@ export const initTabController = (
     }
     return "files";
   };
+
+  const loadStoredActiveTab = (): TabKey => {
+    try {
+      const stored = localStorage.getItem(activeTabStorageKey) ?? undefined;
+      return normalizeTabKey(stored);
+    } catch {
+      return "files";
+    }
+  };
+
+  const saveActiveTab = (tabKey: TabKey) => {
+    try {
+      localStorage.setItem(activeTabStorageKey, tabKey);
+    } catch {
+      // ignore storage failures
+    }
+  };
+
+  let activeTab: TabKey = loadStoredActiveTab();
 
   const setActiveTab = (tabKey: TabKey) => {
     tabs.forEach((tab) => {
@@ -39,6 +58,7 @@ export const initTabController = (
     });
 
     activeTab = tabKey;
+    saveActiveTab(tabKey);
     document.body.dataset.activeTab = tabKey;
     sidebarPanels.forEach((panel) => {
       const isActive = panel.dataset.panel === tabKey;

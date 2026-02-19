@@ -743,7 +743,7 @@ const run = async () => {
     electronApp = await electron.launch({
       args: ["."],
       cwd: repoRoot,
-      env: { ...process.env },
+      env: { ...process.env, TEX64_E2E_HEADLESS: "1" },
     });
     const page = await electronApp.firstWindow();
     await page.setViewportSize({ width: 1600, height: 980 });

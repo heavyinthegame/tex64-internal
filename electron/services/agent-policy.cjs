@@ -3,7 +3,7 @@ const { normalizeRelativePath } = require("./workspace.cjs");
 
 const DEFAULT_MAX_FILE_BYTES = Number.POSITIVE_INFINITY;
 const DEFAULT_MAX_READ_FILES = Number.POSITIVE_INFINITY;
-const DEFAULT_MAX_ITERATIONS = 30;
+const DEFAULT_MAX_ITERATIONS = 12;
 const DEFAULT_TEXT_EXTENSIONS = null;
 const DEFAULT_BLOCKED_TOP_LEVEL = new Set();
 const ALWAYS_IGNORED_DIRECTORIES = new Set();

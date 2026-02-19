@@ -112,6 +112,7 @@ const launchApp = async ({ userDataPath, workspacePath }) => {
     env: {
       ...process.env,
       TEX64_E2E: "1",
+        TEX64_E2E_HEADLESS: "1",
       TEX64_E2E_USERDATA: userDataPath,
       TEX64_E2E_DIALOG_QUEUE: JSON.stringify({
         openWorkspace: [toPosix(workspacePath)],

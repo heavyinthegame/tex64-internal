@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execSync } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -26,6 +27,20 @@ const pause = async (ms = stepDelayMs) => {
   await new Promise((resolve) => setTimeout(resolve, ms));
 };
 
+const cleanupStaleElectron = () => {
+  try {
+    execSync(
+      `pkill -f "${path.join(
+        repoRoot,
+        "node_modules/electron/dist/Electron.app/Contents/MacOS/Electron"
+      )}"`,
+      { stdio: "ignore" }
+    );
+  } catch {
+    // no stale process
+  }
+};
+
 const createWorkspaceCopy = async () => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "tex64-e2e-math-capture-"));
   const workspacePath = path.join(tempDir, "workspace");
@@ -39,6 +54,23 @@ const postToBridge = async (page, payload) => {
   }, payload);
 };
 
+const clickSelectorDom = async (page, selector, timeout = 10000) => {
+  await page.waitForSelector(selector, { timeout });
+  const clicked = await page.evaluate((query) => {
+    const node = document.querySelector(query);
+    if (node instanceof HTMLButtonElement) {
+      node.click();
+      return true;
+    }
+    if (node instanceof HTMLElement) {
+      node.click();
+      return true;
+    }
+    return false;
+  }, selector);
+  assert.equal(clicked, true, `failed to click selector: ${selector}`);
+};
+
 const waitForWorkspaceReady = async (page) => {
   await page.waitForSelector("body.is-ready", { timeout: 15000 });
   await page.waitForSelector('#editor-tabs-list .editor-tab.is-active[data-path="main.tex"]', {
@@ -47,7 +79,29 @@ const waitForWorkspaceReady = async (page) => {
 };
 
 const openSideTab = async (page, key) => {
-  await page.click(`button.tab[data-tab="${key}"]`);
+  await clickSelectorDom(page, `button.tab[data-tab="${key}"]`);
+  await page.waitForSelector(`.sidebar-panel .panel.is-active[data-panel="${key}"]`, {
+    timeout: 10000,
+  });
+  await pause(80);
+};
+
+const setEditorCursor = async (page, lineNumber, column) => {
+  const ok = await page.evaluate(
+    ({ targetLine, targetColumn }) => {
+      const editors = window.monaco?.editor?.getEditors?.() ?? [];
+      const active =
+        editors.find((editor) => typeof editor.hasTextFocus === "function" && editor.hasTextFocus()) ??
+        editors[0];
+      if (!active) return false;
+      active.setPosition?.({ lineNumber: targetLine, column: targetColumn });
+      active.revealPositionInCenterIfOutsideViewport?.({ lineNumber: targetLine, column: targetColumn });
+      active.focus?.();
+      return true;
+    },
+    { targetLine: lineNumber, targetColumn: column }
+  );
+  assert.equal(ok, true, `failed to set cursor at ${lineNumber}:${column}`);
   await pause(80);
 };
 
@@ -62,6 +116,18 @@ const waitForModalState = async (page, id, open, timeout = 10000) => {
     },
     { modalId: id, expectedOpen: open },
     { timeout }
+  );
+};
+
+const waitForDiffModalState = async (page, open) => {
+  await page.waitForFunction(
+    (shouldOpen) => {
+      const modal = document.getElementById("diff-modal");
+      if (!(modal instanceof HTMLElement)) return false;
+      return modal.classList.contains("is-open") === shouldOpen;
+    },
+    open,
+    { timeout: 10000 }
   );
 };
 
@@ -443,36 +509,81 @@ const getMathInputValue = async (page) =>
     return textArea instanceof HTMLTextAreaElement ? textArea.value : "";
   });
 
-const clickCaptureButton = async (page) => {
-  const button = page.locator("#block-capture-button");
-  await button.waitFor({ state: "visible", timeout: 10000 });
-  let clicked = false;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    try {
-      await button.click({ timeout: 4000 });
-      clicked = true;
-      break;
-    } catch {
-      await pause(80);
-    }
+const focusMathInput = async (page) => {
+  const usedMathField = await page.evaluate(() => {
+    const mathField = document.getElementById("block-math-input");
+    if (!(mathField instanceof HTMLElement)) return false;
+    mathField.focus();
+    mathField.click();
+    return true;
+  });
+  if (usedMathField) {
+    await pause(60);
+    return;
   }
-  assert.ok(clicked, "capture button is not available");
+  const textArea = page.locator("#block-math-input-container textarea");
+  await textArea.waitFor({ state: "visible", timeout: 10000 });
+  await textArea.click();
+  await pause(60);
+};
+
+const readActiveEditorValue = async (page) =>
+  page.evaluate(() => {
+    const editors = window.monaco?.editor?.getEditors?.() ?? [];
+    const active =
+      editors.find((editor) => typeof editor.hasTextFocus === "function" && editor.hasTextFocus()) ??
+      editors[0];
+    return String(active?.getModel?.()?.getValue?.() ?? "");
+  });
+
+const clickCaptureButton = async (page) => {
+  await clickSelectorDom(page, "#block-capture-button");
+};
+
+const selectCaptureSource = async (page, sourceId) => {
+  await page.waitForSelector(`#math-capture-window-grid .capture-window-item[data-id="${sourceId}"]`, {
+    timeout: 10000,
+  });
+  await page.evaluate((id) => {
+    const node = document.querySelector(
+      `#math-capture-window-grid .capture-window-item[data-id="${id}"]`
+    );
+    if (node instanceof HTMLButtonElement) {
+      node.click();
+    }
+  }, sourceId);
 };
 
 const run = async () => {
   const { tempDir, workspacePath } = await createWorkspaceCopy();
+  const userDataPath = path.join(tempDir, "user-data");
   let electronApp;
 
   try {
     log(`workspace copy: ${workspacePath}`);
+    await fs.mkdir(userDataPath, { recursive: true });
+    cleanupStaleElectron();
     electronApp = await electron.launch({
       args: ["."],
       cwd: repoRoot,
       slowMo: Number.isFinite(slowMoMs) ? Math.max(0, slowMoMs) : 0,
-      env: { ...process.env },
+      env: {
+        ...process.env,
+        TEX64_E2E: "1",
+        TEX64_E2E_HEADLESS: "1",
+        TEX64_E2E_USERDATA: userDataPath,
+      },
     });
     const page = await electronApp.firstWindow();
     await page.setViewportSize({ width: 1600, height: 980 });
+    page.on("dialog", async (dialog) => {
+      log(`dialog intercepted: ${dialog.type()} ${dialog.message()}`);
+      try {
+        await dialog.dismiss();
+      } catch {
+        // ignore protocol races while shutting down
+      }
+    });
 
     log("opening workspace");
     await postToBridge(page, { type: "openRecentProject", path: workspacePath });
@@ -484,7 +595,7 @@ const run = async () => {
     const imageDataUrl = await createSampleImageDataUrl(page, imageWidth, imageHeight);
     await installMocks(page, { imageDataUrl, imageWidth, imageHeight });
 
-    log("[1/8] window picker list + search + escape/cancel close");
+    log("[1/9] window picker list + search + escape/cancel close");
     await clickCaptureButton(page);
     await waitForModalState(page, "math-capture-window-modal", true);
     let itemIds = await getWindowPickerItemIds(page);
@@ -500,13 +611,13 @@ const run = async () => {
     await waitForModalState(page, "math-capture-window-modal", false);
     await clickCaptureButton(page);
     await waitForModalState(page, "math-capture-window-modal", true);
-    await page.click("#math-capture-window-cancel");
+    await clickSelectorDom(page, "#math-capture-window-cancel");
     await waitForModalState(page, "math-capture-window-modal", false);
 
-    log("[2/8] cropper selection create/move/resize + escape behavior");
+    log("[2/9] cropper selection create/move/resize + escape behavior");
     await clickCaptureButton(page);
     await waitForModalState(page, "math-capture-window-modal", true);
-    await page.click('#math-capture-window-grid .capture-window-item[data-id="window:mock-calculator"]');
+    await selectCaptureSource(page, "window:mock-calculator");
     await waitForModalState(page, "math-capture-crop-modal", true);
     let selection = await getSelectionRect(page);
     assert.equal(selection?.display, "none", "selection should be hidden initially");
@@ -557,7 +668,7 @@ const run = async () => {
     assert.equal(selection?.display, "none", "escape with no selection should keep no selection");
     await waitForModalState(page, "math-capture-crop-modal", true);
 
-    log("[3/8] Enter apply with no selection => full image OCR");
+    log("[3/9] Enter apply with no selection => full image OCR");
     const ocrCountBeforeFull = await getOcrRunCount(page);
     await page.keyboard.press("Enter");
     await waitForModalState(page, "math-capture-crop-modal", false);
@@ -573,6 +684,10 @@ const run = async () => {
     assert.equal(lastRun?.tensorHeight, 384, "OCR input height should be 384");
     assert.equal(lastRun?.tensorLength, 384 * 384 * 3, "OCR tensor length should be 384*384*3");
     assertApprox(lastRun?.tensorChannels, 3, 1e-6, "OCR tensor channel count");
+    assert.ok(
+      Number.isFinite(lastRun?.fallbackCandidateCount ?? Number.NaN),
+      "OCR payload should include fallback candidate metadata"
+    );
     assert.ok(lastRun?.tensorMin >= -1.05, "OCR tensor min should be normalized");
     assert.ok(lastRun?.tensorMax <= 1.05, "OCR tensor max should be normalized");
     assertApprox(lastRun?.cropTopLeftInferredX, 0, 2, "full-image crop top-left X");
@@ -600,10 +715,10 @@ const run = async () => {
     const inserted = await getMathInputValue(page);
     assert.ok(inserted.replace(/\s+/g, "").includes("x^2+1"), "OCR result should be inserted");
 
-    log("[4/8] apply with selection => cropped image OCR");
+    log("[4/9] apply with selection => cropped image OCR");
     await clickCaptureButton(page);
     await waitForModalState(page, "math-capture-window-modal", true);
-    await page.click('#math-capture-window-grid .capture-window-item[data-id="window:mock-calculator"]');
+    await selectCaptureSource(page, "window:mock-calculator");
     await waitForModalState(page, "math-capture-crop-modal", true);
     const canvasBox2 = await page.locator("#math-capture-crop-canvas").boundingBox();
     assert.ok(canvasBox2, "crop canvas should be visible");
@@ -618,7 +733,7 @@ const run = async () => {
     assert.ok(geometryForCrop, "crop geometry should be available");
     const expectedCrop = getExpectedCropFromSelection(selectionForCrop, geometryForCrop);
     const ocrCountBeforeCropped = await getOcrRunCount(page);
-    await page.click("#math-capture-crop-apply");
+    await clickSelectorDom(page, "#math-capture-crop-apply");
     await waitForModalState(page, "math-capture-crop-modal", false);
     await page.waitForFunction(
       (count) => (window.__mathCaptureE2EState?.ocrRuns?.length ?? 0) > count,
@@ -651,19 +766,23 @@ const run = async () => {
     );
     assert.equal(lastRun?.tensorLength, 384 * 384 * 3, "cropped OCR tensor length should be fixed");
     assertApprox(lastRun?.tensorChannels, 3, 1e-6, "cropped OCR tensor channel count");
+    assert.ok(
+      Number.isFinite(lastRun?.fallbackCandidateCount ?? Number.NaN),
+      "cropped OCR payload should include fallback candidate metadata"
+    );
     assert.ok(lastRun?.tensorMin >= -1.05, "cropped OCR tensor min should be normalized");
     assert.ok(lastRun?.tensorMax <= 1.05, "cropped OCR tensor max should be normalized");
 
-    log("[5/8] Retry closes flow (does not return to picker)");
+    log("[5/9] Retry closes flow (does not return to picker)");
     await clickCaptureButton(page);
     await waitForModalState(page, "math-capture-window-modal", true);
-    await page.click('#math-capture-window-grid .capture-window-item[data-id="window:mock-calculator"]');
+    await selectCaptureSource(page, "window:mock-calculator");
     await waitForModalState(page, "math-capture-crop-modal", true);
-    await page.click("#math-capture-crop-retry");
+    await clickSelectorDom(page, "#math-capture-crop-retry");
     await waitForModalState(page, "math-capture-crop-modal", false);
     await waitForModalState(page, "math-capture-window-modal", false);
 
-    log("[6/8] capture-only issues are cleared on start");
+    log("[6/9] capture-only issues are cleared on start");
     await setMockMode(page, "throw");
     await openSideTab(page, "blocks");
     await clickCaptureButton(page);
@@ -678,28 +797,28 @@ const run = async () => {
     await page.keyboard.press("Escape");
     await waitForModalState(page, "math-capture-window-modal", false);
 
-    log("[7/8] OCR failure is reported");
+    log("[7/9] OCR failure is reported");
     await setMockMode(page, "success");
     await setMockOcrReject(page, true);
     await openSideTab(page, "blocks");
     await clickCaptureButton(page);
     await waitForModalState(page, "math-capture-window-modal", true);
-    await page.click('#math-capture-window-grid .capture-window-item[data-id="window:mock-calculator"]');
+    await selectCaptureSource(page, "window:mock-calculator");
     await waitForModalState(page, "math-capture-crop-modal", true);
-    await page.click("#math-capture-crop-apply");
+    await clickSelectorDom(page, "#math-capture-crop-apply");
     await waitForModalState(page, "math-capture-crop-modal", false);
     await waitForIssueContains(page, "mock OCR failure");
 
-    log("[8/8] multi-pass OCR reranking picks better candidate");
+    log("[8/9] multi-pass OCR reranking picks better candidate");
     await setMockOcrReject(page, false);
     await setMockOcrResponses(page, ["\\begin{array}", "\\frac{a}{b}"]);
     await openSideTab(page, "blocks");
     const ocrCountBeforeRerank = await getOcrRunCount(page);
     await clickCaptureButton(page);
     await waitForModalState(page, "math-capture-window-modal", true);
-    await page.click('#math-capture-window-grid .capture-window-item[data-id="window:mock-calculator"]');
+    await selectCaptureSource(page, "window:mock-calculator");
     await waitForModalState(page, "math-capture-crop-modal", true);
-    await page.click("#math-capture-crop-apply");
+    await clickSelectorDom(page, "#math-capture-crop-apply");
     await waitForModalState(page, "math-capture-crop-modal", false);
     await page.waitForFunction(
       (count) => (window.__mathCaptureE2EState?.ocrRuns?.length ?? 0) >= count + 2,
@@ -728,11 +847,65 @@ const run = async () => {
     assert.ok(reranked.includes("\\frac{a}{b}"), "better OCR candidate should be selected");
     await setMockOcrResponses(page, []);
 
+    log("[9/9] OCR result can be edited and inserted via blocks flow");
+    await openSideTab(page, "blocks");
+    await setEditorCursor(page, 4, 1);
+    const beforeInsert = await readActiveEditorValue(page);
+    const beforeMathInput = (await getMathInputValue(page)).replace(/\s+/g, "");
+    assert.ok(
+      beforeMathInput.includes("\\frac{a}{b}"),
+      "math input should keep OCR result before manual edit"
+    );
+    await focusMathInput(page);
+    await page.keyboard.type("+1");
+    await page.waitForFunction(() => {
+      const field = document.getElementById("block-math-input");
+      if (field && typeof field.getValue === "function") {
+        try {
+          return String(field.getValue("latex") ?? "")
+            .replace(/\s+/g, "")
+            .includes("\\frac{a}{b}+1");
+        } catch {
+          return false;
+        }
+      }
+      const textArea = document.querySelector("#block-math-input-container textarea");
+      if (!(textArea instanceof HTMLTextAreaElement)) return false;
+      return textArea.value.replace(/\s+/g, "").includes("\\frac{a}{b}+1");
+    });
+    await clickSelectorDom(page, "#block-insert-button");
+    await waitForDiffModalState(page, true);
+    await clickSelectorDom(page, "#diff-modal-submit");
+    await waitForDiffModalState(page, false);
+    await page.waitForFunction((previous) => {
+      const editors = window.monaco?.editor?.getEditors?.() ?? [];
+      const active =
+        editors.find((editor) => typeof editor.hasTextFocus === "function" && editor.hasTextFocus()) ??
+        editors[0];
+      const text = String(active?.getModel?.()?.getValue?.() ?? "");
+      return text !== previous && text.replace(/\s+/g, "").includes("\\frac{a}{b}+1");
+    }, beforeInsert);
+
     log("math-capture e2e passed");
   } finally {
     if (electronApp) {
-      await electronApp.close();
+      try {
+        await Promise.race([
+          electronApp.close(),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("electronApp.close timeout")), 5000)
+          ),
+        ]);
+      } catch (closeError) {
+        log(`close fallback: ${closeError instanceof Error ? closeError.message : String(closeError)}`);
+        try {
+          electronApp.process()?.kill("SIGKILL");
+        } catch {
+          // ignore force-kill failure
+        }
+      }
     }
+    cleanupStaleElectron();
     if (!keepWorkspace) {
       await fs.rm(tempDir, { recursive: true, force: true });
       log("workspace copy removed");

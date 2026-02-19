@@ -532,7 +532,11 @@ const MANUAL_TRIGGERS = [
         priority: 70,
         pack: "personal",
         candidates: [
-            { latex: "\\cancelto{#?}{#?}", label: "cancelto", displayLatex: "\\cancelto{0}{x}" },
+            {
+                latex: "\\overset{#?}{\\cancel{#?}}",
+                label: "cancelto",
+                displayLatex: "\\overset{0}{\\cancel{x}}",
+            },
         ],
     },
     {
@@ -1186,6 +1190,36 @@ const MANUAL_TRIGGERS = [
         candidates: [{ latex: "\\cdots", label: "⋯", displayLatex: "\\cdots" }],
     },
     {
+        trigger: "quad",
+        priority: 82,
+        candidates: [{ latex: "\\quad", label: "quad", displayLatex: "\\quad" }],
+    },
+    {
+        trigger: "qquad",
+        priority: 82,
+        candidates: [{ latex: "\\qquad", label: "qquad", displayLatex: "\\qquad" }],
+    },
+    {
+        trigger: "thinspace",
+        priority: 76,
+        candidates: [{ latex: "\\,", label: "\\,", displayLatex: "\\," }],
+    },
+    {
+        trigger: "medspace",
+        priority: 76,
+        candidates: [{ latex: "\\:", label: "\\:", displayLatex: "\\:" }],
+    },
+    {
+        trigger: "thickspace",
+        priority: 76,
+        candidates: [{ latex: "\\;", label: "\\;", displayLatex: "\\;" }],
+    },
+    {
+        trigger: "negspace",
+        priority: 76,
+        candidates: [{ latex: "\\!", label: "\\!", displayLatex: "\\!" }],
+    },
+    {
         trigger: "par",
         priority: 90,
         candidates: [
@@ -1409,7 +1443,7 @@ const MANUAL_TRIGGERS = [
     {
         trigger: "text",
         priority: 85,
-        candidates: [{ latex: "\\text{#?}", label: "text", displayLatex: "\\text{unit}" }],
+        candidates: [{ latex: "\\mathrm{#?}", label: "text", displayLatex: "\\mathrm{unit}" }],
     },
     {
         trigger: "rm",
@@ -1550,9 +1584,9 @@ const MANUAL_TRIGGERS = [
         pack: "personal",
         candidates: [
             {
-                latex: "\\smashoperator{#?}",
+                latex: "\\operatorname*{#?}",
                 label: "smashop",
-                displayLatex: "\\smashoperator{\\sum_{i=1}^{n}}",
+                displayLatex: "\\operatorname*{arg\\,max}",
             },
         ],
     },
@@ -1562,9 +1596,9 @@ const MANUAL_TRIGGERS = [
         pack: "personal",
         candidates: [
             {
-                latex: "\\prescript{#?}{#?}{#?}",
+                latex: "{}^{#?}_{#?}{#?}",
                 label: "prescript",
-                displayLatex: "\\prescript{a}{b}{X}",
+                displayLatex: "{}^{a}_{b}X",
             },
         ],
     },
@@ -1572,7 +1606,7 @@ const MANUAL_TRIGGERS = [
         trigger: "symbf",
         priority: 74,
         pack: "personal",
-        candidates: [{ latex: "\\symbf{#?}", label: "symbf", displayLatex: "\\symbf{x}" }],
+        candidates: [{ latex: "\\mathbf{#?}", label: "symbf", displayLatex: "\\mathbf{x}" }],
     },
     {
         trigger: "mathchoice",
@@ -1622,9 +1656,9 @@ const MANUAL_TRIGGERS = [
         pack: "math",
         candidates: [
             {
-                latex: "\\begin{alignat*}{2}#?&=#?\\quad&#?&=#?\\end{alignat*}",
+                latex: "\\begin{align*}#?&=#?\\quad #?&=#?\\end{align*}",
                 label: "alignat*",
-                displayLatex: "\\begin{alignat*}{2}a&=b\\quad&c&=d\\end{alignat*}",
+                displayLatex: "\\begin{align*}a&=b\\quad c&=d\\end{align*}",
             },
         ],
     },
@@ -1634,9 +1668,9 @@ const MANUAL_TRIGGERS = [
         pack: "math",
         candidates: [
             {
-                latex: "\\begin{flalign*}#?&&=#?\\end{flalign*}",
+                latex: "\\begin{align*}#? &= #?\\end{align*}",
                 label: "flalign*",
-                displayLatex: "\\begin{flalign*}a&&=b\\end{flalign*}",
+                displayLatex: "\\begin{align*}a &= b\\end{align*}",
             },
         ],
     },

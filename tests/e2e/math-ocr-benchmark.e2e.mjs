@@ -376,7 +376,7 @@ const run = async () => {
       args: ["."],
       cwd: repoRoot,
       slowMo: Number.isFinite(args.slowMo) ? Math.max(0, args.slowMo) : 0,
-      env: { ...process.env },
+      env: { ...process.env, TEX64_E2E_HEADLESS: "1" },
     });
 
     const page = await electronApp.firstWindow();

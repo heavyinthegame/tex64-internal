@@ -20,10 +20,59 @@ const now = () => new Date().toISOString().slice(11, 19);
 const log = (message) => {
   console.log(`[math-wysiwyg-boundary-e2e ${now()}] ${message}`);
 };
+const selectedBoundaryCaseRaw = String(process.env.E2E_BOUNDARY_CASE ?? "").trim();
+const selectedBoundaryCase = (() => {
+  if (!selectedBoundaryCaseRaw) {
+    return null;
+  }
+  const parsed = Number.parseInt(selectedBoundaryCaseRaw, 10);
+  if (!Number.isFinite(parsed) || parsed < 1 || parsed > 9) {
+    throw new Error(`invalid E2E_BOUNDARY_CASE: ${selectedBoundaryCaseRaw}`);
+  }
+  return parsed;
+})();
+const shouldRunBoundaryCase = (index) =>
+  selectedBoundaryCase === null || Number(index) === selectedBoundaryCase;
 
 const pause = async (ms = stepDelayMs) => {
   if (ms <= 0) return;
   await new Promise((resolve) => setTimeout(resolve, ms));
+};
+
+const allowE2EQuit = async (app) => {
+  if (!app) {
+    return;
+  }
+  await app
+    .evaluate(() => {
+      global.__tex64E2EAllowQuit = true;
+    })
+    .catch(() => {});
+};
+
+const installE2EQuitGuard = async (app) => {
+  if (!app) {
+    return;
+  }
+  await app
+    .evaluate(({ app: electronApp }) => {
+      if (global.__tex64E2EQuitGuardInstalled === true) {
+        return;
+      }
+      global.__tex64E2EQuitGuardInstalled = true;
+      global.__tex64E2EAllowQuit = false;
+      electronApp.on("before-quit", (event) => {
+        if (global.__tex64E2EAllowQuit !== true) {
+          event.preventDefault();
+        }
+      });
+      process.on("SIGTERM", () => {
+        if (global.__tex64E2EAllowQuit === true) {
+          process.exit(0);
+        }
+      });
+    })
+    .catch(() => {});
 };
 
 const normalizeLatex = (value) => String(value ?? "").replace(/\s+/g, "");
@@ -31,7 +80,7 @@ const normalizeLatex = (value) => String(value ?? "").replace(/\s+/g, "");
 const cleanupStaleElectron = () => {
   try {
     execSync(
-      `pkill -f "${path.join(
+      `pkill -9 -f "${path.join(
         repoRoot,
         "node_modules/electron/dist/Electron.app/Contents/MacOS/Electron"
       )}"`,
@@ -42,11 +91,74 @@ const cleanupStaleElectron = () => {
   }
 };
 
+const isTransientElectronError = (error) => {
+  const message = error?.message ?? String(error);
+  return (
+    message.includes("Process failed to launch") ||
+    message.includes("Target page, context or browser has been closed") ||
+    message.includes("Target closed")
+  );
+};
+
+const launchElectronWithRetry = async (userDataPath, label) => {
+  let lastError;
+  for (let attempt = 1; attempt <= 5; attempt += 1) {
+    try {
+      cleanupStaleElectron();
+      await pause(120);
+      const app = await electron.launch({
+        args: ["."],
+        cwd: repoRoot,
+        slowMo: Number.isFinite(slowMoMs) ? Math.max(0, slowMoMs) : 0,
+        env: {
+          ...process.env,
+          TEX64_E2E: "1",
+          TEX64_E2E_HEADLESS: "1",
+          TEX64_E2E_USERDATA: userDataPath,
+        },
+      });
+      await installE2EQuitGuard(app);
+      return app;
+    } catch (error) {
+      lastError = error;
+      if (!isTransientElectronError(error) || attempt >= 5) {
+        throw error;
+      }
+      log(
+        `${label}: transient launch error, retrying (${attempt}/5): ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+      // Give Playwright/Electron process teardown a moment before relaunch.
+      await pause(300);
+    }
+  }
+  throw lastError;
+};
+
 const createWorkspaceCopy = async () => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "tex64-e2e-math-wysiwyg-boundary-"));
   const workspacePath = path.join(tempDir, "workspace");
   await fs.cp(sourceWorkspace, workspacePath, { recursive: true });
   return { tempDir, workspacePath };
+};
+
+const writeDetectionFixture = async (workspacePath) => {
+  const fixturePath = path.join(workspacePath, "sections", "blocks-detection-fixture.tex");
+  const fixtureContent = `\\section{Blocks Detection Fixture}
+% $comment_math + 1$
+Inline math: $x + y$.
+\\begin{verbatim}
+$verbatim_math$
+\\end{verbatim}
+\\begin{custombox}
+  a + b = c
+\\end{custombox}
+\\begin{equationbox}
+  p + q = r
+\\end{equationbox}
+`;
+  await fs.writeFile(fixturePath, fixtureContent, "utf8");
 };
 
 const postToBridge = async (page, payload) => {
@@ -68,6 +180,39 @@ const openSideTab = async (page, key) => {
     timeout: 12000,
   });
   await pause(70);
+};
+
+const openSettingsPage = async (page, pageId) => {
+  await openSideTab(page, "settings");
+  await page.waitForSelector("#settings-panel", { timeout: 10000 });
+
+  const alreadyOpen = await page
+    .locator(`.settings-page[data-settings-page="${pageId}"].is-active`)
+    .count();
+  if (alreadyOpen > 0) {
+    return;
+  }
+
+  const navSelector = `button.settings-nav-item[data-settings-target="${pageId}"]`;
+  const navVisible = await page.locator(navSelector).isVisible().catch(() => false);
+  if (!navVisible) {
+    const backButtons = page.locator("button.settings-back[data-settings-back]");
+    if ((await backButtons.count()) > 0) {
+      await backButtons.first().click();
+      await pause(120);
+    }
+  }
+
+  await page.evaluate((selector) => {
+    const button = document.querySelector(selector);
+    if (button instanceof HTMLButtonElement) {
+      button.click();
+    }
+  }, navSelector);
+
+  await page.waitForSelector(`.settings-page[data-settings-page="${pageId}"].is-active`, {
+    timeout: 10000,
+  });
 };
 
 const openFile = async (page, filePath) => {
@@ -148,15 +293,29 @@ const applySuggestionByTyping = async (page, token, options = {}) => {
     await pause(30);
   }
   await page.keyboard.press("Enter");
-  await page.waitForFunction(
-    () => {
-      const panel = document.querySelector(".math-wysiwyg-panel");
-      if (!(panel instanceof HTMLElement)) return true;
-      return panel.getAttribute("aria-hidden") !== "false";
-    },
-    undefined,
-    { timeout: 5000 }
-  );
+  try {
+    await page.waitForFunction(
+      () => {
+        const panel = document.querySelector(".math-wysiwyg-panel");
+        if (!(panel instanceof HTMLElement)) return true;
+        return panel.getAttribute("aria-hidden") !== "false";
+      },
+      undefined,
+      { timeout: 1200 }
+    );
+  } catch {
+    await page.keyboard.press("Escape");
+    await page.waitForFunction(
+      () => {
+        const panel = document.querySelector(".math-wysiwyg-panel");
+        if (!(panel instanceof HTMLElement)) return true;
+        return panel.getAttribute("aria-hidden") !== "false";
+      },
+      undefined,
+      { timeout: 3000 }
+    );
+  }
+  await pause(60);
 };
 
 const waitForIssueMessage = async (page, needle) => {
@@ -181,6 +340,18 @@ const waitForBlockMode = async (page, mode) => {
     mode,
     { timeout: 10000 }
   );
+};
+
+const setBlockMode = async (page, mode) => {
+  const current = await page.evaluate(() => {
+    const toggle = document.getElementById("block-mode-toggle");
+    if (!(toggle instanceof HTMLButtonElement)) return null;
+    return toggle.dataset.blockMode ?? null;
+  });
+  if (current !== mode) {
+    await page.click("#block-mode-toggle");
+  }
+  await waitForBlockMode(page, mode);
 };
 
 const setEditorCursor = async (page, lineNumber, column) => {
@@ -221,6 +392,144 @@ const waitForMathLatexNormalized = async (page, expectedNormalized, label) => {
   assert.equal(actual, expectedNormalized, `${label}: latex mismatch\nactual=${actual}`);
 };
 
+const waitForMathLatexShape = async (page, options) => {
+  const includes = Array.isArray(options?.includes)
+    ? options.includes.map((value) => String(value ?? "").replace(/\s+/g, "")).filter(Boolean)
+    : [];
+  const minLength = Number.isFinite(options?.minLength) ? Math.max(0, options.minLength) : 0;
+  const label = String(options?.label ?? "math latex shape");
+
+  try {
+    await page.waitForFunction(
+      ({ expectedTokens, expectedLength }) => {
+        const field = document.getElementById("block-math-input");
+        if (!field || typeof field.getValue !== "function") return false;
+        try {
+          const latex = String(field.getValue("latex") ?? "").replace(/\s+/g, "");
+          if (latex.includes("#?")) return false;
+          if (latex.length < expectedLength) return false;
+          return expectedTokens.every((token) => latex.includes(token));
+        } catch {
+          return false;
+        }
+      },
+      { expectedTokens: includes, expectedLength: minLength },
+      { timeout: 12000 }
+    );
+  } catch (error) {
+    const actualLatex = normalizeLatex(await getMathFieldLatex(page));
+    throw new Error(
+      `${label}: timed out waiting latex shape\nexpected tokens=${includes.join(",")}\nactual=${actualLatex}`,
+      { cause: error }
+    );
+  }
+
+  const actual = normalizeLatex(await getMathFieldLatex(page));
+  assert.ok(!actual.includes("#?"), `${label}: unresolved placeholder token remains\nactual=${actual}`);
+  assert.ok(actual.length >= minLength, `${label}: formula is too short\nactual=${actual}`);
+  includes.forEach((token) => {
+    assert.ok(actual.includes(token), `${label}: expected token missing (${token})\nactual=${actual}`);
+  });
+};
+
+const getMathRenderSnapshot = async (page) =>
+  page.evaluate(() => {
+    const field = document.getElementById("block-math-input");
+    if (!(field instanceof HTMLElement) || field.tagName.toLowerCase() !== "math-field") {
+      return null;
+    }
+    const root = field.shadowRoot;
+    if (!(root instanceof ShadowRoot)) {
+      return null;
+    }
+    return {
+      placeholderCount: root.querySelectorAll(".ML__placeholder, .ML__prompt, .ML__editablePromptBox")
+        .length,
+      errorCount: root.querySelectorAll(".ML__error").length,
+      rawText: (root.querySelector(".ML__latex")?.textContent ?? root.textContent ?? "")
+        .replace(/\s+/g, " ")
+        .trim(),
+    };
+  });
+
+const assertMathRenderStable = async (page, label) => {
+  const snapshot = await getMathRenderSnapshot(page);
+  assert.ok(snapshot, `${label}: render snapshot is unavailable`);
+  assert.equal(snapshot.errorCount, 0, `${label}: render has MathLive error node(s)`);
+  assert.equal(snapshot.placeholderCount, 0, `${label}: placeholder remains in rendered output`);
+  assert.ok(!snapshot.rawText.includes("\\"), `${label}: render still shows raw LaTeX slash`);
+};
+
+const waitForMathInputEmpty = async (page, label) => {
+  await page.waitForFunction(
+    () => {
+      const field = document.getElementById("block-math-input");
+      if (!field || typeof field.getValue !== "function") return false;
+      try {
+        const latex = String(field.getValue("latex") ?? "").replace(/\s+/g, "");
+        return latex === "";
+      } catch {
+        return false;
+      }
+    },
+    undefined,
+    { timeout: 10000 }
+  );
+  const actual = normalizeLatex(await getMathFieldLatex(page));
+  assert.equal(actual, "", `${label}: math input expected empty`);
+};
+
+const waitForAutoDetectedUiState = async (page, enabled) => {
+  await page.waitForFunction(
+    (expected) => {
+      const body = document.querySelector('.panel[data-panel="blocks"] .blocks-panel');
+      if (!(body instanceof HTMLElement)) {
+        return false;
+      }
+      return body.classList.contains("is-auto-detected") === expected;
+    },
+    enabled,
+    { timeout: 10000 }
+  );
+};
+
+const waitForDetectedDecorationState = async (page, expected) => {
+  await page.waitForFunction(
+    (state) => {
+      const editors = window.monaco?.editor?.getEditors?.() ?? [];
+      const active =
+        editors.find((editor) => typeof editor.hasTextFocus === "function" && editor.hasTextFocus()) ??
+        editors[0];
+      const model = active?.getModel?.();
+      if (!model || typeof model.getAllDecorations !== "function") {
+        return false;
+      }
+      const decorations = model.getAllDecorations();
+      const hasInline = decorations.some(
+        (decoration) => decoration?.options?.inlineClassName === "detected-block-highlight"
+      );
+      const hasGlyph = decorations.some(
+        (decoration) => decoration?.options?.glyphMarginClassName === "detected-block-glyph"
+      );
+      return hasInline === state.inline && hasGlyph === state.glyph;
+    },
+    expected,
+    { timeout: 10000 }
+  );
+};
+
+const waitForMathKeyboardHidden = async (page) => {
+  await page.waitForFunction(
+    () => {
+      const dock = document.getElementById("math-keyboard-dock");
+      if (!(dock instanceof HTMLElement)) return false;
+      return dock.getAttribute("aria-hidden") === "true" && !dock.classList.contains("is-open");
+    },
+    undefined,
+    { timeout: 10000 }
+  );
+};
+
 const waitForDiffModalState = async (page, open) => {
   await page.waitForFunction(
     (shouldOpen) => {
@@ -229,6 +538,20 @@ const waitForDiffModalState = async (page, open) => {
       return modal.classList.contains("is-open") === shouldOpen;
     },
     open,
+    { timeout: 10000 }
+  );
+};
+
+const waitForModalState = async (page, id, open) => {
+  await page.waitForFunction(
+    ({ modalId, shouldOpen }) => {
+      const modal = document.getElementById(modalId);
+      if (!(modal instanceof HTMLElement)) return false;
+      const isOpen = modal.classList.contains("is-open");
+      const aria = modal.getAttribute("aria-hidden");
+      return isOpen === shouldOpen && aria === (shouldOpen ? "false" : "true");
+    },
+    { modalId: id, shouldOpen: open },
     { timeout: 10000 }
   );
 };
@@ -287,6 +610,86 @@ const saveActiveFileViaBridge = async (page, filePath) => {
   });
 };
 
+const installBridgeIncomingSpy = async (page) => {
+  const installed = await page.evaluate(() => {
+    if ((window).__tex64IncomingSpyInstalled) {
+      return true;
+    }
+    const bridge = window.tex64Bridge;
+    if (!bridge || typeof bridge.onMessage !== "function") {
+      return false;
+    }
+    const messages = [];
+    const unsubscribe = bridge.onMessage((message) => {
+      messages.push(message);
+    });
+    (window).__tex64IncomingSpyInstalled = true;
+    (window).__tex64IncomingMessages = messages;
+    (window).__tex64IncomingUnsubscribe = unsubscribe;
+    return true;
+  });
+  assert.equal(installed, true, "failed to install tex64Bridge incoming spy");
+};
+
+const waitForIncomingBridgeMessage = async (page, expected) => {
+  await page.waitForFunction(
+    (criteria) => {
+      const list = (window).__tex64IncomingMessages;
+      if (!Array.isArray(list)) {
+        return false;
+      }
+      return list.some((message) => {
+        if (!message || message.type !== criteria.type) {
+          return false;
+        }
+        const payload = message.payload ?? null;
+        if (typeof criteria.source === "string" && payload?.source !== criteria.source) {
+          return false;
+        }
+        return true;
+      });
+    },
+    expected,
+    { timeout: 10000 }
+  );
+};
+
+const addEnvRegistryEntry = async (page, name, kind) => {
+  await openSettingsPage(page, "env");
+  await page.fill("#env-registry-input", name);
+  await page.selectOption("#env-registry-kind", kind);
+  await page.click("#env-registry-add");
+  await page.waitForSelector(
+    `#env-registry-${kind} .env-registry-row[data-env-name="${name}"][data-env-kind="${kind}"]`,
+    { timeout: 10000 }
+  );
+};
+
+const removeEnvRegistryEntry = async (page, name, kind) => {
+  await openSettingsPage(page, "env");
+  await page.evaluate(
+    ({ envName, envKind }) => {
+      const button = document.querySelector(
+        `#env-registry-${envKind} .env-registry-remove[data-env-name="${envName}"][data-env-kind="${envKind}"]`
+      );
+      if (button instanceof HTMLButtonElement) {
+        button.click();
+      }
+    },
+    { envName: name, envKind: kind }
+  );
+  await page.waitForFunction(
+    ({ envName, envKind }) => {
+      const row = document.querySelector(
+        `#env-registry-${envKind} .env-registry-row[data-env-name="${envName}"][data-env-kind="${envKind}"]`
+      );
+      return !(row instanceof HTMLElement);
+    },
+    { envName: name, envKind: kind },
+    { timeout: 10000 }
+  );
+};
+
 const runCase = async (label, test, options = {}) => {
   const { tempDir, workspacePath } = await createWorkspaceCopy();
   const userDataPath = path.join(tempDir, "user-data");
@@ -296,17 +699,7 @@ const runCase = async (label, test, options = {}) => {
     await options.prepareWorkspace?.(workspacePath);
     log(`${label}: workspace copy ${workspacePath}`);
     await fs.mkdir(userDataPath, { recursive: true });
-    cleanupStaleElectron();
-    electronApp = await electron.launch({
-      args: ["."],
-      cwd: repoRoot,
-      slowMo: Number.isFinite(slowMoMs) ? Math.max(0, slowMoMs) : 0,
-      env: {
-        ...process.env,
-        TEX64_E2E: "1",
-        TEX64_E2E_USERDATA: userDataPath,
-      },
-    });
+    electronApp = await launchElectronWithRetry(userDataPath, label);
 
     const page = await electronApp.firstWindow();
     await page.setViewportSize({ width: 1600, height: 980 });
@@ -328,6 +721,7 @@ const runCase = async (label, test, options = {}) => {
   } finally {
     if (electronApp) {
       try {
+        await allowE2EQuit(electronApp);
         await Promise.race([
           electronApp.close(),
           new Promise((_, reject) =>
@@ -356,81 +750,350 @@ const runCase = async (label, test, options = {}) => {
 };
 
 const run = async () => {
-  await runCase(
-    "[1/3] non-tex blocks are rejected before diff",
-    async (page) => {
-      await openFile(page, "notes/block-non-tex.txt");
+  if (shouldRunBoundaryCase(1)) {
+    await runCase(
+      "[1/9] non-tex blocks are rejected before diff",
+      async (page) => {
+        await openFile(page, "notes/block-non-tex.txt");
+        await openSideTab(page, "blocks");
+        await waitForMathFieldReady(page);
+        await focusMathField(page);
+        await page.keyboard.type("x+1", { delay: typeDelayMs });
+        await page.click("#block-insert-button");
+        await waitForIssueMessage(page, ".tex ファイルでのみ挿入できます");
+        await waitForDiffModalState(page, false);
+
+        await page.click("#block-mode-toggle");
+        await waitForBlockMode(page, "insert");
+      },
+      {
+        prepareWorkspace: async (workspacePath) => {
+          const target = path.join(workspacePath, "notes", "block-non-tex.txt");
+          await fs.writeFile(target, "Plain text for non-tex blocks test.\n", "utf8");
+        },
+      }
+    );
+  }
+
+  if (shouldRunBoundaryCase(2)) {
+    await runCase(
+      "[2/9] auto detection excludes comment/verbatim and highlights detected blocks",
+      async (page) => {
+        await openFile(page, "sections/blocks-detection-fixture.tex");
+        await openSideTab(page, "blocks");
+        await waitForMathFieldReady(page);
+        await setBlockMode(page, "edit");
+
+        await setEditorCursor(page, 2, 8);
+        await waitForMathInputEmpty(page, "comment exclusion");
+        await waitForAutoDetectedUiState(page, false);
+        await waitForDetectedDecorationState(page, { inline: false, glyph: false });
+
+        await setEditorCursor(page, 3, 16);
+        await waitForMathLatexNormalized(page, "x+y", "inline detection");
+        await waitForAutoDetectedUiState(page, true);
+        await waitForDetectedDecorationState(page, { inline: true, glyph: true });
+
+        await setEditorCursor(page, 5, 3);
+        await waitForMathInputEmpty(page, "verbatim exclusion");
+        await waitForAutoDetectedUiState(page, false);
+        await waitForDetectedDecorationState(page, { inline: false, glyph: false });
+
+        await setEditorCursor(page, 11, 4);
+        await waitForMathLatexNormalized(page, "p+q=r", "heuristic env detection");
+        await waitForAutoDetectedUiState(page, true);
+        await waitForDetectedDecorationState(page, { inline: true, glyph: true });
+        await setBlockMode(page, "insert");
+      },
+      {
+        prepareWorkspace: async (workspacePath) => {
+          await writeDetectionFixture(workspacePath);
+        },
+      }
+    );
+  }
+
+  if (shouldRunBoundaryCase(3)) {
+    await runCase(
+      "[3/9] env registry table/math classification switches detection",
+      async (page) => {
+        await openFile(page, "sections/blocks-detection-fixture.tex");
+        await openSideTab(page, "blocks");
+        await waitForMathFieldReady(page);
+        await setBlockMode(page, "edit");
+
+        await setEditorCursor(page, 8, 5);
+        await waitForMathInputEmpty(page, "custom env before registry");
+        await waitForAutoDetectedUiState(page, false);
+
+        await addEnvRegistryEntry(page, "custombox", "table");
+        await openSideTab(page, "blocks");
+        await waitForMathFieldReady(page);
+        await setBlockMode(page, "edit");
+        await setEditorCursor(page, 8, 5);
+        await waitForMathInputEmpty(page, "custom env registered as table");
+        await waitForAutoDetectedUiState(page, false);
+
+        await removeEnvRegistryEntry(page, "custombox", "table");
+        await addEnvRegistryEntry(page, "custombox", "math");
+        await openSideTab(page, "blocks");
+        await waitForMathFieldReady(page);
+        await setBlockMode(page, "edit");
+        await setEditorCursor(page, 8, 5);
+        await waitForMathLatexNormalized(page, "a+b=c", "custom env registered as math");
+        await waitForAutoDetectedUiState(page, true);
+        await setBlockMode(page, "insert");
+      },
+      {
+        prepareWorkspace: async (workspacePath) => {
+          await writeDetectionFixture(workspacePath);
+        },
+      }
+    );
+  }
+
+  if (shouldRunBoundaryCase(4)) {
+    await runCase("[4/9] edit detection sync + Escape", async (page) => {
+      await openFile(page, "sections/blocks.tex");
       await openSideTab(page, "blocks");
       await waitForMathFieldReady(page);
-      await focusMathField(page);
-      await page.keyboard.type("x+1", { delay: typeDelayMs });
+
+      await setEditorCursor(page, 2, 20);
+      await setBlockMode(page, "edit");
+      await waitForMathLatexNormalized(page, "a^2+b^2=c^2", "inline detection");
+
+      await setEditorCursor(page, 36, 5);
+      await waitForMathInputEmpty(page, "verbatim line in blocks.tex");
+
+      await page.keyboard.press("Escape");
+      await waitForBlockMode(page, "insert");
+    });
+  }
+
+  if (shouldRunBoundaryCase(5)) {
+    await runCase("[5/9] capture button opens picker and cropper flow", async (page) => {
+      await openFile(page, "sections/blocks.tex");
+      await openSideTab(page, "blocks");
+      await waitForMathFieldReady(page);
+      await page.evaluate(() => {
+        (window).__tex64TestCaptureApi = {
+          listSources: async () => [
+            {
+              id: "window:mock-capture",
+              title: "Mock Capture",
+              app: "Mock",
+              thumbnailUrl:
+                "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7+YAAAAABJRU5ErkJggg==",
+              width: 1,
+              height: 1,
+            },
+          ],
+        };
+      });
+
+      await page.click("#block-capture-button");
+      await waitForModalState(page, "math-capture-window-modal", true);
+      await page.click('.capture-window-item[data-id="window:mock-capture"]');
+      await waitForModalState(page, "math-capture-window-modal", false);
+      await waitForModalState(page, "math-capture-crop-modal", true);
+      await page.click("#math-capture-crop-retry");
+      await waitForModalState(page, "math-capture-crop-modal", false);
+    });
+  }
+
+  if (shouldRunBoundaryCase(6)) {
+    await runCase(
+      "[6/9] diff submit applies insert, requests format, and appends blocks history",
+      async (page, { workspacePath }) => {
+        await openFile(page, "sections/blocks.tex");
+        await openSideTab(page, "blocks");
+        await waitForMathFieldReady(page);
+        await installBridgeIncomingSpy(page);
+
+        await setEditorCursor(page, 34, 1);
+        const before = await readActiveEditorValue(page);
+
+        await applySuggestionByTyping(page, "argmax", { pickIndex: 0 });
+        await waitForMathLatexNormalized(page, "\\operatorname*{arg\\,max}", "argmax draft");
+
+        await page.click("#block-insert-button");
+        await waitForDiffModalState(page, true);
+        await page.click("#diff-modal-submit");
+        await waitForDiffModalState(page, false);
+
+        await waitForIncomingBridgeMessage(page, {
+          type: "formatResult",
+          source: "blockInsert",
+        });
+        await waitEditorContains(page, "\\operatorname*{arg\\,max}");
+        const after = await readActiveEditorValue(page);
+        assert.notEqual(after, before, "editor content did not change after diff submit");
+
+        const blocksHistoryPath = path.join(workspacePath, ".tex64", "blocks.json");
+        let history = null;
+        for (let i = 0; i < 40; i += 1) {
+          try {
+            const raw = await fs.readFile(blocksHistoryPath, "utf8");
+            history = JSON.parse(raw);
+            if (Array.isArray(history) && history.length >= 2) {
+              break;
+            }
+          } catch {
+            // wait for async write
+          }
+          // eslint-disable-next-line no-await-in-loop
+          await pause(80);
+        }
+        assert.ok(Array.isArray(history), "blocks history was not created");
+        assert.equal(history.length, 2, "blocks history should append one entry");
+        assert.equal(history[0]?.snippet, "seed");
+        assert.equal(history[0]?.mode, "seed");
+        const latest = history[history.length - 1];
+        assert.equal(latest?.file, "sections/blocks.tex");
+        assert.equal(latest?.mode, "new");
+        assert.ok(
+          String(latest?.snippet ?? "").includes("\\operatorname*{arg\\,max}"),
+          "latest blocks history entry does not contain inserted snippet"
+        );
+        assert.ok(
+          typeof latest?.createdAt === "string" && latest.createdAt.length > 0,
+          "latest blocks history entry missing createdAt"
+        );
+
+        await waitForTabDirtyState(page, "sections/blocks.tex", true);
+        await saveActiveFileViaBridge(page, "sections/blocks.tex");
+        await waitForTabDirtyState(page, "sections/blocks.tex", false);
+      },
+      {
+        prepareWorkspace: async (workspacePath) => {
+          const tex64Dir = path.join(workspacePath, ".tex64");
+          await fs.mkdir(tex64Dir, { recursive: true });
+          await fs.writeFile(
+            path.join(tex64Dir, "blocks.json"),
+            JSON.stringify(
+              [{ snippet: "seed", mode: "seed", createdAt: "2000-01-01T00:00:00.000Z" }],
+              null,
+              2
+            ),
+            "utf8"
+          );
+        },
+      }
+    );
+  }
+
+  if (shouldRunBoundaryCase(7)) {
+    await runCase("[7/9] math keyboard dock stays hidden in all block states", async (page) => {
+      await openFile(page, "sections/blocks.tex");
+      await openSideTab(page, "blocks");
+      await waitForMathFieldReady(page);
+      await waitForMathKeyboardHidden(page);
+
+      await setEditorCursor(page, 2, 20);
+      await setBlockMode(page, "edit");
+      await waitForMathLatexNormalized(page, "a^2+b^2=c^2", "edit mode math detection");
+      await waitForMathKeyboardHidden(page);
+
+      await setBlockMode(page, "insert");
+      await waitForMathKeyboardHidden(page);
+    });
+  }
+
+  if (shouldRunBoundaryCase(8)) {
+    await runCase("[8/9] Gaussian integral is authored via UI and applied through diff", async (page) => {
+      await openFile(page, "sections/blocks.tex");
+      await openSideTab(page, "blocks");
+      await waitForMathFieldReady(page);
+      await installBridgeIncomingSpy(page);
+
+      await setEditorCursor(page, 34, 1);
+      const before = await readActiveEditorValue(page);
+
+      await page.keyboard.type("I=", { delay: typeDelayMs });
+      await applySuggestionByTyping(page, "int", { pickIndex: 0 });
+      await page.keyboard.type("_-", { delay: typeDelayMs });
+      await applySuggestionByTyping(page, "infty", { pickIndex: 0 });
+      await page.keyboard.type("^", { delay: typeDelayMs });
+      await applySuggestionByTyping(page, "infty", { pickIndex: 0 });
+      await page.keyboard.press("Tab");
+      await page.keyboard.type("e^-x^2dx=", { delay: typeDelayMs });
+      await applySuggestionByTyping(page, "sqrt", { pickIndex: 0 });
+      await applySuggestionByTyping(page, "pi", { pickIndex: 0 });
+
+      await waitForMathLatexShape(page, {
+        includes: [
+          "\\int",
+          "\\infty",
+          "e^",
+          "x^2",
+          "dx",
+          "\\sqrt",
+          "\\pi",
+        ],
+        minLength: 20,
+        label: "gaussian integral composition",
+      });
+      await assertMathRenderStable(page, "gaussian integral composition");
+
       await page.click("#block-insert-button");
-      await waitForIssueMessage(page, ".tex ファイルでのみ挿入できます");
+      await waitForDiffModalState(page, true);
+      await page.click("#diff-modal-submit");
       await waitForDiffModalState(page, false);
 
-      await page.click("#block-mode-toggle");
-      await waitForBlockMode(page, "insert");
-    },
-    {
-      prepareWorkspace: async (workspacePath) => {
-        const target = path.join(workspacePath, "notes", "block-non-tex.txt");
-        await fs.writeFile(target, "Plain text for non-tex blocks test.\n", "utf8");
-      },
-    }
-  );
+      await waitForIncomingBridgeMessage(page, {
+        type: "formatResult",
+        source: "blockInsert",
+      });
+      await waitEditorContains(page, "\\int");
+      await waitEditorContains(page, "\\infty");
+      await waitEditorContains(page, "\\sqrt");
+      await waitEditorContains(page, "\\pi");
+      const after = await readActiveEditorValue(page);
+      assert.notEqual(after, before, "editor content did not change after Gaussian-integral diff submit");
+    });
+  }
 
-  await runCase("[2/3] edit detection sync + Escape", async (page) => {
-    await openFile(page, "sections/blocks.tex");
-    await openSideTab(page, "blocks");
-    await waitForMathFieldReady(page);
+  if (shouldRunBoundaryCase(9)) {
+    await runCase("[9/9] physics PDE is authored via UI and applied through diff", async (page) => {
+      await openFile(page, "sections/blocks.tex");
+      await openSideTab(page, "blocks");
+      await waitForMathFieldReady(page);
+      await installBridgeIncomingSpy(page);
 
-    await setEditorCursor(page, 2, 20);
-    await page.click("#block-mode-toggle");
-    await waitForBlockMode(page, "edit");
-    await waitForMathLatexNormalized(page, "a^2+b^2=c^2", "inline detection");
+      await setEditorCursor(page, 34, 1);
+      const before = await readActiveEditorValue(page);
 
-    await setEditorCursor(page, 36, 5);
-    await page.waitForFunction(
-      () => {
-        const field = document.getElementById("block-math-input");
-        if (!field || typeof field.getValue !== "function") return false;
-        try {
-          return String(field.getValue("latex") ?? "").replace(/\s+/g, "") === "";
-        } catch {
-          return false;
-        }
-      },
-      undefined,
-      { timeout: 10000 }
-    );
+      await applySuggestionByTyping(page, "pdx", { pickIndex: 0 });
+      await page.keyboard.type("u", { delay: typeDelayMs });
+      await page.keyboard.press("Tab");
+      await page.keyboard.press("Tab");
+      await page.keyboard.type("t", { delay: typeDelayMs });
+      await page.keyboard.type("+c", { delay: typeDelayMs });
+      await applySuggestionByTyping(page, "nabla", { pickIndex: 0 });
+      await page.keyboard.type("u=0", { delay: typeDelayMs });
 
-    await page.keyboard.press("Escape");
-    await waitForBlockMode(page, "insert");
-  });
+      await waitForMathLatexShape(page, {
+        includes: ["\\frac", "\\partialu", "\\partialt", "+c", "\\nabla", "u=0"],
+        minLength: 20,
+        label: "physics PDE composition",
+      });
+      await assertMathRenderStable(page, "physics PDE composition");
 
-  await runCase("[3/3] diff submit applies block insert", async (page) => {
-    await openFile(page, "sections/blocks.tex");
-    await openSideTab(page, "blocks");
-    await waitForMathFieldReady(page);
+      await page.click("#block-insert-button");
+      await waitForDiffModalState(page, true);
+      await page.click("#diff-modal-submit");
+      await waitForDiffModalState(page, false);
 
-    await setEditorCursor(page, 34, 1);
-    const before = await readActiveEditorValue(page);
-
-    await applySuggestionByTyping(page, "argmax", { pickIndex: 0 });
-    await waitForMathLatexNormalized(page, "\\operatorname*{arg\\,max}", "argmax draft");
-
-    await page.click("#block-insert-button");
-    await waitForDiffModalState(page, true);
-    await page.click("#diff-modal-submit");
-    await waitForDiffModalState(page, false);
-
-    await waitEditorContains(page, "\\operatorname*{arg\\,max}");
-    const after = await readActiveEditorValue(page);
-    assert.notEqual(after, before, "editor content did not change after diff submit");
-    await waitForTabDirtyState(page, "sections/blocks.tex", true);
-    await saveActiveFileViaBridge(page, "sections/blocks.tex");
-    await waitForTabDirtyState(page, "sections/blocks.tex", false);
-  });
+      await waitForIncomingBridgeMessage(page, {
+        type: "formatResult",
+        source: "blockInsert",
+      });
+      await waitEditorContains(page, "\\partial");
+      await waitEditorContains(page, "\\nabla");
+      const after = await readActiveEditorValue(page);
+      assert.notEqual(after, before, "editor content did not change after physics-PDE diff submit");
+    });
+  }
 
   log("math-wysiwyg boundary e2e passed");
 };

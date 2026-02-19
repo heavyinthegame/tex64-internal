@@ -80,6 +80,144 @@ const splitArgsString = (input) => {
   return result;
 };
 
+const normalizeLatexJobName = (value) => {
+  if (!value || typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const normalized = trimmed.split("\\").join("/");
+  const base = normalized.split("/").pop() ?? "";
+  const cleaned = base.replace(/\.pdf$/i, "").trim();
+  return cleaned || null;
+};
+
+const pickJobNameFromLatexmkArgs = (args) => {
+  if (!Array.isArray(args)) {
+    return null;
+  }
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (typeof arg !== "string") {
+      continue;
+    }
+    if (arg.startsWith("-jobname=")) {
+      return normalizeLatexJobName(arg.slice("-jobname=".length).trim());
+    }
+    if (arg === "-jobname") {
+      const next = typeof args[index + 1] === "string" ? args[index + 1].trim() : "";
+      return normalizeLatexJobName(next);
+    }
+  }
+  return null;
+};
+
+const isPathWithinRoot = (rootPath, targetPath) => {
+  if (!rootPath || typeof rootPath !== "string") {
+    return false;
+  }
+  if (!targetPath || typeof targetPath !== "string") {
+    return false;
+  }
+  const rootResolved = path.resolve(rootPath);
+  const targetResolved = path.resolve(targetPath);
+  const normalize = (value) => (process.platform === "win32" ? value.toLowerCase() : value);
+  const rootNormalized = normalize(rootResolved);
+  const targetNormalized = normalize(targetResolved);
+  return targetNormalized === rootNormalized || targetNormalized.startsWith(rootNormalized + path.sep);
+};
+
+const listRecentFiles = (dirPath, predicate, minMtimeMs) => {
+  if (!dirPath || typeof dirPath !== "string") {
+    return [];
+  }
+  const entries = [];
+  let dirEntries = [];
+  try {
+    dirEntries = fs.readdirSync(dirPath, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  for (const entry of dirEntries) {
+    if (!entry?.isFile?.()) {
+      continue;
+    }
+    const name = entry.name;
+    if (!predicate(name)) {
+      continue;
+    }
+    const absPath = path.join(dirPath, name);
+    let mtimeMs = 0;
+    try {
+      const stats = fs.statSync(absPath);
+      mtimeMs = Number(stats.mtimeMs) || 0;
+    } catch {
+      continue;
+    }
+    if (Number.isFinite(minMtimeMs) && mtimeMs < minMtimeMs) {
+      continue;
+    }
+    entries.push({ path: absPath, mtimeMs });
+  }
+  entries.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  return entries;
+};
+
+const parseFlsPdfOutputs = (content) => {
+  if (!content || typeof content !== "string") {
+    return { pwd: null, outputs: [] };
+  }
+  const lines = content.split(/\r?\n/);
+  let pwd = null;
+  const outputs = [];
+  for (const line of lines) {
+    if (typeof line !== "string") {
+      continue;
+    }
+    if (line.startsWith("PWD ")) {
+      const value = line.slice("PWD ".length).trim();
+      if (value) {
+        pwd = value;
+      }
+      continue;
+    }
+    if (!line.startsWith("OUTPUT ")) {
+      continue;
+    }
+    const value = line.slice("OUTPUT ".length).trim();
+    if (!value || !value.toLowerCase().endsWith(".pdf")) {
+      continue;
+    }
+    outputs.push(value);
+  }
+  return { pwd, outputs };
+};
+
+const parseFdbPdfOutputs = (content) => {
+  if (!content || typeof content !== "string") {
+    return [];
+  }
+  const lines = content.split(/\r?\n/);
+  const outputs = [];
+  for (const line of lines) {
+    if (typeof line !== "string") {
+      continue;
+    }
+    const match = line.match(/^\["[^"]*"\]\s+\S+\s+"[^"]+"\s+"([^"]+?\.pdf)"\s+"[^"]*"/);
+    if (!match) {
+      continue;
+    }
+    const value = match[1]?.trim();
+    if (!value) {
+      continue;
+    }
+    outputs.push(value);
+  }
+  return outputs;
+};
+
 const pickOutDirFromLatexmkArgs = (args) => {
   if (!Array.isArray(args)) {
     return null;
@@ -126,6 +264,8 @@ const normalizeOutDir = (rootPath, outDir) => {
 class BuildService {
   constructor() {
     this.isBuilding = false;
+    this.activeProcess = null;
+    this.cancelRequested = false;
   }
 
   async build(rootPath, mainFileName = "main.tex", engine = "lualatex", buildProfile = null) {
@@ -133,10 +273,12 @@ class BuildService {
       return { kind: "busy" };
     }
     this.isBuilding = true;
+    this.cancelRequested = false;
     try {
       return await this.runBuild(rootPath, mainFileName, engine, buildProfile);
     } finally {
       this.isBuilding = false;
+      this.cancelRequested = false;
     }
   }
 
@@ -145,11 +287,49 @@ class BuildService {
       return { kind: "busy" };
     }
     this.isBuilding = true;
+    this.cancelRequested = false;
     try {
       return await this.runClean(rootPath, mainFileName, options, buildProfile);
     } finally {
       this.isBuilding = false;
+      this.cancelRequested = false;
     }
+  }
+
+  cancelCurrentRun() {
+    if (!this.isBuilding || !this.activeProcess) {
+      return false;
+    }
+    const proc = this.activeProcess;
+    this.cancelRequested = true;
+    let sent = false;
+    try {
+      sent = proc.kill("SIGTERM");
+    } catch {
+      sent = false;
+    }
+    if (!sent) {
+      try {
+        sent = proc.kill();
+      } catch {
+        sent = false;
+      }
+    }
+    if (sent) {
+      const timer = setTimeout(() => {
+        try {
+          if (proc.exitCode === null) {
+            proc.kill("SIGKILL");
+          }
+        } catch {
+          // ignore
+        }
+      }, 2000);
+      if (typeof timer?.unref === "function") {
+        timer.unref();
+      }
+    }
+    return sent;
   }
 
   async runBuild(rootPath, mainFileName, engine, buildProfile) {
@@ -172,7 +352,9 @@ class BuildService {
       };
       return { kind: "failure", summary: issue.message, issues: [issue] };
     }
-    const jobName = path.basename(mainFileName, path.extname(mainFileName));
+    const jobName =
+      pickJobNameFromLatexmkArgs(extraArgs) ??
+      path.basename(mainFileName, path.extname(mainFileName));
     const pdfBase = `${jobName}.pdf`;
     const fallbackDir = path.dirname(mainFileName ?? "");
     const pdfDir = outDir
@@ -182,6 +364,7 @@ class BuildService {
       : rootPath;
     const pdfPath = path.join(pdfDir, pdfBase);
 
+    const startedAt = Date.now();
     let output = "";
     let status = 1;
     try {
@@ -192,6 +375,14 @@ class BuildService {
       });
       output = result.output;
       status = result.status;
+      if (result.cancelled === true || this.cancelRequested) {
+        return {
+          kind: "cancelled",
+          summary: "ビルドをキャンセルしました。",
+          issues: [],
+          log: output,
+        };
+      }
     } catch (error) {
       const message = error?.message ?? String(error);
       if (isEnvMissingMessage(message)) {
@@ -213,7 +404,23 @@ class BuildService {
 
     const issues = this.parseIssues(output, rootPath);
     if (status === 0) {
-      return { kind: "success", summary: "ビルド成功", issues, pdfPath, log: output };
+      const resolvedPdfPath = this.resolvePdfPathAfterBuild(rootPath, mainFileName, {
+        outDir,
+        startedAt,
+        expectedPdfPath: pdfPath,
+        jobName,
+      });
+      if (resolvedPdfPath) {
+        return { kind: "success", summary: "ビルド成功", issues, pdfPath: resolvedPdfPath, log: output };
+      }
+      const message =
+        "ビルドは成功しましたが、PDFが見つかりません。-jobname / outDir / latexmkrc を確認してください。";
+      return {
+        kind: "failure",
+        summary: message,
+        issues: [{ severity: "error", message, line: null }],
+        log: output,
+      };
     }
     const summary = this.failureSummary(output, issues, mainFileName);
     if (isEnvMissingMessage(summary)) {
@@ -242,6 +449,217 @@ class BuildService {
       issues: hasError ? issues : [fallback, ...issues].slice(0, 20),
       log: output,
     };
+  }
+
+  resolvePdfPathAfterBuild(rootPath, mainFileName, options = {}) {
+    const startedAt = Number.isFinite(options?.startedAt) ? options.startedAt : 0;
+    const minMtimeMs = startedAt > 0 ? startedAt - 5000 : 0;
+    const expectedPdfPath =
+      typeof options?.expectedPdfPath === "string" && options.expectedPdfPath.trim()
+        ? options.expectedPdfPath.trim()
+        : null;
+    if (expectedPdfPath && fs.existsSync(expectedPdfPath)) {
+      return expectedPdfPath;
+    }
+
+    const jobName =
+      typeof options?.jobName === "string" ? options.jobName.trim() : "";
+    const mainBaseName = path.basename(mainFileName ?? "", path.extname(mainFileName ?? ""));
+    const outDir =
+      typeof options?.outDir === "string" ? options.outDir.trim() : "";
+
+    const candidateDirs = [];
+    const pushDir = (dirPath) => {
+      if (!dirPath || typeof dirPath !== "string") {
+        return;
+      }
+      const resolved = path.resolve(dirPath);
+      if (candidateDirs.includes(resolved)) {
+        return;
+      }
+      try {
+        if (!fs.statSync(resolved).isDirectory()) {
+          return;
+        }
+      } catch {
+        return;
+      }
+      candidateDirs.push(resolved);
+    };
+
+    if (expectedPdfPath) {
+      pushDir(path.dirname(expectedPdfPath));
+    }
+    if (outDir) {
+      pushDir(path.join(rootPath, outDir));
+    }
+    pushDir(path.dirname(path.join(rootPath, mainFileName)));
+    pushDir(rootPath);
+
+    if (jobName) {
+      for (const dirPath of candidateDirs) {
+        const direct = path.join(dirPath, `${jobName}.pdf`);
+        if (fs.existsSync(direct) && isPathWithinRoot(rootPath, direct)) {
+          return direct;
+        }
+      }
+    }
+
+    const probeArtifact = (baseName, ext, filePath) => {
+      if (!baseName || typeof baseName !== "string") {
+        return null;
+      }
+      if (!filePath || typeof filePath !== "string") {
+        return null;
+      }
+      if (!fs.existsSync(filePath) || !isPathWithinRoot(rootPath, filePath)) {
+        return null;
+      }
+      let content = "";
+      try {
+        content = fs.readFileSync(filePath, "utf8");
+      } catch {
+        return null;
+      }
+      if (ext === ".fls") {
+        const parsed = parseFlsPdfOutputs(content);
+        const baseDir =
+          parsed.pwd && path.isAbsolute(parsed.pwd)
+            ? parsed.pwd
+            : path.dirname(filePath);
+        for (const outputPath of parsed.outputs) {
+          const abs = path.isAbsolute(outputPath)
+            ? outputPath
+            : path.resolve(baseDir, outputPath);
+          if (!isPathWithinRoot(rootPath, abs)) {
+            continue;
+          }
+          try {
+            if (fs.statSync(abs).isFile()) {
+              return abs;
+            }
+          } catch {
+            // ignore
+          }
+        }
+        return null;
+      }
+      if (ext === ".fdb_latexmk") {
+        const pdfs = parseFdbPdfOutputs(content);
+        const baseDir = path.dirname(filePath);
+        for (const value of pdfs) {
+          const abs = path.isAbsolute(value) ? value : path.resolve(baseDir, value);
+          if (!isPathWithinRoot(rootPath, abs)) {
+            continue;
+          }
+          try {
+            if (fs.statSync(abs).isFile()) {
+              return abs;
+            }
+          } catch {
+            // ignore
+          }
+        }
+        return null;
+      }
+      return null;
+    };
+
+    const recentFls = [];
+    for (const dirPath of candidateDirs) {
+      recentFls.push(
+        ...listRecentFiles(
+          dirPath,
+          (name) => name.toLowerCase().endsWith(".fls"),
+          minMtimeMs
+        ).slice(0, 10)
+      );
+    }
+    recentFls.sort((a, b) => b.mtimeMs - a.mtimeMs);
+    for (const entry of recentFls.slice(0, 20)) {
+      const resolved = probeArtifact(jobName || mainBaseName, ".fls", entry.path);
+      if (resolved) {
+        return resolved;
+      }
+    }
+
+    for (const dirPath of candidateDirs) {
+      const candidates = [];
+      if (jobName) {
+        candidates.push(jobName);
+      }
+      if (mainBaseName && mainBaseName !== jobName) {
+        candidates.push(mainBaseName);
+      }
+      for (const baseName of candidates) {
+        const flsPath = path.join(dirPath, `${baseName}.fls`);
+        const resolved = probeArtifact(baseName, ".fls", flsPath);
+        if (resolved) {
+          return resolved;
+        }
+      }
+    }
+
+    const recentFdb = [];
+    for (const dirPath of candidateDirs) {
+      recentFdb.push(
+        ...listRecentFiles(
+          dirPath,
+          (name) => name.toLowerCase().endsWith(".fdb_latexmk"),
+          minMtimeMs
+        ).slice(0, 10)
+      );
+    }
+    recentFdb.sort((a, b) => b.mtimeMs - a.mtimeMs);
+    for (const entry of recentFdb.slice(0, 20)) {
+      const resolved = probeArtifact(jobName || mainBaseName, ".fdb_latexmk", entry.path);
+      if (resolved) {
+        return resolved;
+      }
+    }
+
+    for (const dirPath of candidateDirs) {
+      const candidates = [];
+      if (jobName) {
+        candidates.push(jobName);
+      }
+      if (mainBaseName && mainBaseName !== jobName) {
+        candidates.push(mainBaseName);
+      }
+      for (const baseName of candidates) {
+        const fdbPath = path.join(dirPath, `${baseName}.fdb_latexmk`);
+        const resolved = probeArtifact(baseName, ".fdb_latexmk", fdbPath);
+        if (resolved) {
+          return resolved;
+        }
+      }
+    }
+
+    const recentPdf = [];
+    for (const dirPath of candidateDirs) {
+      recentPdf.push(
+        ...listRecentFiles(
+          dirPath,
+          (name) => name.toLowerCase().endsWith(".pdf"),
+          minMtimeMs
+        ).slice(0, 20)
+      );
+    }
+    recentPdf.sort((a, b) => b.mtimeMs - a.mtimeMs);
+    for (const entry of recentPdf.slice(0, 20)) {
+      if (!isPathWithinRoot(rootPath, entry.path)) {
+        continue;
+      }
+      try {
+        if (fs.statSync(entry.path).isFile()) {
+          return entry.path;
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    return null;
   }
 
   async runClean(rootPath, mainFileName, options, buildProfile) {
@@ -276,6 +694,14 @@ class BuildService {
       });
       output = result.output;
       status = result.status;
+      if (result.cancelled === true || this.cancelRequested) {
+        return {
+          kind: "cancelled",
+          summary: deep ? "clean（全削除）をキャンセルしました。" : "clean をキャンセルしました。",
+          issues: [],
+          log: output,
+        };
+      }
     } catch (error) {
       const message = error?.message ?? String(error);
       if (isEnvMissingMessage(message)) {
@@ -401,6 +827,7 @@ class BuildService {
   async runProcess(command, args, cwd, env) {
     return new Promise((resolve, reject) => {
       const proc = spawn(command, args, { cwd, env });
+      this.activeProcess = proc;
       let output = "";
       proc.stdout.on("data", (chunk) => {
         output += chunk.toString();
@@ -409,10 +836,20 @@ class BuildService {
         output += chunk.toString();
       });
       proc.on("error", (err) => {
+        if (this.activeProcess === proc) {
+          this.activeProcess = null;
+        }
         reject(err);
       });
       proc.on("close", (code) => {
-        resolve({ output, status: code ?? 1 });
+        if (this.activeProcess === proc) {
+          this.activeProcess = null;
+        }
+        resolve({
+          output,
+          status: code ?? 1,
+          cancelled: this.cancelRequested,
+        });
       });
     });
   }

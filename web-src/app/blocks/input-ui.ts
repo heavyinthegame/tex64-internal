@@ -139,6 +139,29 @@ export const initBlockInputUi = (
   );
   const STYLE_WRAPPER_TEMPLATE_RE =
     /^\\(?:mathbb|mathcal|mathfrak|mathsf|mathrm|mathbf|mathit|mathtt|operatorname)\{#\?\}$/;
+  const isPlainBackslashInput = (event: KeyboardEvent) => {
+    if (event.metaKey || event.ctrlKey || event.altKey) {
+      return false;
+    }
+    if (event.key === "\\" || event.key === "¥") {
+      return true;
+    }
+    return (
+      event.code === "Backslash" || event.code === "IntlYen" || event.code === "IntlRo"
+    );
+  };
+  const blockDirectLatexCommandInput = (event: KeyboardEvent) => {
+    if (!isPlainBackslashInput(event)) {
+      return false;
+    }
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const opened = Boolean(mathWysiwygApi?.openExplicitSuggestions());
+    if (!opened) {
+      mathWysiwygApi?.close();
+    }
+    return true;
+  };
 
   const setFormatMenuOpen = (open: boolean) => {
     formatMenuOpen = open;
@@ -526,6 +549,9 @@ export const initBlockInputUi = (
       textArea.addEventListener("keydown", (event: KeyboardEvent) => {
         if (mathWysiwygApi?.handleKeydown(event)) {
           event.stopImmediatePropagation();
+          return;
+        }
+        if (blockDirectLatexCommandInput(event)) {
           return;
         }
         if (event.isComposing) {
@@ -1086,6 +1112,9 @@ export const initBlockInputUi = (
         event.stopImmediatePropagation();
         return;
       }
+      if (blockDirectLatexCommandInput(event)) {
+        return;
+      }
       if (
         event.key === "/" &&
         !event.metaKey &&
@@ -1198,6 +1227,9 @@ export const initBlockInputUi = (
 
     mathfield.addEventListener("keydown", (e: KeyboardEvent) => {
       if (mathWysiwygApi?.handleKeydown(e)) {
+        return;
+      }
+      if (blockDirectLatexCommandInput(e)) {
         return;
       }
       if (e.isComposing) {
