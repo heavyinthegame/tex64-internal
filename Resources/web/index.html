@@ -3,7 +3,10 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;">
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self' data: blob: https:; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https:; worker-src 'self' blob:; frame-src 'self' data: blob:;"
+    >
     <title>TeX64</title>
     <link rel="stylesheet" href="./theme.css">
     <link rel="stylesheet" href="./mathlive/mathlive-static.css">
@@ -19,6 +22,17 @@
             </div>
             <div class="launcher-title">Tex64</div>
           </div>
+          <div class="launcher-template" role="group" aria-label="テンプレート">
+            <div class="launcher-label">テンプレート</div>
+            <div class="launcher-toggle">
+              <button class="launcher-template-button" data-template="paper" type="button" aria-selected="true">
+                論文
+              </button>
+              <button class="launcher-template-button" data-template="lecture" type="button" aria-selected="false">
+                講義ノート
+              </button>
+            </div>
+          </div>
           <div class="launcher-actions">
             <button class="launcher-action primary" id="launcher-open" type="button">
               <span class="launcher-action-title">フォルダを開く</span>
@@ -27,6 +41,7 @@
               <span class="launcher-action-title">新規作成</span>
             </button>
           </div>
+          <div class="launcher-status is-hidden" id="launcher-status" role="status" aria-live="polite"></div>
         </div>
         <div class="launcher-right">
           <div class="launcher-recent" id="launcher-recent">
@@ -227,6 +242,7 @@
           <div class="tab-group secondary" role="tablist" aria-label="補助">
             <button
               class="tab"
+              id="settings-tab"
               type="button"
               role="tab"
               data-tab="settings"
@@ -344,12 +360,6 @@
                         </div>
                       </div>
                       <button
-                        class="panel-button block-suggest-button"
-                        id="block-suggest-button"
-                        type="button"
-                        aria-label="候補を表示"
-                      >候補</button>
-                      <button
                         class="panel-button block-mode-toggle"
                         id="block-mode-toggle"
                         type="button"
@@ -402,6 +412,12 @@
                   <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
                 </button>
                 <span class="ai-topbar-title" id="ai-topbar-title">AI</span>
+                <div class="ai-usage-meter is-hidden" id="ai-usage-meter" role="img" aria-label="AI使用量">
+                  <span class="ai-usage-meter-text" id="ai-usage-meter-text">-</span>
+                </div>
+                <button class="panel-button ghost ai-topbar-auth is-hidden" id="ai-auth-topbar" type="button">
+                  ログイン
+                </button>
                 <button class="ai-icon-btn" id="ai-chat-new" type="button" aria-label="新しいチャット">
                   <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
                 </button>
@@ -565,7 +581,12 @@
                   <span class="settings-nav-desc">コンパイルエンジン / PDF 表示</span>
                 </button>
                 <button class="settings-nav-item" data-settings-target="runtime" type="button">
-                  <span class="settings-nav-title">実行環境</span>
+                    <span class="settings-nav-title-row">
+                    <span class="settings-nav-title">実行環境</span>
+                    <span class="settings-nav-badge is-hidden" id="settings-runtime-attention" aria-hidden="true">
+                      要対応
+                    </span>
+                  </span>
                   <span class="settings-nav-desc">TeX Distribution / latexmk</span>
                 </button>
               </div>
@@ -898,6 +919,20 @@
                     <div class="settings-page-title">実行環境</div>
                   </div>
                   <div class="settings-group">
+                    <div class="settings-group-title">アカウント</div>
+                    <div class="settings-item">
+                      <div class="settings-label">
+                        <span class="settings-title">Googleログイン</span>
+                        <span class="settings-desc" id="settings-auth-status">未ログイン</span>
+                      </div>
+                      <div class="settings-control settings-inline settings-inline-wrap">
+                        <button class="panel-button ghost is-hidden" id="settings-auth-logout" type="button">
+                          ログアウト
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="settings-group">
                     <div class="settings-group-title">アップデート</div>
                     <div class="settings-item">
                       <div class="settings-label">
@@ -925,11 +960,8 @@
                       <button class="panel-button ghost" id="settings-update-check" type="button">
                         更新を確認
                       </button>
-                      <button class="panel-button" id="settings-update-download" type="button">
-                        ダウンロード
-                      </button>
-                      <button class="panel-button" id="settings-update-install" type="button">
-                        適用
+                      <button class="panel-button is-hidden" id="settings-update-apply" type="button">
+                        更新を適用
                       </button>
                       <button class="panel-button ghost" id="settings-update-open" type="button">
                         手動ダウンロード
@@ -941,7 +973,7 @@
                     <div class="settings-item env-item" data-env="lualatex">
                       <div class="settings-label">
                         <span class="settings-title">TeX Distribution</span>
-                        <span class="settings-desc">TeX Live / MacTeX / BasicTeX / MiKTeX など、LaTeX エンジンと基本ツール一式。</span>
+                        <span class="settings-desc">TeX Live / MacTeX / BasicTeX など、LaTeX エンジンと基本ツール一式。</span>
                       </div>
                       <div class="settings-control">
                         <span class="env-badge checking">確認中...</span>
@@ -989,6 +1021,29 @@
                     <div class="settings-help-text">
                       本アプリのビルド/整形/SyncTeX には TeX Distribution と
                       latexmk / latexindent / synctex が必要です（多くは同梱）。
+                    </div>
+                    <div class="settings-help-text is-hidden" id="settings-runtime-install-status" aria-hidden="true"></div>
+                    <div class="settings-help-text settings-runtime-setup-status" id="settings-runtime-setup-status">
+                      実行環境を確認中です。
+                    </div>
+                    <div class="settings-help-text settings-runtime-onboarding" id="settings-runtime-onboarding-status">
+                      初回セットアップを準備中です。
+                    </div>
+                    <div class="settings-inline settings-inline-wrap">
+                      <button class="panel-button" id="settings-runtime-run-first-build" type="button" disabled>
+                        最初のビルドを実行
+                      </button>
+                      <button class="panel-button ghost" id="settings-runtime-open-getting-started" type="button">
+                        はじめに
+                      </button>
+                    </div>
+                    <div class="settings-inline settings-inline-wrap">
+                      <button class="panel-button ghost" id="settings-runtime-open-install-docs" type="button">
+                        インストール手順
+                      </button>
+                      <button class="panel-button ghost" id="settings-runtime-open-tex-docs" type="button">
+                        TeX環境ガイド
+                      </button>
                     </div>
                     <div class="settings-item">
                       <div class="settings-label">
@@ -1041,10 +1096,45 @@
                         >
                       </div>
                     </div>
+                    <div class="settings-item">
+                      <div class="settings-label">
+                        <span class="settings-title">診断情報を添付（任意）</span>
+                        <span class="settings-desc">OS/バージョンなどの診断情報を送信します。</span>
+                      </div>
+                      <div class="settings-control">
+                        <label class="settings-switch" for="settings-feedback-include-diagnostics">
+                          <input
+                            class="settings-switch-input"
+                            id="settings-feedback-include-diagnostics"
+                            type="checkbox"
+                          >
+                          <span class="settings-switch-track" aria-hidden="true"></span>
+                        </label>
+                      </div>
+                    </div>
                     <div class="settings-inline">
                       <button class="panel-button" id="settings-feedback-send" type="button">
                         送信
                       </button>
+                    </div>
+                    <div class="settings-item">
+                      <div class="settings-label">
+                        <span class="settings-title">匿名エラーレポート</span>
+                        <span class="settings-desc">致命的エラー時に診断情報を tex64.com へ送信します。</span>
+                      </div>
+                      <div class="settings-control">
+                        <label class="settings-switch" for="settings-error-reporting-enabled">
+                          <input
+                            class="settings-switch-input"
+                            id="settings-error-reporting-enabled"
+                            type="checkbox"
+                          >
+                          <span class="settings-switch-track" aria-hidden="true"></span>
+                        </label>
+                      </div>
+                    </div>
+                    <div class="settings-help-text">
+                      フィードバック送信に失敗した場合は、アプリ内で再送キューに保存して再試行します。
                     </div>
                     <div class="settings-help-text is-hidden" id="settings-feedback-status"></div>
                   </div>
@@ -1305,14 +1395,6 @@
                 <span class="block-settings-item-title">挿入形式</span>
                 <span class="block-settings-item-desc">インライン/別行の囲み方</span>
               </button>
-              <button
-                class="block-settings-item"
-                type="button"
-                data-block-settings-target="suggestions"
-              >
-                <span class="block-settings-item-title">候補/サジェスト</span>
-                <span class="block-settings-item-desc">自動表示・パック・手動表示</span>
-              </button>
             </div>
             <div class="block-settings-page" data-block-settings-page="insert-format">
               <div class="block-settings-nav">
@@ -1372,7 +1454,7 @@
                   >手動のみ</button>
                 </div>
                 <div class="block-settings-section-hint">
-                  手動表示: 「候補」ボタン（<span class="block-settings-kbd">Ctrl</span> + <span class="block-settings-kbd">.</span> も可）
+                  手動表示: <span class="block-settings-kbd">Ctrl</span> + <span class="block-settings-kbd">.</span>
                 </div>
               </div>
               <div class="block-settings-section">

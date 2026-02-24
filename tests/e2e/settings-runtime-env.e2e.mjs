@@ -147,7 +147,7 @@ const waitForWorkspaceReady = async (page) => {
   await page.waitForSelector('#editor-tabs-list .editor-tab.is-active[data-path="main.tex"]', {
     timeout: 30000,
   });
-  await page.waitForSelector("#file-tree", { timeout: 15000 });
+  await page.waitForSelector("#file-tree", { state: "attached", timeout: 15000 });
 };
 
 const clickSideTab = async (page, key) => {

@@ -510,29 +510,51 @@ const run = async () => {
     await startSession();
 
     const failures = [];
-    const page = session.page;
+    let fatalStop = false;
     for (let offset = 0; offset < scopedTokens.length; offset += 1) {
       const token = scopedTokens[offset];
       const absoluteIndex = startIndex + offset;
-      if (page.isClosed()) {
+      if (!session?.page || session.page.isClosed()) {
         failures.push(`${token}: page closed before validation at index ${absoluteIndex}`);
+        fatalStop = true;
         break;
       }
-      try {
-        await applySuggestionByToken(page, token);
-        await fillRemainingPlaceholders(page, token);
-        const latex = await getMathFieldLatex(page);
-        assert.ok(normalizeLatex(latex).length > 0, `${token}: latex is empty after applying suggestion`);
-        assert.ok(!latex.includes("#?"), `${token}: unresolved #? placeholder found`);
-        await assertRenderedOutput(page, token);
-      } catch (error) {
-        failures.push(`${token}: ${error instanceof Error ? error.message : String(error)}`);
-        if (isClosedError(error) || page.isClosed()) {
-          break;
+
+      let resolved = false;
+      for (let attempt = 0; attempt < 2 && !resolved; attempt += 1) {
+        const page = session.page;
+        try {
+          await applySuggestionByToken(page, token);
+          await fillRemainingPlaceholders(page, token);
+          const latex = await getMathFieldLatex(page);
+          assert.ok(normalizeLatex(latex).length > 0, `${token}: latex is empty after applying suggestion`);
+          assert.ok(!latex.includes("#?"), `${token}: unresolved #? placeholder found`);
+          await assertRenderedOutput(page, token);
+          resolved = true;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          const pageClosed = isClosedError(error) || page.isClosed();
+          const recoverableClearFailure =
+            message.includes("failed to clear math-field") && attempt === 0 && !pageClosed;
+          if (recoverableClearFailure) {
+            log(`${token}: clear failure detected, restarting session and retrying once`);
+            await stopSession();
+            await startSession();
+            continue;
+          }
+          failures.push(`${token}: ${message}`);
+          resolved = true;
+          if (pageClosed) {
+            fatalStop = true;
+          }
         }
       }
+
       if ((offset + 1) % 25 === 0 || offset + 1 === scopedTokens.length) {
         log(`progress ${offset + 1}/${scopedTokens.length}, failures=${failures.length}`);
+      }
+      if (fatalStop) {
+        break;
       }
     }
 

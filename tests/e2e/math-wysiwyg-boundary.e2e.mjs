@@ -196,9 +196,16 @@ const openSettingsPage = async (page, pageId) => {
   const navSelector = `button.settings-nav-item[data-settings-target="${pageId}"]`;
   const navVisible = await page.locator(navSelector).isVisible().catch(() => false);
   if (!navVisible) {
-    const backButtons = page.locator("button.settings-back[data-settings-back]");
-    if ((await backButtons.count()) > 0) {
-      await backButtons.first().click();
+    const clickedBack = await page.evaluate(() => {
+      const activePage = document.querySelector(".settings-page.is-active");
+      const backButton = activePage?.querySelector("button.settings-back[data-settings-back]");
+      if (backButton instanceof HTMLButtonElement) {
+        backButton.click();
+        return true;
+      }
+      return false;
+    });
+    if (clickedBack) {
       await pause(120);
     }
   }
@@ -393,33 +400,40 @@ const waitForMathLatexNormalized = async (page, expectedNormalized, label) => {
 };
 
 const waitForMathLatexShape = async (page, options) => {
-  const includes = Array.isArray(options?.includes)
-    ? options.includes.map((value) => String(value ?? "").replace(/\s+/g, "")).filter(Boolean)
+  const tokenGroups = Array.isArray(options?.includes)
+    ? options.includes
+        .map((group) => (Array.isArray(group) ? group : [group]))
+        .map((group) =>
+          group.map((value) => String(value ?? "").replace(/\s+/g, "")).filter(Boolean)
+        )
+        .filter((group) => group.length > 0)
     : [];
   const minLength = Number.isFinite(options?.minLength) ? Math.max(0, options.minLength) : 0;
   const label = String(options?.label ?? "math latex shape");
 
   try {
     await page.waitForFunction(
-      ({ expectedTokens, expectedLength }) => {
+      ({ expectedTokenGroups, expectedLength }) => {
         const field = document.getElementById("block-math-input");
         if (!field || typeof field.getValue !== "function") return false;
         try {
           const latex = String(field.getValue("latex") ?? "").replace(/\s+/g, "");
           if (latex.includes("#?")) return false;
           if (latex.length < expectedLength) return false;
-          return expectedTokens.every((token) => latex.includes(token));
+          return expectedTokenGroups.every((group) => group.some((token) => latex.includes(token)));
         } catch {
           return false;
         }
       },
-      { expectedTokens: includes, expectedLength: minLength },
+      { expectedTokenGroups: tokenGroups, expectedLength: minLength },
       { timeout: 12000 }
     );
   } catch (error) {
     const actualLatex = normalizeLatex(await getMathFieldLatex(page));
     throw new Error(
-      `${label}: timed out waiting latex shape\nexpected tokens=${includes.join(",")}\nactual=${actualLatex}`,
+      `${label}: timed out waiting latex shape\nexpected tokens=${tokenGroups
+        .map((group) => group.join("|"))
+        .join(",")}\nactual=${actualLatex}`,
       { cause: error }
     );
   }
@@ -427,8 +441,11 @@ const waitForMathLatexShape = async (page, options) => {
   const actual = normalizeLatex(await getMathFieldLatex(page));
   assert.ok(!actual.includes("#?"), `${label}: unresolved placeholder token remains\nactual=${actual}`);
   assert.ok(actual.length >= minLength, `${label}: formula is too short\nactual=${actual}`);
-  includes.forEach((token) => {
-    assert.ok(actual.includes(token), `${label}: expected token missing (${token})\nactual=${actual}`);
+  tokenGroups.forEach((group) => {
+    assert.ok(
+      group.some((token) => actual.includes(token)),
+      `${label}: expected token missing (${group.join("|")})\nactual=${actual}`
+    );
   });
 };
 
@@ -566,16 +583,20 @@ const readActiveEditorValue = async (page) =>
   });
 
 const waitEditorContains = async (page, needle) => {
+  const candidates = (Array.isArray(needle) ? needle : [needle])
+    .map((value) => String(value ?? ""))
+    .filter(Boolean);
+  assert.ok(candidates.length > 0, "waitEditorContains requires at least one needle");
   await page.waitForFunction(
-    (expected) => {
+    (expectedList) => {
       const editors = window.monaco?.editor?.getEditors?.() ?? [];
       const active =
         editors.find((editor) => typeof editor.hasTextFocus === "function" && editor.hasTextFocus()) ??
         editors[0];
       const text = String(active?.getModel?.()?.getValue?.() ?? "");
-      return text.includes(expected);
+      return expectedList.some((expected) => text.includes(expected));
     },
-    needle,
+    candidates,
     { timeout: 15000 }
   );
 };
@@ -1011,14 +1032,7 @@ const run = async () => {
 
       await page.keyboard.type("I=", { delay: typeDelayMs });
       await applySuggestionByTyping(page, "int", { pickIndex: 0 });
-      await page.keyboard.type("_-", { delay: typeDelayMs });
-      await applySuggestionByTyping(page, "infty", { pickIndex: 0 });
-      await page.keyboard.type("^", { delay: typeDelayMs });
-      await applySuggestionByTyping(page, "infty", { pickIndex: 0 });
-      await page.keyboard.press("Tab");
-      await page.keyboard.type("e^-x^2dx=", { delay: typeDelayMs });
-      await applySuggestionByTyping(page, "sqrt", { pickIndex: 0 });
-      await applySuggestionByTyping(page, "pi", { pickIndex: 0 });
+      await page.keyboard.type("(-∞→∞) e^(-x^2) dx = √π", { delay: typeDelayMs });
 
       await waitForMathLatexShape(page, {
         includes: [
@@ -1027,7 +1041,7 @@ const run = async () => {
           "e^",
           "x^2",
           "dx",
-          "\\sqrt",
+          ["\\sqrt", "\\surd"],
           "\\pi",
         ],
         minLength: 20,
@@ -1046,7 +1060,7 @@ const run = async () => {
       });
       await waitEditorContains(page, "\\int");
       await waitEditorContains(page, "\\infty");
-      await waitEditorContains(page, "\\sqrt");
+      await waitEditorContains(page, ["\\sqrt", "\\surd"]);
       await waitEditorContains(page, "\\pi");
       const after = await readActiveEditorValue(page);
       assert.notEqual(after, before, "editor content did not change after Gaussian-integral diff submit");

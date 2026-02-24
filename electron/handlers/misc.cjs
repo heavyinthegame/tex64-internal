@@ -12,10 +12,12 @@ const createMiscHandlers = (deps) => {
     ensureUserSettings,
     workspace,
     shell,
+    Notification,
     sendToRenderer,
     blocksStore,
     apiUsageService,
     platformService,
+    ensureProtocolClient,
     runtimeInfo,
   } = deps;
   const { requestGemini } = require("../services/agent-llm.cjs");
@@ -31,6 +33,7 @@ const createMiscHandlers = (deps) => {
     typeof runtimeInfo?.arch === "string" && runtimeInfo.arch.trim()
       ? runtimeInfo.arch.trim()
       : process.arch;
+  const strictProduction = runtimeInfo?.packaged === true;
   const defaultUpdateChannel =
     typeof process.env.TEX64_UPDATE_CHANNEL === "string" &&
     process.env.TEX64_UPDATE_CHANNEL.trim()
@@ -58,6 +61,7 @@ const createMiscHandlers = (deps) => {
     updatedAt: Date.now(),
     error: null,
   };
+  let lastNotifiedUpdateVersion = null;
 
   const parseNumber = (value, fallback = 0) => {
     if (typeof value === "number" && Number.isFinite(value)) {
@@ -70,6 +74,45 @@ const createMiscHandlers = (deps) => {
       }
     }
     return fallback;
+  };
+
+  const normalizeOAuthPathname = (value) => {
+    const pathname = typeof value === "string" && value ? value : "/";
+    if (pathname === "/") {
+      return "/";
+    }
+    const normalized = pathname.replace(/\/+$/, "");
+    return normalized || "/";
+  };
+
+  const isTex64OAuthCallbackUrl = (value) => {
+    if (typeof value !== "string") {
+      return false;
+    }
+    const raw = value.trim();
+    if (!/^tex64:\/\//i.test(raw)) {
+      return false;
+    }
+    try {
+      const parsed = new URL(raw);
+      const hostname = parsed.hostname.toLowerCase();
+      const pathname = normalizeOAuthPathname(parsed.pathname || "/");
+      if (hostname === "oauth" && pathname === "/callback") {
+        return true;
+      }
+      if (!hostname && pathname === "/oauth/callback") {
+        return true;
+      }
+      if (hostname === "account" && pathname === "/oauth/callback") {
+        return true;
+      }
+      if (!hostname && pathname === "/account/oauth/callback") {
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
   };
 
   const normalizeQuotaSummary = (quota, periodOverrides = {}) => {
@@ -135,6 +178,61 @@ const createMiscHandlers = (deps) => {
     emitUpdateStatus(source);
   };
 
+  const canShowDesktopNotification = () => {
+    if (typeof Notification !== "function") {
+      return false;
+    }
+    if (typeof Notification.isSupported === "function") {
+      try {
+        return Notification.isSupported() === true;
+      } catch {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const notifyUpdateAvailable = (update, source = "manual") => {
+    if (source !== "background") {
+      return;
+    }
+    if (!update?.hasUpdate) {
+      lastNotifiedUpdateVersion = null;
+      return;
+    }
+    const latestVersion =
+      typeof update.latestVersion === "string" && update.latestVersion.trim()
+        ? update.latestVersion.trim()
+        : "";
+    if (!latestVersion || latestVersion === lastNotifiedUpdateVersion) {
+      return;
+    }
+    lastNotifiedUpdateVersion = latestVersion;
+    if (!canShowDesktopNotification()) {
+      return;
+    }
+    try {
+      const notification = new Notification({
+        title: "TeX64 のアップデート",
+        body: `バージョン ${latestVersion} を利用できます。`,
+        silent: true,
+      });
+      if (typeof notification.on === "function" && shell?.openExternal) {
+        notification.on("click", () => {
+          const fallbackUrl = resolveUpdateFallbackUrl();
+          if (fallbackUrl) {
+            shell.openExternal(fallbackUrl).catch(() => {});
+          }
+        });
+      }
+      if (typeof notification.show === "function") {
+        notification.show();
+      }
+    } catch {
+      // ignore notification failures
+    }
+  };
+
   const resolveUpdateArtifactUrl = (update = latestUpdateSnapshot) => {
     if (
       update &&
@@ -154,7 +252,7 @@ const createMiscHandlers = (deps) => {
     ) {
       return latestUpdateSnapshot.notesUrl.trim();
     }
-    return resolveUpdateArtifactUrl() || "https://tex64.com/#download";
+    return resolveUpdateArtifactUrl() || "https://tex64.com/download";
   };
 
   const resolveUpdateFileName = (artifactUrl, latestVersion) => {
@@ -430,6 +528,22 @@ const createMiscHandlers = (deps) => {
     sendToRenderer("platform:auth", { auth });
   };
 
+  const clearOAuthPendingAndEmitAuth = async () => {
+    if (!platformService || typeof platformService.cancelGoogleAuthPending !== "function") {
+      return;
+    }
+    try {
+      await platformService.cancelGoogleAuthPending();
+    } catch {
+      // ignore pending-clear errors
+    }
+    try {
+      await emitPlatformAuth();
+    } catch {
+      // ignore auth snapshot errors after pending clear
+    }
+  };
+
   const emitPlatformAiAccess = async (force = false, source = "check") => {
     if (!platformService) {
       return null;
@@ -568,6 +682,7 @@ const createMiscHandlers = (deps) => {
     if (!platformService || typeof platformService.fetchUpdateManifest !== "function") {
       return null;
     }
+    const source = payload?.source === "background" ? "background" : "manual";
     setUpdateStatus(
       {
         phase: "checking",
@@ -578,12 +693,13 @@ const createMiscHandlers = (deps) => {
         checkedAt: null,
         error: null,
       },
-      "manual"
+      source
     );
     try {
-      const update = await emitPlatformUpdate(payload, "manual");
+      const update = await emitPlatformUpdate(payload, source);
       if (!update?.hasUpdate) {
         downloadedInstallerPath = null;
+        lastNotifiedUpdateVersion = null;
         setUpdateStatus(
           {
             phase: "up-to-date",
@@ -593,7 +709,7 @@ const createMiscHandlers = (deps) => {
             message: "最新バージョンを使用中です。",
             error: null,
           },
-          "manual"
+          source
         );
         return update ?? null;
       }
@@ -610,12 +726,13 @@ const createMiscHandlers = (deps) => {
               : "新しいバージョンを利用できます。",
           error: null,
         },
-        "manual"
+        source
       );
+      notifyUpdateAvailable(update, source);
       return update ?? null;
     } catch (error) {
       sendToRenderer("platform:update", {
-        source: "manual",
+        source,
         update: null,
         error: toErrorPayload(error, "UPDATE_CHECK_FAILED"),
       });
@@ -625,7 +742,7 @@ const createMiscHandlers = (deps) => {
           message: "更新確認に失敗しました。",
           error: toUpdateErrorPayload(error, "UPDATE_CHECK_FAILED"),
         },
-        "manual"
+        source
       );
       return null;
     }
@@ -906,22 +1023,51 @@ const createMiscHandlers = (deps) => {
       return;
     }
     try {
+      if (typeof ensureProtocolClient === "function") {
+        try {
+          ensureProtocolClient();
+        } catch {
+          // continue even if protocol registration fails in this runtime
+        }
+      }
       await emitPlatformAuth();
       const started = await platformService.startGoogleAuth();
       await emitPlatformAuth();
       if (started?.bypassed) {
         return;
       }
-      if (
-        started?.authUrl &&
-        typeof started.authUrl === "string" &&
-        started.authUrl.startsWith("tex64://oauth/callback")
-      ) {
-        await handleAuthGoogleCallback(started.authUrl);
+      const authUrl =
+        typeof started?.authUrl === "string" && started.authUrl.trim()
+          ? started.authUrl.trim()
+          : null;
+      if (!authUrl) {
+        throw {
+          code: "AUTH_START_INVALID_URL",
+          message: "OAuth authorization URL is missing.",
+        };
+      }
+      if (isTex64OAuthCallbackUrl(authUrl)) {
+        await handleAuthGoogleCallback(authUrl);
         return;
       }
-      if (started?.authUrl && shell?.openExternal) {
-        await shell.openExternal(started.authUrl);
+      if (!shell?.openExternal) {
+        await clearOAuthPendingAndEmitAuth();
+        throw {
+          code: "AUTH_BROWSER_UNAVAILABLE",
+          message: "External browser is unavailable in this runtime.",
+        };
+      }
+      try {
+        await shell.openExternal(authUrl);
+      } catch (error) {
+        await clearOAuthPendingAndEmitAuth();
+        throw {
+          code: "AUTH_BROWSER_OPEN_FAILED",
+          message:
+            typeof error?.message === "string" && error.message
+              ? error.message
+              : "Failed to open OAuth page in external browser.",
+        };
       }
     } catch (error) {
       const auth = await platformService.getAuthSnapshot();
@@ -959,6 +1105,24 @@ const createMiscHandlers = (deps) => {
     } catch (error) {
       const auth = await platformService.getAuthSnapshot();
       sendToRenderer("platform:auth", { auth, error: toErrorPayload(error, "AUTH_SIGNOUT_FAILED") });
+    }
+  };
+
+  const handleAuthGoogleCancel = async () => {
+    if (!platformService || typeof platformService.cancelGoogleAuthPending !== "function") {
+      return;
+    }
+    try {
+      await platformService.cancelGoogleAuthPending();
+      await emitPlatformAuth();
+      await emitPlatformAiAccess(true, "auth");
+      await emitPlatformUsage(true, "auth");
+    } catch (error) {
+      const auth = await platformService.getAuthSnapshot();
+      sendToRenderer("platform:auth", {
+        auth,
+        error: toErrorPayload(error, "AUTH_CANCEL_FAILED"),
+      });
     }
   };
 
@@ -1030,6 +1194,46 @@ const createMiscHandlers = (deps) => {
         ok: false,
         error: toErrorPayload(error, "FEEDBACK_SEND_FAILED"),
       });
+    }
+  };
+
+  const handleErrorReportSend = async (payload) => {
+    if (!platformService || typeof platformService.submitErrorReport !== "function") {
+      return;
+    }
+    const raw =
+      payload?.report && typeof payload.report === "object"
+        ? payload.report
+        : payload && typeof payload === "object"
+        ? payload
+        : null;
+    if (!raw) {
+      return;
+    }
+    const report = {
+      ...raw,
+      source:
+        typeof raw.source === "string" && raw.source.trim()
+          ? raw.source.trim()
+          : "app-renderer",
+      appVersion:
+        typeof raw.appVersion === "string" && raw.appVersion.trim()
+          ? raw.appVersion.trim()
+          : appVersion,
+      diagnostics:
+        raw.diagnostics && typeof raw.diagnostics === "object"
+          ? {
+              ...raw.diagnostics,
+              platform: `${appPlatform}-${appArch}`,
+            }
+          : {
+              platform: `${appPlatform}-${appArch}`,
+            },
+    };
+    try {
+      await platformService.submitErrorReport(report, {});
+    } catch {
+      // ignore reporting failures
     }
   };
 
@@ -1131,6 +1335,12 @@ const createMiscHandlers = (deps) => {
           sendToRenderer("platform:usage", platformUsage);
         }
       } else {
+        if (strictProduction) {
+          throw {
+            code: "INLINE_COMPLETION_BACKEND_UNAVAILABLE",
+            message: "AI補完バックエンドを初期化できませんでした。",
+          };
+        }
         const proxyUrl =
           typeof process.env.TEX64_AI_PROXY_URL === "string"
             ? process.env.TEX64_AI_PROXY_URL.trim()
@@ -1224,9 +1434,11 @@ const createMiscHandlers = (deps) => {
     handleUpdateStatusGet,
     handleAuthGoogleStart,
     handleAuthGoogleCallback,
+    handleAuthGoogleCancel,
     handleAuthSignOut,
     handleOpenExternal,
     handleFeedbackSend,
+    handleErrorReportSend,
     handleApiGhostCompletion,
   };
 };

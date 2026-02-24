@@ -28,6 +28,25 @@ const pause = async (ms = stepDelayMs) => {
   await new Promise((resolve) => setTimeout(resolve, ms));
 };
 
+const removePathWithRetries = async (targetPath, attempts = 5) => {
+  let lastError = null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      await fs.rm(targetPath, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      lastError = error;
+      const code = error && typeof error === "object" ? error.code : null;
+      const recoverable = code === "ENOTEMPTY" || code === "EBUSY" || code === "EPERM";
+      if (!recoverable || attempt === attempts - 1) {
+        break;
+      }
+      await pause(200);
+    }
+  }
+  throw lastError;
+};
+
 const normalizeLatex = (value) => String(value ?? "").replace(/\s+/g, "");
 
 const cleanupStaleElectron = () => {
@@ -412,7 +431,7 @@ const runCase = async (label, test) => {
     }
     cleanupStaleElectron();
     if (!keepWorkspace) {
-      await fs.rm(tempDir, { recursive: true, force: true });
+      await removePathWithRetries(tempDir);
       log(`${label}: workspace copy removed`);
     } else {
       log(`${label}: workspace copy kept ${tempDir}`);

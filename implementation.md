@@ -1,13 +1,79 @@
-# TeX64 機能設計図（実装同期版）
+# TeX64 機能設計図（実装同期版 / MVP導線込み）
 
-この文書は、`/Users/wedd/tex64` の現行実装（Renderer/Main/PDF viewer/API proxy）を読み直して、
-**ユーザーができること**を機能ベースで整理した最新版です。
+この文書は、TeX64 を構成する **2つのリポジトリ**の現行実装を読み直して、
+**ユーザーができること**を機能ベースで整理し、MVP公開に必須の導線（ダウンロード/初回起動/ログイン/課金/アップデート）まで含めて記述します。
 
-- 基準日: 2026-02-18
+- Desktop app（tex64）: `/Users/wedd/tex64`
+- Web + Platform API（tex64.com）: `/Users/wedd/tex64.com`
+
+- 基準日: 2026-02-23
 - 方針: コード構造の説明ではなく、画面操作・挙動・制約・保存先を中心に記述
-- 対象: ランチャー、編集、ビルド、SyncTeX、検索、Blocks、OCR、AI、設定、永続化
+- 対象: 起動/ランチャー、編集、ビルド、SyncTeX、検索、Blocks、OCR、AI、ログイン（Google OAuth）、課金/契約状態（AIのみ）、アップデート、設定、永続化、運用導線（サポート/法務/フィードバック/管理）
+- 注記: 課金/アップデート/フィードバック/エラーレポートの **API は tex64.com 側に実装がある**。MVP公開では「tex64.com のデプロイ + 環境変数 + DB/Stripe/OAuth設定 + 運用」を必須要件として扱う（末尾の不足洗い出しを参照）
 
 ---
+
+## 0. MVPユーザー導線（DL→初回→継続）
+
+この章は「ユーザーがダウンロードしてから初回で使い始め、継続利用する」ために必要な要素を導線として固定します。
+
+### 0.1 ダウンロード/インストール（macOS）
+
+- ダウンロード: `https://tex64.com/download`（最新版の参照は `GET /api/v2/updates/manifest`）
+  - 共有用の固定リンク: `https://tex64.com/download/latest`
+- 対応: macOS Apple Silicon（arm64）のみ（現行）
+- 配布形式: DMG（現行）
+- 典型手順: DMG を開く → `TeX64.app` を `Applications` にドラッグ → 起動
+- 公開配布の前提: Developer ID 署名 + Notarization（Gatekeeper 回避のため）
+- 重要: TeX Distribution（MacTeX/BasicTeX 等）は同梱しない（ユーザー側インストールが必要）
+
+### 0.2 初回起動〜最初のビルド（ローカル機能）
+
+- 起動直後はランチャーでワークスペース（フォルダ）を選ぶ
+- ワークスペースを開く/新規作成の後に:
+  - root TeX の自動検出（`main.tex` 優先）
+  - 実行環境チェック（TeX engine/latexmk/synctex/latexindent）
+  - 実行環境不足時は Build をガードし、Settings > Runtime へ誘導（初回オンボーディング表示あり）
+- 初回成功体験のゴール: `main.tex` をビルドして PDF を表示できる
+- （要修正）ランチャーの失敗理由メッセージが現行UIに表示されないため、操作不能に見えるケースがある
+- （要修正）TeX導入の「インストール開始/結果」イベントは Main から送られるが UI が未表示（チェック結果のみ反映）
+
+### 0.3 継続利用（執筆ループ）
+
+- 最近のプロジェクトから再開 → 編集 → Build（`Cmd/Ctrl+B`）→ PDF確認 → SyncTeX（forward/reverse）
+- 障害時は Issues に集約し、Runtime/ログ/設定へ誘導
+
+### 0.4 AIを使い始める（ログイン/課金/使用量）
+
+- AI はローカル機能とは独立し、未ログイン/未契約でも編集・ビルド等は利用可能
+- AI利用時にだけ以下を判定:
+  - Google OAuth ログイン状態
+  - プラン/契約状態（`free/basic/pro` + `active/grace/past_due/canceled`）
+  - 月次クォータ（tokens/requests）
+- 未ログイン: Google ログイン導線（ブラウザ→deep link）を提示
+- 未契約/支払い遅延/上限超過: pricing 導線と理由を提示
+- 課金/契約の実体は tex64.com（Web + Platform API）で提供する（Stripe Checkout/Portal/Webhook）
+- Desktop は pricing を開くのみ（購入UIは持たない）
+
+### 0.5 アップデート（使い続けるための安全弁）
+
+- Settings > Runtime に更新UIを集約（チェック/ダウンロード/適用/手動導線）
+- 更新があれば OS 通知を出せる設計（通知ロジックは実装済み）
+- （要修正）更新チェックを `background` として呼ぶ配線が現状無く、通知が出ない
+- ダウンロード後に sha256 検証し、不一致なら適用しない
+- 適用は「インストーラ起動」方式（自動置換/再起動ではない）
+- update manifest は tex64.com の `GET /api/v2/updates/manifest` を利用する（Web の Download ボタンと Desktop の更新が同じ情報源を参照する）
+  - 本番では artifact 配布先URL・`sha256`・リリースノートURLの運用を確立する（詳細は 1.5 / 20）
+
+### 0.6 フィードバック/サポート/法務（困ったとき）
+
+- Settings から規約/プライバシー/特商法/返金/ヘルプ/問い合わせ/リリースノートを開ける
+- フィードバック送信フォーム（カテゴリ/本文/連絡先任意、任意で診断情報を添付）
+- エラーレポート送信の ON/OFF（任意）
+- 送信先は tex64.com の Platform API:
+  - `POST /api/v2/feedback`（匿名でも送信可。必要ならログイン状態も付与）
+  - `POST /api/v2/internal/error-report`（匿名でも送信可。必要ならログイン状態も付与）
+  - 本番では保存先（DB）と通知先（Webhook/監視）を設定する（詳細は 1.5 / 20）
 
 ## 1. アプリでできること（全体像）
 
@@ -25,12 +91,112 @@ TeX64 は、1つの LaTeX ワークスペースに対して次を一体で提供
 
 ---
 
+## 1.5 tex64.com（Web + Platform API）でできること
+
+tex64.com は「配布サイト」と「Desktop が呼ぶ Platform API v2」を **同一ドメイン**で提供します。
+
+- ユーザー向け（Web）: ダウンロード、リリースノート、ドキュメント、価格/契約、アカウント、サポート、法務
+- アプリ向け（API）: Google OAuth、AI（chat/completion）、契約状態/使用量、アップデートmanifest、フィードバック、エラーレポート
+- 運用向け（Admin）: ユーザー/契約/フィードバック/監査の管理
+
+### 1.5.1 Web（公開ページ）
+
+- `/`（Landing）: 概要 + Download セクション（`#download`）
+- `/download`: 最新版ダウンロードUI（`/api/v2/updates/manifest` を参照）
+- `/download/latest`: JS無しの「最新版」リダイレクト（manifest を参照）
+- `/releases`: リリース一覧
+- `/releases/[version]`: リリース詳細（ノート + アーティファクト）
+- `/docs/*`: ドキュメント（WIP/プレースホルダーを含む）
+  - `/docs/getting-started`
+  - `/docs/install-macos`
+  - `/docs/tex-distribution`
+  - `/docs/updates`
+  - `/docs/troubleshooting`
+  - `/docs/ai`
+  - `/docs/blocks`
+  - `/docs/synctex`
+- `/pricing`: プラン案内（購入はログイン後に `/account/billing`）
+- `/support`: サポート/問い合わせ（クエリでの prefill 対応）
+- `/account/*`: アカウント（ログイン/課金/使用量）
+  - `/account/login`（Google OAuth 開始）
+  - `/account/oauth/callback`（OAuth 完了）
+  - `/account/billing`（Checkout 開始）
+  - `/account/billing/manage`（Customer Portal）
+  - `/account/usage`（AI 使用量）
+- `/admin`: 管理コンソール（admin token 必須）
+- `/terms`, `/privacy`, `/legal`: 法務
+
+### 1.5.2 Platform API v2（/api/v2）
+
+Desktop app と Web の account 画面が共通で利用する API です。
+
+#### 認証（Google OAuth + PKCE）
+
+- `POST /api/v2/auth/google/start`
+- `GET /api/v2/auth/google/callback`（Desktop deep link bridge）
+- `POST /api/v2/auth/google/exchange`
+- `POST /api/v2/auth/refresh`
+- `POST /api/v2/auth/logout`
+
+補足:
+
+- Desktop の redirect URI は `tex64://oauth/callback`
+- Google OAuth の redirect URI は「Web callback」と「Desktop bridge callback」を分けて扱う
+  - Web: `https://tex64.com/account/oauth/callback`
+  - Desktop bridge: `https://tex64.com/v2/auth/google/callback`（`/v2/* -> /api/v2/*` の rewrite 前提。環境により `/api/v2/...` を追加登録）
+
+#### 契約状態/使用量（Entitlements/Quota）
+
+- `GET /api/v2/me/features?names=ai`（enabled/plan/status/quota/period/grace など）
+- `GET /api/v2/me/usage/ai?period=current_month`
+
+#### AI（サーバー側でモデル/上限を固定）
+
+- `POST /api/v2/ai/chat`
+- `POST /api/v2/ai/completion`
+- `TEX64_AI_MOCK` でモック応答に切替可能（本番では原則無効化）
+
+#### 課金（Stripe）
+
+- `POST /api/v2/billing/checkout`（Checkout URL 発行）
+- `POST /api/v2/billing/portal`（Customer Portal URL 発行）
+- `POST /api/v2/billing/webhook`（Stripe webhook 受信→subscription を保存/更新）
+  - 必須: `DATABASE_URL`（billing は DB 前提）
+  - 任意: webhook 後に subscription を別システムへ中継（`TEX64_APP_PLATFORM_*`）
+
+#### アップデート（manifest）
+
+- `GET /api/v2/updates/manifest?platform=darwin&arch=arm64&channel=stable`
+  - Web の Download と Desktop の update が同じ情報源を参照
+  - `latestVersion/notesUrl/artifactUrl/artifactSha256/required` を返す
+
+#### フィードバック/エラーレポート
+
+- `POST /api/v2/feedback`（匿名可。必要なら認証情報も付与）
+- `POST /api/v2/internal/error-report`（匿名可。必要なら認証情報も付与）
+  - どちらも DB または fallback に保存し、任意で Webhook へ通知できる
+
+#### 管理（運用）
+
+- `/admin` UI は `Authorization: Bearer <TEX64_ADMIN_TOKEN>` と `x-admin-actor` を使用
+- 代表 API:
+  - `GET /api/v2/admin/overview`
+  - `GET /api/v2/admin/users`
+  - `POST /api/v2/admin/users/subscription`
+  - `POST /api/v2/admin/users/period-entitlement`
+  - `POST /api/v2/admin/users/revoke-sessions`
+  - `GET/POST /api/v2/admin/feedback`
+  - `GET /api/v2/admin/audit`
+
+---
+
 ## 2. 起動とプロジェクト導線
 
 ### 2.1 ランチャー
 
 - ワークスペース未選択時にランチャーを表示
 - ワークスペース確定後は非表示
+- （要修正）Main 側が送る `launcherStatus.message`（失敗理由）が現行UIに描画されない（busy のみ反映）
 - キーボード操作:
   - `ArrowUp/ArrowDown`: 「フォルダを開く」「新規作成」の選択移動
   - `Enter`: 選択中アクション実行
@@ -46,6 +212,7 @@ TeX64 は、1つの LaTeX ワークスペースに対して次を一体で提供
 - `main.tex` が既存なら `main2.tex`, `main3.tex`... を自動採番して上書き回避
 - テンプレート内容は LaTeX 文書の雛形（本文、数式、図表、文献のサンプル付き）
 - 補足: バックエンドは `paper/lecture` 両テンプレートを受け取れるが、現行ランチャー UI からは `paper` 運用
+- （要修正）テンプレート切替UI（`paper/lecture`）は HTML/CSS 側で非表示/未接続のため、ユーザー操作で切替できない
 
 ### 2.4 最近のプロジェクト
 
@@ -54,6 +221,8 @@ TeX64 は、1つの LaTeX ワークスペースに対して次を一体で提供
 - 初期表示は先頭 3 件、`すべて表示/折りたたむ` で展開切替
 - 項目をクリックするとそのパスを再オープン
 - 再オープン時に存在確認し、存在しない項目は最近一覧から自動除去
+- （要修正）最近一覧の「手動削除」導線が現行UIから呼べない（無効項目をユーザーが消せない）
+- （要修正）無効パス自動除去時の UI 即時同期（一覧の再配信）が弱く、表示が残る場合がある
 
 ---
 
@@ -589,12 +758,71 @@ TeX64 は、1つの LaTeX ワークスペースに対して次を一体で提供
 - 概算コスト（モデル別集計）
 - リセット機能あり
 
-### 13.8 認証・契約導線（AIタブ）
+### 13.8 認証・契約導線（AIタブ / Ghost）
 
-- AI利用時に Google OAuth 状態と契約状態を判定（未ログイン/未契約/上限超過を表示）
-- プラン導線（`pricing`）を AIタブのステータスから開ける
-- 使用量（token/request/期間）を表示し、`再試行` で再取得できる
-- AIが利用不可でも編集・ビルド・保存などローカル機能は継続利用できる
+AI（チャット/ツール）と Ghost Completion は、Platform API v2 の **ログイン状態 + AI契約状態 + クォータ** によって利用可否が決まる。
+
+#### 13.8.1 状態モデル（ユーザーに見える）
+
+- 未ログイン:
+  - AI は利用不可（理由を表示し、ログイン導線を出す）
+- ログイン済み/未契約・支払い遅延・quota超過:
+  - AI は利用不可（理由を表示し、pricing への導線を出す）
+- ログイン済み/契約OK:
+  - AI 利用可（使用量メーターを表示）
+- 重要: AI が利用不可でも、編集/ビルド/保存など **ローカル機能は常に利用可能**（機能分離）
+
+#### 13.8.2 ログイン（Google OAuth）
+
+- 開始:
+  - AIタブの「ログイン」から開始（外部ブラウザを開く）
+  - PKCE + state を使い、`tex64://oauth/callback` の deep link で結果を受け取る
+- 完了:
+  - deep link 受信後に code/state を Platform API へ交換し、access/refresh をローカルに保存
+  - 期限が近い/401 の場合は refresh を自動実行（refresh token は rotate/revoke 対応）
+- 中断/サインアウト:
+  - OAuth 進行中はキャンセル可能
+  - Settings > Runtime からサインアウト可能
+
+#### 13.8.3 AI契約状態（Entitlement）と使用量（Quota）
+
+- プラン:
+  - `free/basic/pro`
+  - 表示は「トークン量のみ」（USD 等の金額は出さない）
+- 状態:
+  - `active/grace/past_due/canceled`
+  - `grace` は 3日（支払い失敗後も一時的に利用可。grace終了で AI 無効）
+- クォータ:
+  - tokens: `limit/used/remaining`
+  - requests: `used/remaining`
+  - 期間: `periodStart/periodEnd`（月次）
+- 取得タイミング:
+  - AI送信/補完の直前に entitlement を確認（短時間キャッシュあり。目安 60秒）
+  - 使用量表示は `再試行` で再取得できる
+
+#### 13.8.4 課金/状態反映（tex64.com）
+
+- アプリ内の課金導線は「pricing ページを開く」のみ（購入UIは持たない）
+- 購入/管理は tex64.com の Account 画面で行う:
+  - Checkout: `/account/billing` → `POST /api/v2/billing/checkout` → Stripe Checkout
+  - 管理: `/account/billing/manage` → `POST /api/v2/billing/portal` → Customer Portal
+- Stripe webhook（`POST /api/v2/billing/webhook`）で subscription を DB に反映し、`GET /api/v2/me/features` が plan/status/quota を返す
+- 例外対応（返金・手動調整等）は Admin API/UI で plan/status/extraTokens 等をパッチできる
+- （任意）別システムへ中継する場合は `TEX64_APP_PLATFORM_*`（subscription-bridge）を設定する
+
+#### 13.8.5 本番運用の前提（tex64.com / Platform API）
+
+- 必須（代表）:
+  - Google OAuth credential（`GOOGLE_OAUTH_CLIENT_ID/SECRET`）+ redirect URI 登録（Web callback + Desktop bridge）
+  - `TEX64_PLATFORM_JWT_SECRET`（production で必須）
+  - `DATABASE_URL`（永続化。billing/refresh token は DB 前提）
+  - `GEMINI_API_KEY`（AI を有効にする場合）
+  - Stripe を有効にする場合: `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` / `STRIPE_BASIC_PRICE_ID` / `STRIPE_PRO_PRICE_ID`
+  - Admin を使う場合: `TEX64_ADMIN_TOKEN`
+- 本番で原則無効化すべきもの（モック/フォールバック）:
+  - `TEX64_PLATFORM_MOCK_OAUTH`
+  - `TEX64_PLATFORM_STATE_FALLBACK`
+  - `TEX64_AI_MOCK`
 
 ---
 
@@ -628,17 +856,28 @@ TeX64 は、1つの LaTeX ワークスペースに対して次を一体で提供
 
 ### 14.4 Runtime（実行環境・アップデート）
 
-- `lualatex/pdflatex/xelatex/uplatex/latexmk/latexindent/synctex` をチェック
-- 未導入時のインストール導線（platform 別）
-- Runtime ページを開くと `update:status:get` と `update:check(force=false)` を実行
-- 更新UIで `現在/最新バージョン`、状態、進捗バーを表示
-- 更新操作:
-  - `更新を確認`
-  - `ダウンロード`（manifest の `artifactUrl` を取得）
-  - `適用`（ダウンロード済みインストーラを起動）
-  - `手動ダウンロード`（`artifactUrl` → `notesUrl` → `TEX64_LINKS.download` の順で開く）
-- ダウンロード後に `sha256` 検証を実施し、不一致時は適用しない
-  - 受理する検証値: `artifactSha256` / `sha256` / `checksum` / `signature`（sha256 として解釈可能な形式）
+- 実行環境チェック:
+  - `lualatex/pdflatex/xelatex/uplatex/latexmk/latexindent/synctex` をチェック
+  - 不足時は Runtime のバッジとオンボーディング表示へ反映（Build 側も不足時にガードして Runtime へ誘導）
+- 初回オンボーディング:
+  - Runtime に「1/3 実行環境 → 2/3 ワークスペース → 3/3 最初のビルド」ステータスを表示
+  - `最初のビルドを実行` ボタン（条件を満たすまで disabled）
+- インストール導線（best-effort）:
+  - 未導入時のインストールボタン（platform 別）
+  - （要修正）`env:installStart` / `env:installResult` を現行UIが受け取らないため、進捗/成否が見えない（チェック結果のみ反映）
+- アップデート:
+  - Runtime を開くと `update:status:get` と `update:check(force=false)` を実行
+  - 自動チェックは 6時間間隔（`tex64.update.lastAutoCheckAt.v1` を基準に抑制）
+  - （任意/要修正）更新がある場合の OS 通知は background チェック時のみ（現行未結線）
+  - 更新UIで `現在/最新バージョン`、状態、進捗バーを表示
+  - 更新操作:
+    - `更新を確認`
+    - `ダウンロード`（manifest の `artifactUrl` + 検証情報が必要）
+    - `適用`（ダウンロード済みインストーラを起動）
+    - `手動ダウンロード`（`artifactUrl` → `notesUrl` → `TEX64_LINKS.download` の順で開く）
+  - ダウンロード後に `sha256` 検証を実施し、不一致時は適用しない
+    - 受理する検証値: `artifactSha256` / `sha256` / `checksum` / `signature`（sha256 として解釈可能な形式）
+  - manifest は tex64.com の Platform API（`GET /api/v2/updates/manifest`）を前提にする（MVP本番では tex64.com 側で `artifactUrl/sha256/notesUrl` を供給する）
 
 ### 14.5 Env Registry
 
@@ -650,10 +889,20 @@ TeX64 は、1つの LaTeX ワークスペースに対して次を一体で提供
 
 ### 14.6 フィードバック・法務/サポート導線
 
-- フィードバック送信（カテゴリ・本文・連絡先任意）は Settings > Runtime から実行
+- フィードバック送信（Settings > Runtime）:
+  - カテゴリ・本文・連絡先（任意）
   - `Cmd/Ctrl+Enter` でも送信可能
-  - 送信先は自前 API（`/feedback`）
+  - 失敗時は送信キューに保存して自動再送（指数バックオフ）
+  - 任意で診断情報を添付（設定でON/OFF）
+  - 送信先は tex64.com の Platform API v2（`POST /api/v2/feedback`）
+    - 本番では `DATABASE_URL`（保存先）と `TEX64_FEEDBACK_WEBHOOK_URL`（通知先、任意）を設定する
 - 法務/サポートリンク（利用規約、プライバシー、特商法、返金、ヘルプ、問い合わせ、リリースノート）を Settings から開ける
+
+### 14.7 エラーレポート（任意）
+
+- Renderer 側の例外や重要イベントを Native 経由で送信できる（Settings で ON/OFF）
+- 送信先は tex64.com の Platform API v2（`POST /api/v2/internal/error-report`）
+  - 本番では `DATABASE_URL`（保存先）と `TEX64_ERROR_WEBHOOK_URL`（通知先、任意）を設定する
 
 ---
 
@@ -681,6 +930,7 @@ TeX64 は、1つの LaTeX ワークスペースに対して次を一体で提供
   - API usage 集計
 - `tex64-platform-session.json`
   - Google OAuth セッション
+  - access/refresh token（`safeStorage` が使える場合は暗号化して保存）
   - plan/status のキャッシュ
   - OAuth 進行中 state
 - `updates/*`
@@ -714,6 +964,13 @@ TeX64 は、1つの LaTeX ワークスペースに対して次を一体で提供
 - PDF viewer:
   - `tex64.pdf.invert`
   - `tex64.pdf.sidebarTab`
+- Runtime/運用:
+  - `tex64.runtimeSetupPrompted.v1`
+  - `tex64.onboarding.firstBuildCompleted.v1`
+  - `tex64.update.lastAutoCheckAt.v1`
+  - `tex64.feedback.queue.v1`
+  - `tex64.feedback.includeDiagnostics.v1`
+  - `tex64.errorReporting.enabled.v1`
 
 ---
 
@@ -732,9 +989,9 @@ TeX64 は、1つの LaTeX ワークスペースに対して次を一体で提供
 
 ### 16.3 `tex64.com` 公開ページ導線
 
-- AI タブの `pricing` は `TEX64_LINKS.pricing`（現行既定: `https://tex64.com/#comparison`）へ遷移
+- AI タブの `pricing` は `TEX64_LINKS.pricing`（現行既定: `https://tex64.com/pricing`）へ遷移
 - Settings の法務/サポートボタンは `TEX64_LINKS.*` で定義した `tex64.com` 公開ページを開く
-- 手動アップデートは `artifactUrl` が無い場合に `notesUrl` または `TEX64_LINKS.download`（現行既定: `https://tex64.com/#download`）へフォールバック
+- 手動アップデートは `artifactUrl` が無い場合に `notesUrl` または `TEX64_LINKS.download`（現行既定: `https://tex64.com/download`）へフォールバック
 
 ---
 
@@ -749,6 +1006,11 @@ TeX64 は、1つの LaTeX ワークスペースに対して次を一体で提供
   - minPrefix 10
   - cooldown 3s
   - 最大 12 req/min
+- Platform（AI契約/使用量）キャッシュ:
+  - entitlement: 60s
+  - usage: 60s
+- OAuth pending（ログイン開始→完了の猶予）: 10 分
+- Update 自動チェック間隔: 6 時間
 - AI 画像添付:
   - 4 件
   - 1件 5MB
@@ -761,10 +1023,15 @@ TeX64 は、1つの LaTeX ワークスペースに対して次を一体で提供
 
 - 数式キーボードは実装されているが現状は表示無効
 - ランチャー新規作成は現行 UI では paper テンプレート運用
+- ランチャーの失敗理由メッセージ（`launcherStatus.message`）は現行UIに表示されない
+- ランチャーのテンプレート切替UI（paper/lecture）は非表示/未接続
+- 最近プロジェクトの手動削除UIは未接続（無効項目は自動除去のみ）
 - 削除は OS ゴミ箱ではなく `.tex64/.trash` を使用
 - `rename_latex_symbol` は Search 画面から AI ツール経由で実行される
 - reverse SyncTeX は設定 OFF で無効化される
 - アップデート導線は Settings > Runtime に集約（AIタブに更新操作は置かない）
+- TeX導入の install 開始/結果イベントは Main から送られるが UI が未表示（チェック結果のみ反映）
+- 課金（Stripe等）・Update manifest・Feedback・Error report は tex64.com 側に実装があるが、本番では「デプロイ + 環境変数 + DB/Stripe/OAuth設定 + 運用（通知/保存/監査）」が必須
 
 ---
 
@@ -826,12 +1093,109 @@ TeX64 は、1つの LaTeX ワークスペースに対して次を一体で提供
 - [x] 適用 Undo
 - [x] usage 集計
 
-### 19.7 設定・運用
+### 19.7 設定・オンボーディング
 
 - [x] Runtime で実行環境チェック
-- [x] Runtime で更新確認/ダウンロード/適用
-- [x] 更新ファイルの `sha256` 検証
-- [x] Runtime でフィードバック送信
+- [x] Runtime 初回オンボーディング表示（1/3 ... + 最初のビルド導線）
+- [ ] Runtime のインストール進捗/成否表示（`env:installStart` / `env:installResult`）
+- [x] Runtime で更新確認/ダウンロード/適用（クライアント側）
+- [x] 更新ファイルの `sha256` 検証（クライアント側）
+- [x] Runtime でフィードバック送信UI（キュー/再送込み）
+- [x] Runtime でサインアウト
 - [x] Settings から法務/サポート/リリース導線
+
+### 19.8 プラットフォーム結線（ログイン/課金/更新/フィードバック）
+
+- [x] Google OAuth start/exchange/refresh/logout（API v2 + Desktop）
+- [x] Entitlement/quota（`free/basic/pro` + `active/grace/past_due/canceled`）判定と UI 表示
+- [x] 決済連携（Stripe）: `POST /api/v2/billing/checkout` / `portal` / `webhook`（tex64.com 実装。production は `DATABASE_URL` + Stripe 設定が必須）
+- [x] Update manifest API（`GET /api/v2/updates/manifest`）
+- [x] Feedback API（`POST /api/v2/feedback`）
+- [x] Error report API（`POST /api/v2/internal/error-report`）
+- [x] 運用管理API（Admin: `/api/v2/admin/*`）
+
+---
+
+## 20. MVP公開に向けて足りないもの（不足洗い出し）
+
+この章は「MVPとして公開配布を開始する」ために、tex64（Desktop）と tex64.com（Web/Platform）の両面で不足しているものを機能ベースで列挙します。
+（ローカル編集/ビルド等の中核機能は概ね成立している前提で、**ユーザー導線**と**運用上の安全弁**の欠けを優先する。）
+
+### 20.1 P0（公開前に必須）
+
+- tex64.com（Platform）を本番として成立させる
+  - `DATABASE_URL` を用意し、永続化を有効にする（billing/refresh token/usage/feedback の基盤）
+  - `TEX64_PLATFORM_JWT_SECRET` を本番用に設定（production で必須）
+  - Google OAuth を本番設定し、redirect URI を登録する
+    - Web: `https://tex64.com/account/oauth/callback`
+    - Desktop bridge: `https://tex64.com/v2/auth/google/callback`（環境により `/api/v2/...` も追加登録）
+  - AI を有効にする場合: `GEMINI_API_KEY` とモデル/上限（コスト制御）を確定
+  - 課金（AIのみ）を有効にする場合: Stripe 設定（`STRIPE_*`）+ webhook 受信（`POST /api/v2/billing/webhook`）
+  - 運用: `TEX64_ADMIN_TOKEN` を設定し、`/admin` でユーザー/契約/フィードバック/監査を扱えるようにする
+- 配布/アップデート情報源を「運用できる」形で確定する（manifest の中身を埋める）
+  - artifact のホスティング（GitHub Releases / オブジェクトストレージ / remote feed など）を決める
+  - `artifactSha256`（Desktop が検証する）の生成・公開フローを確立する
+  - `notesUrl`（`/releases/[version]` 等）を提供する
+  - 反映手段: `TEX64_UPDATE_*`（env）または `src/content/releases.js`（静的データ）を運用方針として固定
+- Desktop 配布（macOS）
+  - Developer ID 署名 + Notarization の手順を確定（Gatekeeper 対応）
+  - バージョン付けとリリースノート作成を update/manifest 運用に組み込む
+- 初回UXの詰まりどころを潰す（ユーザーが「使い始められない」系）
+  - [x] ランチャーの失敗理由が UI に出ない（`launcherStatus.message` が描画されない）
+  - [x] Runtime の TeX インストール進捗/成否が UI に出ない（`env:installStart` / `env:installResult`）
+  - [x] テンプレート切替UIが非表示（paper/lecture）
+  - [x] 最近プロジェクトの手動削除が未接続
+
+### 20.2 P1（公開後すぐに欲しい）
+
+- アップデート通知
+  - [x] background チェック（OS通知）: 起動後に自動チェック + 6時間ごとに再チェック
+- サポート運用
+  - `TEX64_FEEDBACK_WEBHOOK_URL` / `TEX64_ERROR_WEBHOOK_URL` を Slack/Jira/Sentry 等へ接続する
+  - triage（タグ/担当/優先度）の運用を決め、`/admin` の運用手順を整備する
+- セキュリティ/運用ハードニング
+  - CSP/権限の最小化、PII/ログ保持/削除方針を明文化する
+  - トークン保存（`safeStorage` が使えない環境の扱い）を本番方針として固定する
+
+### 20.3 運用整合（リリース事故を減らす）
+
+- Desktop と tex64.com の Runbook を1つに集約（OAuth/Stripe/webhook/update/初回ビルドの確認手順）
+- README と `package.json` のコマンド/環境変数の整合を取る（両リポジトリ）
+
+---
+
+## 21. モック/開発モード一覧（本番での扱い）
+
+### 21.1 Platform API v2（サーバー側）
+
+- mock OAuth:
+  - `TEX64_PLATFORM_MOCK_OAUTH=true` で Google OAuth の代わりに `mock:` コードでログイン可能
+  - 本番では必ず無効化し、Google OAuth credential を設定する
+- state fallback（DBなし動作）:
+  - `TEX64_PLATFORM_STATE_FALLBACK=true` で JSON ストアへ退避（`TEX64_PLATFORM_STATE_FILE`）
+  - 本番では `DATABASE_URL` を必須にし、fallback を無効化する
+- user overrides（テスト用）:
+  - `TEX64_PLATFORM_USER_OVERRIDES`（JSON）で特定ユーザーの plan/status/extraTokens を強制できる
+  - 本番では原則無効化し、Admin/Stripe を正とする
+- AI mock:
+  - `TEX64_AI_MOCK=true` で AI をモック応答へ切替できる
+  - 本番では原則無効化し、実プロバイダ（例: Gemini）を設定する
+- JWT secret:
+  - 非production では未設定時に開発用デフォルトへフォールバックする
+  - 本番では必ず強度の高い secret を設定する
+
+### 21.2 Desktop app（Electron）
+
+- entitlement bypass（開発/E2E）:
+  - `TEX64_AI_BYPASS_ENTITLEMENT=1` などで契約判定をバイパス
+  - packaged 本番では常に無効化される前提で運用する
+- Platform API base URL の上書き（開発）:
+  - `TEX64_PLATFORM_API_BASE_URL` / `TEX64_PLATFORM_WEB_BASE_URL` / `TEX64_PLATFORM_OAUTH_REDIRECT_URI`
+  - 本番では `https://tex64.com` へ固定して運用する
+- legacy AI proxy（開発）:
+  - `TEX64_AI_PROXY_URL`（旧 `/api/ai-chat` プロキシ）
+  - 本番では Platform API v2（`/api/v2/ai/*`）へ統一する
+- update channel（運用）:
+  - `TEX64_UPDATE_CHANNEL`（既定: `stable`）
 
 以上。

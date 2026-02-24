@@ -22,6 +22,22 @@ export const initBuildOpsUi = (context, deps) => {
         const hasMissing = message.includes("見つかりません") || lower.includes("not found");
         return hasMissing && lower.includes("synctex");
     };
+    const firstBuildCompletedKey = "tex64.onboarding.firstBuildCompleted.v1";
+    const resolveRuntimeMissingLabel = (key) => {
+        if (key === "engine") {
+            return "TeX Engine";
+        }
+        if (key === "latexmk") {
+            return "latexmk";
+        }
+        if (key === "synctex") {
+            return "synctex";
+        }
+        if (key === "latexindent") {
+            return "latexindent";
+        }
+        return key;
+    };
     const resolvePdfSyncGroup = (pdfPath) => {
         var _a;
         if (!pdfPath) {
@@ -148,6 +164,12 @@ export const initBuildOpsUi = (context, deps) => {
             buildButton.title = isBusy ? "ビルドをキャンセル" : "ビルド (Cmd+B)";
         }
         if (state === "success") {
+            try {
+                localStorage.setItem(firstBuildCompletedKey, "1");
+            }
+            catch {
+                // ignore storage failures
+            }
             const targetPath = (_b = (_a = deps.getLastBuildMainFile()) !== null && _a !== void 0 ? _a : deps.getRootFilePath()) !== null && _b !== void 0 ? _b : deps.getActiveFilePath();
             if (deps.settings.getAutoSynctexOnBuildEnabled() &&
                 targetPath &&
@@ -175,6 +197,41 @@ export const initBuildOpsUi = (context, deps) => {
             if (ok) {
                 deps.updateIssues(0, "ビルドをキャンセルしています...", "info", []);
             }
+            return;
+        }
+        const runtimeSummary = deps.settings.getRuntimeStatusSummary();
+        if (!runtimeSummary || !runtimeSummary.hasAnyResult) {
+            deps.settings.checkEnvironmentStatus();
+            deps.updateIssues(1, "実行環境チェック中です。完了後に再度 Build を実行してください。", "error", [
+                {
+                    severity: "error",
+                    message: "実行環境チェック中です。完了後に再度 Build を実行してください。",
+                    action: "open-runtime",
+                },
+            ]);
+            deps.setPendingBuildIssuesFocus(true);
+            return;
+        }
+        if (!runtimeSummary.runtimeReady) {
+            const missing = runtimeSummary.missingRequired.map((item) => resolveRuntimeMissingLabel(item));
+            const summaryText = missing.length > 0
+                ? `実行環境が不足しています: ${missing.join(", ")}`
+                : "実行環境が不足しています。";
+            const issues = runtimeSummary.missingRequired.length > 0
+                ? runtimeSummary.missingRequired.map((item) => ({
+                    severity: "error",
+                    message: `${resolveRuntimeMissingLabel(item)} が未検出です。Settings > 実行環境で確認してください。`,
+                    action: "open-runtime",
+                }))
+                : [
+                    {
+                        severity: "error",
+                        message: "実行環境が不足しています。Settings > 実行環境で確認してください。",
+                        action: "open-runtime",
+                    },
+                ];
+            deps.updateIssues(issues.length, summaryText, "error", issues);
+            deps.setPendingBuildIssuesFocus(true);
             return;
         }
         deps.cacheCurrentBuffer(deps.getActiveGroup());

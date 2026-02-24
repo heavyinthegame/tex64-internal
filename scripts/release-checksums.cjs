@@ -20,9 +20,12 @@ const readOption = (name) => {
 
 const rootDirInput = readOption("--dir") || "dist";
 const outPathInput = readOption("--out") || path.join(rootDirInput, "checksums-sha256.txt");
+const versionFilterInput = readOption("--version") || "";
 
 const rootDir = path.resolve(process.cwd(), rootDirInput);
 const outPath = path.resolve(process.cwd(), outPathInput);
+const normalizeVersion = (value) => String(value || "").trim().replace(/^v/i, "");
+const versionFilter = normalizeVersion(versionFilterInput);
 
 const includeFile = (filePath) => {
   const name = path.basename(filePath);
@@ -77,7 +80,16 @@ const run = async () => {
   }
 
   const allFiles = await walkFiles(rootDir);
-  const targets = allFiles.filter(includeFile);
+  const targets = allFiles.filter((filePath) => {
+    if (!includeFile(filePath)) {
+      return false;
+    }
+    if (!versionFilter) {
+      return true;
+    }
+    const fileName = path.basename(filePath);
+    return fileName.includes(`-${versionFilter}-`);
+  });
   targets.sort((a, b) => a.localeCompare(b));
 
   const lines = [];
@@ -96,4 +108,3 @@ run().catch((error) => {
   console.error(error);
   process.exit(1);
 });
-

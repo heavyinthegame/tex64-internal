@@ -2,6 +2,22 @@ const { exec } = require("child_process");
 const util = require("util");
 const execAsync = util.promisify(exec);
 
+const shouldForceMissingTool = (toolName) => {
+  const raw = process.env.TEX64_E2E_FORCE_MISSING_TOOLS;
+  if (!raw || typeof raw !== "string") {
+    return false;
+  }
+  const needle = String(toolName ?? "").trim().toLowerCase();
+  if (!needle) {
+    return false;
+  }
+  return raw
+    .split(",")
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean)
+    .includes(needle);
+};
+
 class EnvService {
   constructor() {
     this.platform = process.platform; // 'darwin' or 'win32' or 'linux'
@@ -29,6 +45,9 @@ class EnvService {
   }
 
   async checkCommand(command) {
+    if (shouldForceMissingTool(command)) {
+      return false;
+    }
     try {
       const checkCmd = this.platform === "win32" ? `where ${command}` : `which ${command}`;
       const env = { ...process.env };

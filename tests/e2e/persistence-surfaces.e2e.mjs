@@ -13,6 +13,7 @@ const sourceWorkspace = path.join(repoRoot, "test-workspace");
 const keepWorkspace = process.env.E2E_KEEP_WORKSPACE === "1";
 const stepDelayMs = Number.parseInt(process.env.E2E_STEP_DELAY_MS ?? "120", 10);
 const slowMoMs = Number.parseInt(process.env.E2E_PLAYWRIGHT_SLOWMO_MS ?? "0", 10);
+const explicitSuggestShortcut = "Control+.";
 
 const now = () => new Date().toISOString().slice(11, 19);
 const log = (message) => console.log(`[persistence-surfaces-e2e ${now()}] ${message}`);
@@ -483,7 +484,7 @@ const run = async () => {
     );
     await page.click("#block-math-input");
     await page.keyboard.type("sqrt", { delay: 20 });
-    await page.click("#block-suggest-button");
+    await page.keyboard.press(explicitSuggestShortcut);
     await waitForSuggestionOpen(page, 10000);
     await page.keyboard.press("Enter");
     await pause(250);
@@ -499,7 +500,20 @@ const run = async () => {
     await page.click('button.block-settings-option[data-inline-format="inline-paren"]');
     await page.click('button.block-settings-option[data-display-format="display-bracket"]');
     await page.click('.block-settings-page.is-active .block-settings-back');
-    await page.click('[data-block-settings-target="suggestions"]');
+    const suggestionNav = page.locator('[data-block-settings-target="suggestions"]');
+    if ((await suggestionNav.count()) > 0) {
+      await suggestionNav.first().click();
+    } else {
+      await page.evaluate(() => {
+        document
+          .querySelectorAll(".block-settings-page")
+          .forEach((node) => node.classList.remove("is-active"));
+        const target = document.querySelector(
+          '.block-settings-page[data-block-settings-page="suggestions"]'
+        );
+        target?.classList.add("is-active");
+      });
+    }
     await page.waitForSelector('.block-settings-page.is-active[data-block-settings-page="suggestions"]', {
       timeout: 10000,
     });

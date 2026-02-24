@@ -2,6 +2,17 @@
 
 対象: `free / basic / pro`、Google OAuth、AIのみ課金、3日grace、トークン表示のみ
 
+## 実装状況（2026-02-23）
+
+- このリポジトリに `api/v2` の entitlement/quota 基盤を追加済み
+  - `GET /api/v2/me/features?names=ai`
+  - `GET /api/v2/me/usage/ai?period=current_month`
+  - `POST /api/v2/ai/chat`
+  - `POST /api/v2/ai/completion`
+  - `POST /api/v2/internal/subscription`（Webhook連携用の内部反映先）
+- Stripe/Webhook本体と外部DB接続は別実装として切り出し
+- 詳細は `docs/platform-entitlement-backend.md` を参照
+
 ## Phase 0: 前提設定（先に固定）
 
 1. サーバー環境変数
@@ -113,4 +124,3 @@
 1. Phase 1 の `auth + features + usage + ai guard` まで
 2. Phase 2/3 の最低UI（AIタブガード + 使用量表示）
 3. その後 Phase 4 の自動アップデート
-

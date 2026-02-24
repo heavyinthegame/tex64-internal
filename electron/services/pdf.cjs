@@ -2,7 +2,12 @@ const { BrowserWindow } = require("electron");
 const path = require("path");
 const { pathToFileURL } = require("url");
 
-const e2eHeadless = process.env.TEX64_E2E_HEADLESS === "1";
+const isE2EContext =
+  process.env.TEX64_E2E === "1" ||
+  (typeof process.env.TEX64_E2E_USERDATA === "string" &&
+    process.env.TEX64_E2E_USERDATA.trim().length > 0);
+const e2eHeadless =
+  isE2EContext && process.env.TEX64_E2E_FORCE_HEADLESS !== "0";
 
 class PDFWindowManager {
   constructor() {

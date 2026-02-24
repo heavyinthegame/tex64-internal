@@ -1,3 +1,4 @@
+import { AUXILIARY_MATH_MACROS } from "./math-aux-command-escape.js";
 export const initMathLive = (context, deps) => {
     const { blockMathInputContainer } = context.dom;
     let setupInFlight = false;
@@ -95,6 +96,33 @@ export const initMathLive = (context, deps) => {
             const hasMathLive = !!MathLiveGlobal;
             const hasMathfieldElement = hasMathLive && !!MathLiveGlobal.MathfieldElement;
             const loadError = window.MATHLIVE_LOAD_ERROR;
+            const configureMathLiveAudio = () => {
+                var _a;
+                const mathfieldElement = ((_a = MathLiveGlobal === null || MathLiveGlobal === void 0 ? void 0 : MathLiveGlobal.MathfieldElement) !== null && _a !== void 0 ? _a : window.MathfieldElement);
+                if (mathfieldElement) {
+                    try {
+                        mathfieldElement.soundsDirectory = null;
+                        mathfieldElement.keypressSound = null;
+                        mathfieldElement.plonkSound = null;
+                        mathfieldElement.keypressVibration = false;
+                    }
+                    catch {
+                        // ignore global audio option failures
+                    }
+                }
+                const mathVirtualKeyboard = window.mathVirtualKeyboard;
+                if (mathVirtualKeyboard) {
+                    try {
+                        mathVirtualKeyboard.keypressSound = null;
+                        mathVirtualKeyboard.plonkSound = null;
+                        mathVirtualKeyboard.keypressVibration = false;
+                    }
+                    catch {
+                        // ignore virtual keyboard audio option failures
+                    }
+                }
+            };
+            configureMathLiveAudio();
             if (!customElements.get("math-field")) {
                 if (hasMathfieldElement) {
                     try {
@@ -257,6 +285,7 @@ export const initMathLive = (context, deps) => {
                     locale: "ja",
                 });
             }
+            configureMathLiveAudio();
             // MathLive doesn't support some LaTeX font commands natively (e.g. \mathds),
             // but macros let us render them while preserving the original command in `getValue("latex")`.
             try {
@@ -264,6 +293,7 @@ export const initMathLive = (context, deps) => {
                     mathfield.macros = {
                         ...((_b = mathfield.macros) !== null && _b !== void 0 ? _b : {}),
                         mathds: { def: "\\mathbb{#1}", args: 1 },
+                        ...AUXILIARY_MATH_MACROS,
                     };
                 }
             }

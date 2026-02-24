@@ -1,3 +1,15 @@
+export type EnvStatusSummary = {
+  hasAnyResult: boolean;
+  hasEngine: boolean;
+  latexmkAvailable: boolean;
+  synctexAvailable: boolean;
+  latexindentAvailable: boolean;
+  runtimeReady: boolean;
+  missingRequired: string[];
+  missingRecommended: string[];
+  statusByCommand: Record<string, boolean>;
+};
+
 export const createEnvStatusManager = (params: {
   postToNative: (
     payload: { type: string; [key: string]: unknown },
@@ -6,11 +18,57 @@ export const createEnvStatusManager = (params: {
   envCheckTargets: string[];
   envDisplayTargets: string[];
   texEngineCommands: Set<string>;
+  onStatusSummaryChange?: (summary: EnvStatusSummary) => void;
 }) => {
   const envCheckState = new Map<string, boolean>();
   let envCheckRetryTimer: number | null = null;
   let envCheckRetryCount = 0;
   const envCheckMaxRetries = 4;
+
+  const hasDetectedEngine = () =>
+    Array.from(params.texEngineCommands).some(
+      (engine) => envCheckState.get(engine) === true
+    );
+
+  const getStatusSummary = (): EnvStatusSummary => {
+    const hasAnyResult = params.envCheckTargets.some((command) =>
+      envCheckState.has(command)
+    );
+    const hasEngine = hasDetectedEngine();
+    const latexmkAvailable = envCheckState.get("latexmk") === true;
+    const synctexAvailable = envCheckState.get("synctex") === true;
+    const latexindentAvailable = envCheckState.get("latexindent") === true;
+    const missingRequired: string[] = [];
+    if (!hasEngine) {
+      missingRequired.push("engine");
+    }
+    if (!latexmkAvailable) {
+      missingRequired.push("latexmk");
+    }
+    if (!synctexAvailable) {
+      missingRequired.push("synctex");
+    }
+    const missingRecommended: string[] = [];
+    if (!latexindentAvailable) {
+      missingRecommended.push("latexindent");
+    }
+    const statusByCommand = Object.fromEntries(envCheckState.entries());
+    return {
+      hasAnyResult,
+      hasEngine,
+      latexmkAvailable,
+      synctexAvailable,
+      latexindentAvailable,
+      runtimeReady: missingRequired.length === 0,
+      missingRequired,
+      missingRecommended,
+      statusByCommand,
+    };
+  };
+
+  const emitStatusSummary = () => {
+    params.onStatusSummaryChange?.(getStatusSummary());
+  };
 
   const renderEnvStatus = (envName: string, available: boolean | null) => {
     const item = document.querySelector(`.env-item[data-env="${envName}"]`);
@@ -52,6 +110,7 @@ export const createEnvStatusManager = (params: {
     }
     params.envDisplayTargets.forEach((envName) => renderEnvStatus(envName, null));
     params.envCheckTargets.forEach((command) => envCheckState.delete(command));
+    emitStatusSummary();
     let postedAll = true;
     params.envCheckTargets.forEach((command) => {
       if (!params.postToNative({ type: "env:check", command }, true)) {
@@ -80,17 +139,18 @@ export const createEnvStatusManager = (params: {
     }
     envCheckState.set(command, available);
     if (params.texEngineCommands.has(command)) {
-      const hasEngine = Array.from(params.texEngineCommands).some(
-        (engine) => envCheckState.get(engine) === true
-      );
+      const hasEngine = hasDetectedEngine();
       renderEnvStatus("lualatex", hasEngine);
+      emitStatusSummary();
       return;
     }
     renderEnvStatus(command, available);
+    emitStatusSummary();
   };
 
   return {
     checkEnvironmentStatus,
     updateEnvStatus,
+    getStatusSummary,
   };
 };

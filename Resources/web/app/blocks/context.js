@@ -9,15 +9,19 @@ const MATRIX_ENV_NAMES = new Set([
     "Vmatrix",
     "smallmatrix",
 ]);
-const OPTIONAL_BRACKET_ENVS = new Set([
-    "aligned",
-    "alignedat",
-    "gathered",
-    "multlined",
-    "empheq",
-    "mathpar",
-    "mathparpagebreakable",
-]);
+const OPTIONAL_ENV_ARGS = {
+    aligned: 1,
+    alignedat: 1,
+    gathered: 1,
+    multlined: 1,
+    empheq: 1,
+    mathpar: 1,
+    mathparpagebreakable: 1,
+    array: 1,
+    subarray: 1,
+    IEEEeqnarray: 1,
+    IEEEeqnarraybox: 2,
+};
 const REQUIRED_ENV_ARGS = {
     alignat: 1,
     xalignat: 1,
@@ -59,17 +63,25 @@ const readDelimitedArg = (text, startIndex, openChar, closeChar) => {
     return null;
 };
 const consumeEnvArguments = (snippet, startIndex, envName) => {
-    var _a;
+    var _a, _b;
     const base = getEnvBaseName(envName);
     let cursor = skipEnvWhitespace(snippet, startIndex);
-    const allowOptional = OPTIONAL_BRACKET_ENVS.has(base) || (MATRIX_ENV_NAMES.has(base) && envName.endsWith("*"));
-    if (allowOptional && snippet[cursor] === "[") {
-        const optionalArg = readDelimitedArg(snippet, cursor, "[", "]");
-        if (optionalArg) {
-            cursor = skipEnvWhitespace(snippet, optionalArg.end);
-        }
+    let optionalCount = (_a = OPTIONAL_ENV_ARGS[base]) !== null && _a !== void 0 ? _a : 0;
+    if (optionalCount === 0 && MATRIX_ENV_NAMES.has(base) && envName.endsWith("*")) {
+        optionalCount = 1;
     }
-    let requiredCount = (_a = REQUIRED_ENV_ARGS[base]) !== null && _a !== void 0 ? _a : 0;
+    for (let i = 0; i < optionalCount; i += 1) {
+        cursor = skipEnvWhitespace(snippet, cursor);
+        if (snippet[cursor] !== "[") {
+            break;
+        }
+        const optionalArg = readDelimitedArg(snippet, cursor, "[", "]");
+        if (!optionalArg) {
+            break;
+        }
+        cursor = skipEnvWhitespace(snippet, optionalArg.end);
+    }
+    let requiredCount = (_b = REQUIRED_ENV_ARGS[base]) !== null && _b !== void 0 ? _b : 0;
     for (let i = 0; i < requiredCount; i += 1) {
         cursor = skipEnvWhitespace(snippet, cursor);
         if (snippet[cursor] !== "{") {

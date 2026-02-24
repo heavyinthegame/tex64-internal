@@ -15,20 +15,17 @@ concurrency:
 
 jobs:
   build:
-    name: Build (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    name: Build (macOS ${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
-
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest
-            script: electron:dist:mac
-          - os: windows-latest
-            script: electron:dist:win
-          - os: ubuntu-latest
-            script: electron:dist:linux
+          - arch: arm64
+            runner: macos-14
+          - arch: x64
+            runner: macos-13
 
     steps:
       - name: Checkout
@@ -61,13 +58,89 @@ jobs:
           console.log(`package.json version -> ${version}`);
           NODE
 
+      - name: Require macOS signing/notarization secrets for tagged release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          TEX64_MACOS_CERT_P12_BASE64: ${{ secrets.TEX64_MACOS_CERT_P12_BASE64 }}
+          TEX64_MACOS_CERT_PASSWORD: ${{ secrets.TEX64_MACOS_CERT_PASSWORD }}
+          TEX64_APPLE_ID: ${{ secrets.TEX64_APPLE_ID }}
+          TEX64_APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.TEX64_APPLE_APP_SPECIFIC_PASSWORD }}
+          TEX64_APPLE_TEAM_ID: ${{ secrets.TEX64_APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          missing=0
+          require_secret() {
+            value="$1"
+            name="$2"
+            if [ -z "$value" ]; then
+              echo "::error::Missing required secret: ${name}"
+              missing=1
+            fi
+          }
+          require_secret "${TEX64_MACOS_CERT_P12_BASE64}" "TEX64_MACOS_CERT_P12_BASE64"
+          require_secret "${TEX64_MACOS_CERT_PASSWORD}" "TEX64_MACOS_CERT_PASSWORD"
+          require_secret "${TEX64_APPLE_ID}" "TEX64_APPLE_ID"
+          require_secret "${TEX64_APPLE_APP_SPECIFIC_PASSWORD}" "TEX64_APPLE_APP_SPECIFIC_PASSWORD"
+          require_secret "${TEX64_APPLE_TEAM_ID}" "TEX64_APPLE_TEAM_ID"
+          if [ "${missing}" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Prepare macOS signing and notarization env
+        shell: bash
+        env:
+          TEX64_MACOS_CERT_P12_BASE64: ${{ secrets.TEX64_MACOS_CERT_P12_BASE64 }}
+          TEX64_MACOS_CERT_PASSWORD: ${{ secrets.TEX64_MACOS_CERT_PASSWORD }}
+          TEX64_APPLE_ID: ${{ secrets.TEX64_APPLE_ID }}
+          TEX64_APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.TEX64_APPLE_APP_SPECIFIC_PASSWORD }}
+          TEX64_APPLE_TEAM_ID: ${{ secrets.TEX64_APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          if [ -n "${TEX64_MACOS_CERT_P12_BASE64}" ] && [ -n "${TEX64_MACOS_CERT_PASSWORD}" ]; then
+            certPath="${RUNNER_TEMP}/tex64-macos-signing.p12"
+            CERT_B64="${TEX64_MACOS_CERT_P12_BASE64}" CERT_PATH="${certPath}" node -e "const fs=require('fs');fs.writeFileSync(process.env.CERT_PATH, Buffer.from(process.env.CERT_B64,'base64'));"
+            {
+              echo "CSC_LINK=${certPath}"
+              echo "CSC_KEY_PASSWORD=${TEX64_MACOS_CERT_PASSWORD}"
+            } >> "$GITHUB_ENV"
+            if [ -n "${TEX64_APPLE_ID}" ] && [ -n "${TEX64_APPLE_APP_SPECIFIC_PASSWORD}" ] && [ -n "${TEX64_APPLE_TEAM_ID}" ]; then
+              {
+                echo "APPLE_ID=${TEX64_APPLE_ID}"
+                echo "APPLE_APP_SPECIFIC_PASSWORD=${TEX64_APPLE_APP_SPECIFIC_PASSWORD}"
+                echo "APPLE_TEAM_ID=${TEX64_APPLE_TEAM_ID}"
+              } >> "$GITHUB_ENV"
+              echo "macOS notarization: enabled"
+            else
+              echo "macOS notarization: disabled (Apple credentials missing)"
+            fi
+            echo "macOS signing: enabled"
+          else
+            echo "macOS signing: disabled (certificate secrets missing)"
+          fi
+
       - name: Build distributables
-        run: npm run -s ${{ matrix.script }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run -s dist:prep
+          npm run -s web:build
+          if [ "${{ matrix.arch }}" = "arm64" ]; then
+            npx --no-install electron-builder --mac --arm64 --publish never
+          else
+            npx --no-install electron-builder --mac --x64 --publish never
+          fi
+
+      - name: Cleanup signing files
+        if: always()
+        shell: bash
+        run: |
+          rm -f "${RUNNER_TEMP}/tex64-macos-signing.p12" || true
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: tex64-${{ matrix.os }}-${{ github.ref_name }}
+          name: tex64-macos-${{ matrix.arch }}-${{ github.ref_name }}
           path: dist/**
           if-no-files-found: error
           retention-days: 14
@@ -87,6 +160,33 @@ jobs:
         with:
           node-version: "20"
 
+      - name: Require downloads secrets for tagged release
+        if: startsWith(github.ref, 'refs/tags/v') && (secrets.TEX64_DOWNLOADS_PUBLIC_BASE_URL != '' || secrets.TEX64_DOWNLOADS_BUCKET != '' || secrets.TEX64_DOWNLOADS_ACCESS_KEY_ID != '' || secrets.TEX64_DOWNLOADS_SECRET_ACCESS_KEY != '')
+        shell: bash
+        env:
+          TEX64_DOWNLOADS_PUBLIC_BASE_URL: ${{ secrets.TEX64_DOWNLOADS_PUBLIC_BASE_URL }}
+          TEX64_DOWNLOADS_BUCKET: ${{ secrets.TEX64_DOWNLOADS_BUCKET }}
+          TEX64_DOWNLOADS_ACCESS_KEY_ID: ${{ secrets.TEX64_DOWNLOADS_ACCESS_KEY_ID }}
+          TEX64_DOWNLOADS_SECRET_ACCESS_KEY: ${{ secrets.TEX64_DOWNLOADS_SECRET_ACCESS_KEY }}
+        run: |
+          set -euo pipefail
+          missing=0
+          require_secret() {
+            value="$1"
+            name="$2"
+            if [ -z "$value" ]; then
+              echo "::error::Missing required secret: ${name}"
+              missing=1
+            fi
+          }
+          require_secret "${TEX64_DOWNLOADS_PUBLIC_BASE_URL}" "TEX64_DOWNLOADS_PUBLIC_BASE_URL"
+          require_secret "${TEX64_DOWNLOADS_BUCKET}" "TEX64_DOWNLOADS_BUCKET"
+          require_secret "${TEX64_DOWNLOADS_ACCESS_KEY_ID}" "TEX64_DOWNLOADS_ACCESS_KEY_ID"
+          require_secret "${TEX64_DOWNLOADS_SECRET_ACCESS_KEY}" "TEX64_DOWNLOADS_SECRET_ACCESS_KEY"
+          if [ "${missing}" -ne 0 ]; then
+            exit 1
+          fi
+
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
@@ -98,7 +198,7 @@ jobs:
           rm -rf release
           mkdir -p release
           find artifacts -type f \( \
-            -name '*.dmg' -o -name '*.zip' -o -name '*.exe' -o -name '*.msi' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' -o -name '*.tar.gz' \
+            -name '*.dmg' -o -name '*.zip' \
           \) -print0 | while IFS= read -r -d '' file; do
             base="$(basename "$file")"
             cp "$file" "release/$base"
@@ -107,6 +207,20 @@ jobs:
 
       - name: Generate checksums
         run: node scripts/release-checksums.cjs --dir release --out release/checksums-sha256.txt
+
+      - name: Write release operator summary
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          {
+            echo "## tex64.com sync checklist"
+            echo ""
+            echo "- Set \`NEXT_PUBLIC_TEX64_DOWNLOADS_PUBLIC_BASE_URL\` (example: \`https://downloads.tex64.com\`)."
+            echo "- Set \`TEX64_UPDATE_REMOTE_BASE_URL\` (example: \`https://downloads.tex64.com/tex64/updates\`)."
+            echo "- Import checksum file into tex64.com:"
+            echo "  \`npm run -s release:import-checksums -- --version ${version} --file /path/to/checksums-sha256.txt\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Generate update feed (stable)
         if: startsWith(github.ref, 'refs/tags/v') && secrets.TEX64_DOWNLOADS_PUBLIC_BASE_URL != ''

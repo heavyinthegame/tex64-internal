@@ -58,3 +58,26 @@ Source: user feedback 2026-02-02.
 - web-src/app/math-wysiwyg-selection.ts (placeholder detection, reduce internal API usage)
 - web-src/app/blocks/input-ui.ts (explicit trigger, keybinding hooks)
 - tests/e2e/mathlive-wysiwyg-suggestions.spec.js (new UX cases)
+
+## 8) Math Input Safety Checklist (for future skills/checks)
+- Auxiliary command insertion path: verify `label/tag/tag*/notag/nonumber/eqref/ref/pageref/autoref/intertext` can be inserted from WYSIWYG suggestions and keep editable structure.
+- Escaped command normalization: when MathLive emits `\\lbrace ... \\rbrace` or bare-arg forms, normalize into stable command form without breaking caret movement.
+- Cursor safety under environments: if MathLive offset↔latex index mapping is unstable (e.g. nested `aligned/matrix`), defer aux-command argument rewriting during active editing and finalize on blur/change.
+- Punctuation-safe args: verify labels/refs containing `/ + @ . - _ :` remain intact through normalization (no truncation or spill into adjacent cells).
+- Render health: after each auxiliary command insertion, assert no `.ML__error` node remains and no raw `\\begin/\\end` leak in visible render text.
+- Structure edits under nesting: run row/column insertion inside matrix/cases/aligned with nested environments and confirm `&` / `\\\\` splitting remains stable.
+- Placeholder leak guard: assert generated latex has no unresolved `\\placeholder{}` tokens after typing (not only no `#?` markers), especially for `align/alignat/flalign/multline`.
+- Environment-type sweep: run `tests/e2e/math-wysiwyg-all-env-types-complex.e2e.mjs` (22 env-focused cases: matrix families, cases families, align families, array families, subequations wrapper) and verify render + snippet stability.
+- Long-form regression sweeps: execute large adversarial suites (`ultra-complex-30`, `environment-entangled-50`, `structural-breakage-probes`, nested matrix sets) in chunked ranges to detect focus/selection regressions.
+- Missing-env registry sweep: run `tests/e2e/math-wysiwyg-missing-env-edit-16.e2e.mjs` to verify editability and stable output for `alignat/xalignat/xxalignat/flalign/alignedat/gathered/multlined/numcases/subnumcases/empheq/subarray/darray/IEEEeqnarray/IEEEeqnarraybox/mathpar/mathparpagebreakable`.
+- Proxy/real-env consistency: for `alignat/flalign/array-custom`, verify mathfield proxy markers (`\\txalnat/\\txflaln/\\txarrcf`) round-trip to correct final LaTeX env (`alignat*`/`flalign*`/complex `array`) on insert.
+- Nested subequations safety: verify `subequations + aligned` nested template keeps inner slot editing stable and does not collapse to raw commands in render.
+- Complex colspec array safety: verify complex colspec array template (`@{}>r<{}c@{|}l<{}@{}`) is editable via placeholders and restores correctly after commit.
+- Matrix normalization guard: verify `normalizeMatrixSyntax()` only rewrites pure top-level braced-cell matrix bodies and skips mixed/unbraced/nested-command cells.
+- Text-like suppression sweep: verify auto-suggest suppression inside `text/operatorname` and font wrappers (`mathrm/mathsf/mathit/mathtt/mathbf/mathcal/mathfrak/mathscr/textrm/textsf/texttt/textit/textbf/mbox`).
+- Tab arbitration check: run `tests/e2e/math-wysiwyg-interactions.e2e.mjs` and verify `Tab/Shift+Tab` always prioritizes placeholder movement over suggestion cycling.
+- Shift+Tab roundtrip integrity: in matrix prompts, edit `q11/q12`, `Shift+Tab` back-edit first cell, and assert the second cell token (`q12`) is not mutated by caret drift.
+- Intertext boundary check: verify `intertext/shortintertext` bare-arg normalization does not truncate prose containing inline `\\begin/\\end`, `&`, or escaped punctuation.
+- Edit-mode anchor sweep: in `block-mode=edit`, move cursor to pre-existing formula anchors and verify the mathfield loads the target expression (not previous/empty state) before editing.
+- Edit output roundtrip: after editing existing formulas, assert post-submit editor content increments marker occurrence exactly once while preserving wrapper/environment tokens.
+- Diff modal integrity: validate diff header/file, then ensure summary `+/-` counts match actual add/del counts computed from diff original/modified models.

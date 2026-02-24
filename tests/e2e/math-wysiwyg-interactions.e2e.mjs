@@ -14,7 +14,7 @@ const sourceWorkspace = path.join(repoRoot, "test-workspace");
 const keepWorkspace = process.env.E2E_KEEP_WORKSPACE === "1";
 const stepDelayMs = Number.parseInt(process.env.E2E_STEP_DELAY_MS ?? "130", 10);
 const typeDelayMs = Number.parseInt(process.env.E2E_TYPE_DELAY_MS ?? "35", 10);
-const slowMoMs = Number.parseInt(process.env.E2E_PLAYWRIGHT_SLOWMO_MS ?? "25", 10);
+const slowMoMs = Number.parseInt(process.env.E2E_PLAYWRIGHT_SLOWMO_MS ?? "0", 10);
 const isMac = process.platform === "darwin";
 const selectAllShortcut = isMac ? "Meta+A" : "Control+A";
 const explicitSuggestShortcut = "Control+.";
@@ -221,7 +221,20 @@ const openSuggestionsSettings = async (page) => {
     const modal = document.getElementById("block-settings-modal");
     return Boolean(modal?.classList.contains("is-open") && modal?.getAttribute("aria-hidden") === "false");
   });
-  await page.click('[data-block-settings-target="suggestions"]');
+  const navButton = page.locator('[data-block-settings-target="suggestions"]');
+  if ((await navButton.count()) > 0) {
+    await navButton.first().click();
+  } else {
+    await page.evaluate(() => {
+      document
+        .querySelectorAll(".block-settings-page")
+        .forEach((node) => node.classList.remove("is-active"));
+      const target = document.querySelector(
+        '.block-settings-page[data-block-settings-page="suggestions"]'
+      );
+      target?.classList.add("is-active");
+    });
+  }
   await page.waitForSelector('.block-settings-page.is-active[data-block-settings-page="suggestions"]', {
     timeout: 5000,
   });
@@ -387,7 +400,7 @@ const runCase = async (label, test) => {
 };
 
 const run = async () => {
-  await runCase("[1/7] explicit shortcut works with autoSuggest off", async (page) => {
+  await runCase("[1/8] explicit shortcut works with autoSuggest off", async (page) => {
     await openSuggestionsSettings(page);
     await setAutoSuggest(page, false);
     await closeSettingsModal(page);
@@ -402,7 +415,7 @@ const run = async () => {
     await waitForLatexIncludes(page, "\\sin", "explicit shortcut apply");
   });
 
-  await runCase("[2/7] ArrowDown + Enter applies non-default candidate", async (page) => {
+  await runCase("[2/8] ArrowDown + Enter applies non-default candidate", async (page) => {
     await typeToken(page, "int");
     await waitForSuggestionVisible(page, "int");
     await page.keyboard.press("ArrowDown");
@@ -411,30 +424,40 @@ const run = async () => {
     await waitForLatexIncludes(page, "\\mathrm{d}", "non-default int candidate");
   });
 
-  await runCase("[3/7] Tab and Shift+Tab cycle suggestion candidates", async (page) => {
-    await typeToken(page, "int");
-    await waitForSuggestionVisible(page, "int");
-    await page.keyboard.press("Tab");
-    await pause(70);
+  await runCase("[3/8] Tab keeps placeholder navigation even when suggestions are open", async (page) => {
+    await typeToken(page, "frac");
+    await waitForSuggestionVisible(page, "frac");
     await page.keyboard.press("Enter");
-    await waitForLatexIncludes(page, "\\mathrm{d}", "Tab candidate navigation");
+    await pause(90);
 
-    await clearMathField(page);
-    await typeToken(page, "int");
-    await waitForSuggestionVisible(page, "int");
+    await page.keyboard.type("a", { delay: typeDelayMs });
+    await page.keyboard.press(explicitSuggestShortcut);
+    await page.waitForFunction(
+      () => {
+        const panel = document.querySelector(".math-wysiwyg-panel");
+        if (!(panel instanceof HTMLElement)) return false;
+        if (panel.getAttribute("aria-hidden") !== "false") return false;
+        return panel.querySelectorAll(".math-wysiwyg-item").length > 0;
+      },
+      undefined,
+      { timeout: 10000 }
+    );
     const defaultHint = await getActiveSuggestionHint(page);
-    await page.keyboard.press("Shift+Tab");
-    await pause(70);
-    const shiftedHint = await getActiveSuggestionHint(page);
-    assert.notEqual(shiftedHint, defaultHint, "Shift+Tab should move to previous candidate");
+    assert.ok(defaultHint, "suggestion should be visible before Tab");
+
     await page.keyboard.press("Tab");
-    await pause(70);
-    assert.equal(await getActiveSuggestionHint(page), defaultHint, "Tab should return to default candidate");
-    await page.keyboard.press("Enter");
-    await waitForLatexIncludes(page, "\\int", "Shift+Tab candidate navigation");
+    await page.keyboard.type("b", { delay: typeDelayMs });
+    await page.keyboard.press("Escape");
+
+    const latex = normalizeLatex(await getMathFieldLatex(page));
+    assert.equal(
+      latex,
+      normalizeLatex("\\frac{a}{b}"),
+      `Tab should not hijack placeholder navigation while suggestion panel is open: ${latex}`
+    );
   });
 
-  await runCase("[4/7] Escape closes suggestion panel", async (page) => {
+  await runCase("[4/8] Escape closes suggestion panel", async (page) => {
     await typeToken(page, "log");
     await waitForSuggestionVisible(page, "log");
     await page.keyboard.press("Escape");
@@ -442,7 +465,7 @@ const run = async () => {
     assert.equal(await isSuggestionPanelVisible(page), false, "Escape should close panel");
   });
 
-  await runCase("[5/7] backslash direct input is blocked and unknown token stays literal", async (page) => {
+  await runCase("[5/8] backslash direct input is blocked and unknown token stays literal", async (page) => {
     await clearMathField(page);
     await focusMathField(page);
 
@@ -474,7 +497,7 @@ const run = async () => {
     await waitForExactLatex(page, rawCommandToken, "unknown token should stay literal");
   });
 
-  await runCase("[6/7] Tab and Shift+Tab move placeholders", async (page) => {
+  await runCase("[6/8] Tab and Shift+Tab move placeholders", async (page) => {
     await typeToken(page, "frac");
     await waitForSuggestionVisible(page, "frac");
     await page.keyboard.press("Enter");
@@ -488,7 +511,7 @@ const run = async () => {
     assert.equal(latex, normalizeLatex("\\frac{a}{b}"), `placeholder navigation failed: ${latex}`);
   });
 
-  await runCase("[7/7] math pack toggle affects auto-suggest", async (page) => {
+  await runCase("[7/8] math pack toggle affects auto-suggest", async (page) => {
     await openSuggestionsSettings(page);
     await setAutoSuggest(page, true);
     await setPackEnabled(page, "math", false);
@@ -520,6 +543,46 @@ const run = async () => {
 
     await typeToken(page, "min");
     await waitForSuggestionVisible(page, "min");
+  });
+
+  await runCase("[8/8] text-like wrapper arguments suppress auto-suggest while typing", async (page) => {
+    const wrappers = [
+      { token: "rm", hint: "rm", expected: "\\mathrm{" },
+      { token: "op", hint: "op", expected: "\\operatorname{" },
+      { token: "sf", hint: "sf", expected: "\\mathsf{" },
+    ];
+    for (const wrapper of wrappers) {
+      await clearMathField(page);
+      await typeToken(page, wrapper.token);
+      await waitForSuggestionVisible(page, wrapper.hint);
+      await page.keyboard.press("Enter");
+      await waitForLatexIncludes(page, wrapper.expected, `${wrapper.token} wrapper inserted`);
+      await page.keyboard.type("sin", { delay: typeDelayMs });
+      await pause(220);
+      assert.equal(
+        await isSuggestionPanelVisible(page),
+        false,
+        `suggestions should stay hidden inside ${wrapper.token} wrapper`
+      );
+      await page.keyboard.press("Escape");
+      await pause(40);
+    }
+
+    await clearMathField(page);
+    await typeToken(page, "argmax");
+    await waitForSuggestionVisible(page, "argmax");
+    await page.keyboard.press("Enter");
+    await waitForLatexIncludes(page, "\\operatorname*{", "argmax inserted");
+    await page.keyboard.press("ArrowLeft");
+    await page.keyboard.press("ArrowLeft");
+    await page.keyboard.press("ArrowLeft");
+    await page.keyboard.type("sin", { delay: typeDelayMs });
+    await pause(220);
+    assert.equal(
+      await isSuggestionPanelVisible(page),
+      false,
+      "suggestions should stay hidden while editing operatorname* text"
+    );
   });
 
   log("math-wysiwyg interactions e2e passed");

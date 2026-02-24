@@ -1,6 +1,6 @@
 const INITIAL_VISIBLE_COUNT = 3;
 export const initLauncherUi = (context, deps) => {
-    const { launcher, launcherCreateButton, launcherOpenButton, launcherTemplateButtons, launcherRecent, launcherRecentList, launcherRecentEmpty, launcherRecentToggle, } = context.dom;
+    const { launcher, launcherCreateButton, launcherOpenButton, launcherTemplateButtons, launcherStatusMessage, launcherRecent, launcherRecentList, launcherRecentEmpty, launcherRecentToggle, } = context.dom;
     let selectedActionIndex = 0;
     let launcherTemplate = "paper";
     let launcherBusy = false;
@@ -49,6 +49,14 @@ export const initLauncherUi = (context, deps) => {
         if (launcherOpenButton instanceof HTMLButtonElement) {
             launcherOpenButton.disabled = launcherBusy;
         }
+        if (launcherStatusMessage instanceof HTMLElement) {
+            const message = typeof payload.message === "string" && payload.message.trim()
+                ? payload.message.trim()
+                : "";
+            launcherStatusMessage.textContent = message;
+            launcherStatusMessage.classList.toggle("is-hidden", !message);
+            launcherStatusMessage.setAttribute("aria-hidden", message ? "false" : "true");
+        }
     };
     const renderRecentProjects = () => {
         if (!(launcherRecentList instanceof HTMLElement)) {
@@ -59,6 +67,8 @@ export const initLauncherUi = (context, deps) => {
             ? recentProjects
             : recentProjects.slice(0, INITIAL_VISIBLE_COUNT);
         for (const project of visibleProjects) {
+            const row = document.createElement("div");
+            row.className = "launcher-recent-row";
             const item = document.createElement("button");
             item.className = "launcher-recent-item";
             item.type = "button";
@@ -77,7 +87,24 @@ export const initLauncherUi = (context, deps) => {
                 setStatus({ isBusy: true, message: null });
                 deps.onOpenRecent(project.path);
             });
-            launcherRecentList.appendChild(item);
+            const removeButton = document.createElement("button");
+            removeButton.className = "launcher-recent-remove";
+            removeButton.type = "button";
+            removeButton.textContent = "×";
+            removeButton.title = "最近から削除";
+            removeButton.setAttribute("aria-label", "最近から削除");
+            removeButton.addEventListener("click", (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (launcherBusy)
+                    return;
+                recentProjects = recentProjects.filter((entry) => entry.path !== project.path);
+                renderRecentProjects();
+                deps.onRemoveRecent(project.path);
+            });
+            row.appendChild(item);
+            row.appendChild(removeButton);
+            launcherRecentList.appendChild(row);
         }
         // Update empty state
         if (launcherRecentEmpty instanceof HTMLElement) {

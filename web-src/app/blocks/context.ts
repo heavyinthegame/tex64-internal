@@ -12,15 +12,19 @@ const MATRIX_ENV_NAMES = new Set([
   "smallmatrix",
 ]);
 
-const OPTIONAL_BRACKET_ENVS = new Set([
-  "aligned",
-  "alignedat",
-  "gathered",
-  "multlined",
-  "empheq",
-  "mathpar",
-  "mathparpagebreakable",
-]);
+const OPTIONAL_ENV_ARGS: Record<string, number> = {
+  aligned: 1,
+  alignedat: 1,
+  gathered: 1,
+  multlined: 1,
+  empheq: 1,
+  mathpar: 1,
+  mathparpagebreakable: 1,
+  array: 1,
+  subarray: 1,
+  IEEEeqnarray: 1,
+  IEEEeqnarraybox: 2,
+};
 
 const REQUIRED_ENV_ARGS: Record<string, number> = {
   alignat: 1,
@@ -72,13 +76,20 @@ const readDelimitedArg = (
 const consumeEnvArguments = (snippet: string, startIndex: number, envName: string) => {
   const base = getEnvBaseName(envName);
   let cursor = skipEnvWhitespace(snippet, startIndex);
-  const allowOptional =
-    OPTIONAL_BRACKET_ENVS.has(base) || (MATRIX_ENV_NAMES.has(base) && envName.endsWith("*"));
-  if (allowOptional && snippet[cursor] === "[") {
-    const optionalArg = readDelimitedArg(snippet, cursor, "[", "]");
-    if (optionalArg) {
-      cursor = skipEnvWhitespace(snippet, optionalArg.end);
+  let optionalCount = OPTIONAL_ENV_ARGS[base] ?? 0;
+  if (optionalCount === 0 && MATRIX_ENV_NAMES.has(base) && envName.endsWith("*")) {
+    optionalCount = 1;
+  }
+  for (let i = 0; i < optionalCount; i += 1) {
+    cursor = skipEnvWhitespace(snippet, cursor);
+    if (snippet[cursor] !== "[") {
+      break;
     }
+    const optionalArg = readDelimitedArg(snippet, cursor, "[", "]");
+    if (!optionalArg) {
+      break;
+    }
+    cursor = skipEnvWhitespace(snippet, optionalArg.end);
   }
   let requiredCount = REQUIRED_ENV_ARGS[base] ?? 0;
   for (let i = 0; i < requiredCount; i += 1) {

@@ -124,10 +124,118 @@ const getInternalPlaceholderRanges = (mathfieldApi: MathFieldPlaceholderApi) => 
   return ranges;
 };
 
+const PLACEHOLDER_TOKEN_REGEX = /\\placeholder(?:\[[^\]]*\])?\{(?:[^{}]|\\.)*\}/g;
+
+const offsetToLatexIndex = (mathfieldApi: MathFieldPlaceholderApi, offset: number) => {
+  const reader = mathfieldApi as {
+    getValue?: (start?: number, end?: number, format?: string) => unknown;
+  };
+  if (typeof reader.getValue !== "function") {
+    return offset;
+  }
+  try {
+    const value = reader.getValue(0, offset, "latex");
+    return typeof value === "string" ? value.length : Math.max(0, offset);
+  } catch {
+    return Math.max(0, offset);
+  }
+};
+
+const indexToOffset = (mathfieldApi: MathFieldPlaceholderApi, lastOffset: number, index: number) => {
+  const reader = mathfieldApi as {
+    getValue?: (start?: number, end?: number, format?: string) => unknown;
+  };
+  if (typeof reader.getValue !== "function") {
+    return Math.max(0, Math.min(lastOffset, index));
+  }
+  let rangeText = "";
+  try {
+    const value = reader.getValue(0, lastOffset, "latex");
+    rangeText = typeof value === "string" ? value : "";
+  } catch {
+    return Math.max(0, Math.min(lastOffset, index));
+  }
+  if (index <= 0) {
+    return 0;
+  }
+  if (index >= rangeText.length) {
+    return lastOffset;
+  }
+  let low = 0;
+  let high = lastOffset;
+  while (low < high) {
+    const mid = Math.floor((low + high) / 2);
+    const length = offsetToLatexIndex(mathfieldApi, mid);
+    if (length < index) {
+      low = mid + 1;
+    } else {
+      high = mid;
+    }
+  }
+  return Math.max(0, Math.min(lastOffset, low));
+};
+
+const getLiteralPlaceholderRanges = (mathfieldApi: MathFieldPlaceholderApi) => {
+  const reader = mathfieldApi as {
+    getValue?: (start?: number, end?: number, format?: string) => unknown;
+  };
+  if (typeof reader.getValue !== "function") {
+    return [] as Array<{ start: number; end: number }>;
+  }
+  const lastOffset =
+    typeof mathfieldApi.lastOffset === "number" && mathfieldApi.lastOffset > 0
+      ? mathfieldApi.lastOffset
+      : null;
+  if (lastOffset === null) {
+    return [] as Array<{ start: number; end: number }>;
+  }
+  let latex = "";
+  try {
+    const value = reader.getValue(0, lastOffset, "latex");
+    if (typeof value === "string") {
+      latex = value;
+    }
+  } catch {
+    return [] as Array<{ start: number; end: number }>;
+  }
+  if (!latex || !latex.includes("\\placeholder")) {
+    return [] as Array<{ start: number; end: number }>;
+  }
+  const seen = new Set<string>();
+  const ranges: Array<{ start: number; end: number }> = [];
+  let match: RegExpExecArray | null = PLACEHOLDER_TOKEN_REGEX.exec(latex);
+  while (match) {
+    const startIndex = match.index;
+    const endIndex = startIndex + match[0].length;
+    const start = indexToOffset(mathfieldApi, lastOffset, startIndex);
+    const end = indexToOffset(mathfieldApi, lastOffset, endIndex);
+    if (
+      Number.isFinite(start) &&
+      Number.isFinite(end) &&
+      start >= 0 &&
+      end > start &&
+      !(start <= 0 && end >= lastOffset)
+    ) {
+      const key = `${start}:${end}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        ranges.push({ start, end });
+      }
+    }
+    match = PLACEHOLDER_TOKEN_REGEX.exec(latex);
+  }
+  ranges.sort((a, b) => a.start - b.start || a.end - b.end);
+  return ranges;
+};
+
 const getPromptRanges = (mathfieldApi: MathFieldPlaceholderApi) => {
   const internalRanges = getInternalPlaceholderRanges(mathfieldApi);
   if (internalRanges.length > 0) {
     return internalRanges;
+  }
+  const literalRanges = getLiteralPlaceholderRanges(mathfieldApi);
+  if (literalRanges.length > 0) {
+    return literalRanges;
   }
   if (typeof mathfieldApi.getPrompts !== "function") {
     return [] as Array<{ start: number; end: number }>;
@@ -207,7 +315,10 @@ const getPromptRanges = (mathfieldApi: MathFieldPlaceholderApi) => {
       setSelectionCollapsed(mathfieldApi, snapshotPosition);
     }
   }
-  return ranges;
+  if (ranges.length > 0) {
+    return ranges;
+  }
+  return literalRanges;
 };
 
 export const createPlaceholderNavigator = () => {

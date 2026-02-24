@@ -84,64 +84,239 @@ export const normalizeMatrixSyntax = (value) => {
     if (!value) {
         return value;
     }
-    return value.replace(/\\begin\{((?:[p|b|B|v|V])?matrix)\}([\s\S]*?)\\end\{\1\}/g, (match, env, body) => {
+    const isEscapedAt = (text, index) => {
+        let slashCount = 0;
+        for (let i = index - 1; i >= 0 && text[i] === "\\"; i -= 1) {
+            slashCount += 1;
+        }
+        return slashCount % 2 === 1;
+    };
+    const parseTopLevelBracedCells = (body) => {
+        var _a;
+        const cells = [];
+        let i = 0;
+        while (i < body.length) {
+            while (i < body.length && /\s/.test((_a = body[i]) !== null && _a !== void 0 ? _a : "")) {
+                i += 1;
+            }
+            if (i >= body.length) {
+                break;
+            }
+            if (body[i] !== "{" || isEscapedAt(body, i)) {
+                return null;
+            }
+            const start = i + 1;
+            let depth = 0;
+            let closed = false;
+            for (; i < body.length; i += 1) {
+                const ch = body[i];
+                if (ch === "{" && !isEscapedAt(body, i)) {
+                    depth += 1;
+                    continue;
+                }
+                if (ch === "}" && !isEscapedAt(body, i)) {
+                    depth -= 1;
+                    if (depth === 0) {
+                        cells.push(body.slice(start, i).trim());
+                        i += 1;
+                        closed = true;
+                        break;
+                    }
+                }
+            }
+            if (!closed) {
+                return null;
+            }
+        }
+        return cells;
+    };
+    const inferMatrixShape = (cellCount) => {
+        if (!Number.isFinite(cellCount) || cellCount < 4) {
+            return null;
+        }
+        let bestRows = 0;
+        let bestCols = 0;
+        let bestDiff = Number.POSITIVE_INFINITY;
+        for (let rows = 2; rows * rows <= cellCount; rows += 1) {
+            if (cellCount % rows !== 0) {
+                continue;
+            }
+            const cols = cellCount / rows;
+            if (cols < 2) {
+                continue;
+            }
+            const diff = Math.abs(cols - rows);
+            if (diff < bestDiff) {
+                bestRows = rows;
+                bestCols = cols;
+                bestDiff = diff;
+            }
+        }
+        if (bestRows > 0 && bestCols > 0) {
+            return { rows: bestRows, cols: bestCols };
+        }
+        return null;
+    };
+    return value.replace(/\\begin\{(matrix|pmatrix|bmatrix|Bmatrix|vmatrix|Vmatrix|smallmatrix)\}([\s\S]*?)\\end\{\1\}/g, (match, env, body) => {
         if (body.includes("&") || body.includes("\\\\")) {
             return match;
         }
-        const cells = [];
-        let i = 0;
-        let valid = true;
-        while (i < body.length) {
-            const ch = body[i];
-            if (ch === "{") {
-                let depth = 0;
-                const start = i + 1;
-                for (; i < body.length; i += 1) {
-                    const inner = body[i];
-                    if (inner === "{")
-                        depth += 1;
-                    if (inner === "}") {
-                        depth -= 1;
-                        if (depth === 0) {
-                            cells.push(body.slice(start, i).trim());
-                            i += 1;
-                            break;
-                        }
-                    }
-                }
-                if (depth !== 0) {
-                    valid = false;
-                    break;
-                }
-                continue;
-            }
-            if (!/\s/.test(ch)) {
-                const start = i;
-                while (i < body.length && !/\s/.test(body[i])) {
-                    i += 1;
-                }
-                cells.push(body.slice(start, i).trim());
-                continue;
-            }
-            i += 1;
-        }
-        if (!valid) {
+        const cells = parseTopLevelBracedCells(body);
+        if (!cells || cells.length <= 1) {
             return match;
         }
         const filtered = cells.filter((cell) => cell.length > 0);
-        if (filtered.length === 0) {
+        if (filtered.length !== cells.length) {
             return match;
         }
-        const size = Math.sqrt(filtered.length);
-        const n = Math.round(size);
-        if (!Number.isFinite(size) || n * n !== filtered.length) {
+        const shape = inferMatrixShape(filtered.length);
+        if (!shape) {
             return match;
         }
         const rows = [];
-        for (let r = 0; r < n; r += 1) {
-            const row = filtered.slice(r * n, (r + 1) * n);
+        for (let r = 0; r < shape.rows; r += 1) {
+            const row = filtered.slice(r * shape.cols, (r + 1) * shape.cols);
             rows.push(row.join("&"));
         }
         return `\\begin{${env}}${rows.join("\\\\")}\\end{${env}}`;
     });
+};
+const restoreAlignedMarkerEnvs = (value) => value.replace(/\\begin\{aligned\}([\s\S]*?)\\end\{aligned\}/g, (match, body) => {
+    if (body.includes("\\txalnat")) {
+        const cleaned = body.replace(/\\txalnat/g, "").trim();
+        return `\\begin{alignat*}{2}${cleaned}\\end{alignat*}`;
+    }
+    if (body.includes("\\txflaln")) {
+        const cleaned = body.replace(/\\txflaln/g, "").trim();
+        return `\\begin{flalign*}${cleaned}\\end{flalign*}`;
+    }
+    if (body.includes("\\txarrcf")) {
+        const cleaned = body.replace(/\\txarrcf/g, "").trim();
+        return `\\begin{array}{@{}>r<{}c@{|}l<{}@{}}${cleaned}\\end{array}`;
+    }
+    return match;
+});
+const isEscapedAtFormat = (text, index) => {
+    let slashCount = 0;
+    for (let i = index - 1; i >= 0 && text[i] === "\\"; i -= 1) {
+        slashCount += 1;
+    }
+    return slashCount % 2 === 1;
+};
+const findBalancedBraceEndFormat = (text, start) => {
+    if (text[start] !== "{") {
+        return -1;
+    }
+    let depth = 0;
+    for (let i = start; i < text.length; i += 1) {
+        const ch = text[i];
+        if (ch === "{" && !isEscapedAtFormat(text, i)) {
+            depth += 1;
+            continue;
+        }
+        if (ch === "}" && !isEscapedAtFormat(text, i)) {
+            depth -= 1;
+            if (depth === 0) {
+                return i;
+            }
+        }
+    }
+    return -1;
+};
+const replaceCommandWithBraceArgs = (value, command, argCount, mapper) => {
+    var _a;
+    const needle = `\\${command}`;
+    if (!value.includes(needle)) {
+        return value;
+    }
+    let output = "";
+    for (let i = 0; i < value.length;) {
+        if (!value.startsWith(needle, i)) {
+            output += value[i];
+            i += 1;
+            continue;
+        }
+        let cursor = i + needle.length;
+        const args = [];
+        let ok = true;
+        for (let argIndex = 0; argIndex < argCount; argIndex += 1) {
+            while (cursor < value.length && /\s/.test((_a = value[cursor]) !== null && _a !== void 0 ? _a : "")) {
+                cursor += 1;
+            }
+            if (value[cursor] !== "{") {
+                ok = false;
+                break;
+            }
+            const end = findBalancedBraceEndFormat(value, cursor);
+            if (end < 0) {
+                ok = false;
+                break;
+            }
+            args.push(value.slice(cursor + 1, end));
+            cursor = end + 1;
+        }
+        if (!ok) {
+            output += value[i];
+            i += 1;
+            continue;
+        }
+        output += mapper(args);
+        i = cursor;
+    }
+    return output;
+};
+const restoreArrayMarkerEnvs = (value) => replaceCommandWithBraceArgs(value, "txarrayc", 2, (args) => {
+    var _a, _b;
+    const colspec = (_a = args[0]) !== null && _a !== void 0 ? _a : "";
+    const body = (_b = args[1]) !== null && _b !== void 0 ? _b : "";
+    return `\\begin{array}{${colspec}}${body}\\end{array}`;
+});
+const restoreAlignatBegin = (value) => {
+    var _a;
+    const endMatches = [...value.matchAll(/\\end\{(alignat\*?)\}/g)];
+    if (endMatches.length === 0) {
+        return value;
+    }
+    const endMatch = endMatches[endMatches.length - 1];
+    const env = endMatch[1];
+    const endToken = endMatch[0];
+    const endIndex = (_a = endMatch.index) !== null && _a !== void 0 ? _a : value.length;
+    const beforeEnd = value.slice(0, endIndex);
+    if (new RegExp(`\\\\begin\\{${env.replace("*", "\\*")}\\}`).test(beforeEnd)) {
+        return value;
+    }
+    let body = beforeEnd.trim();
+    let colspec = "{2}";
+    const colspecMatch = body.match(/^\{(\d+)\}/);
+    if (colspecMatch) {
+        colspec = `{${colspecMatch[1]}}`;
+        body = body.slice(colspecMatch[0].length).trim();
+    }
+    const trailing = value.slice(endIndex + endToken.length);
+    return `\\begin{${env}}${colspec}${body}\\end{${env}}${trailing}`;
+};
+const restoreFlalignBegin = (value) => {
+    var _a;
+    const endMatches = [...value.matchAll(/\\end\{(flalign\*?)\}/g)];
+    if (endMatches.length === 0) {
+        return value;
+    }
+    const endMatch = endMatches[endMatches.length - 1];
+    const env = endMatch[1];
+    const endToken = endMatch[0];
+    const endIndex = (_a = endMatch.index) !== null && _a !== void 0 ? _a : value.length;
+    const beforeEnd = value.slice(0, endIndex);
+    if (new RegExp(`\\\\begin\\{${env.replace("*", "\\*")}\\}`).test(beforeEnd)) {
+        return value;
+    }
+    const body = beforeEnd.trim();
+    const trailing = value.slice(endIndex + endToken.length);
+    return `\\begin{${env}}${body}\\end{${env}}${trailing}`;
+};
+export const restoreUnsupportedEnvBegins = (value) => {
+    if (!value) {
+        return value;
+    }
+    const restoredProxy = restoreAlignedMarkerEnvs(restoreArrayMarkerEnvs(value));
+    return restoreFlalignBegin(restoreAlignatBegin(restoredProxy));
 };

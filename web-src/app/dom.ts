@@ -1,6 +1,7 @@
 export const getDomRefs = () => ({
   tabs: Array.from(document.querySelectorAll<HTMLButtonElement>(".tab[data-tab]")),
   issuesTab: document.getElementById("issues-tab"),
+  settingsTab: document.getElementById("settings-tab"),
   editorGroups: document.getElementById("editor-groups"),
   editorSplitter: document.getElementById("editor-splitter"),
   editorHost: document.getElementById("editor"),
@@ -33,6 +34,7 @@ export const getDomRefs = () => ({
   launcher: document.getElementById("launcher"),
   launcherCreateButton: document.getElementById("launcher-create"),
   launcherOpenButton: document.getElementById("launcher-open"),
+  launcherStatusMessage: document.getElementById("launcher-status"),
   launcherTemplateButtons: Array.from(
     document.querySelectorAll<HTMLButtonElement>(".launcher-template-button")
   ),
@@ -81,7 +83,6 @@ export const getDomRefs = () => ({
   blockFormatOptions: Array.from(
     document.querySelectorAll<HTMLButtonElement>(".block-format-option")
   ),
-  blockSuggestButton: document.getElementById("block-suggest-button"),
   blockModeToggle: document.getElementById("block-mode-toggle"),
   blockInsertButton: document.getElementById("block-insert-button"),
   blocksPanelBody: document.querySelector<HTMLElement>(".blocks-panel"),
@@ -156,15 +157,35 @@ export const getDomRefs = () => ({
   settingsUpdateProgress: document.getElementById("settings-update-progress"),
   settingsUpdateProgressFill: document.getElementById("settings-update-progress-fill"),
   settingsUpdateCheck: document.getElementById("settings-update-check"),
-  settingsUpdateDownload: document.getElementById("settings-update-download"),
-  settingsUpdateInstall: document.getElementById("settings-update-install"),
+  settingsUpdateApply: document.getElementById("settings-update-apply"),
   settingsUpdateOpen: document.getElementById("settings-update-open"),
+  settingsAuthStatus: document.getElementById("settings-auth-status"),
+  settingsAuthLogin: document.getElementById("settings-auth-login"),
+  settingsAuthLogout: document.getElementById("settings-auth-logout"),
+  settingsRuntimeAttention: document.getElementById("settings-runtime-attention"),
+  settingsRuntimeInstallStatus: document.getElementById("settings-runtime-install-status"),
+  settingsRuntimeSetupStatus: document.getElementById("settings-runtime-setup-status"),
+  settingsRuntimeOnboardingStatus: document.getElementById(
+    "settings-runtime-onboarding-status"
+  ),
+  settingsRuntimeRunFirstBuild: document.getElementById(
+    "settings-runtime-run-first-build"
+  ),
+  settingsRuntimeOpenGettingStarted: document.getElementById(
+    "settings-runtime-open-getting-started"
+  ),
+  settingsRuntimeOpenInstallDocs: document.getElementById("settings-runtime-open-install-docs"),
+  settingsRuntimeOpenTexDocs: document.getElementById("settings-runtime-open-tex-docs"),
   settingsEnvRefresh: document.getElementById("settings-env-refresh"),
   settingsFeedbackCategory: document.getElementById("settings-feedback-category"),
   settingsFeedbackMessage: document.getElementById("settings-feedback-message"),
   settingsFeedbackEmail: document.getElementById("settings-feedback-email"),
+  settingsFeedbackIncludeDiagnostics: document.getElementById(
+    "settings-feedback-include-diagnostics"
+  ),
   settingsFeedbackSend: document.getElementById("settings-feedback-send"),
   settingsFeedbackStatus: document.getElementById("settings-feedback-status"),
+  settingsErrorReportingEnabled: document.getElementById("settings-error-reporting-enabled"),
   settingsLinkTerms: document.getElementById("settings-link-terms"),
   settingsLinkPrivacy: document.getElementById("settings-link-privacy"),
   settingsLinkCommercial: document.getElementById("settings-link-commercial"),
@@ -206,8 +227,11 @@ export const getDomRefs = () => ({
   aiInput: document.getElementById("ai-input"),
   aiSend: document.getElementById("ai-send"),
   aiStatus: document.getElementById("ai-status"),
+  aiAuthTopbar: document.getElementById("ai-auth-topbar"),
   aiChatNew: document.getElementById("ai-chat-new"),
   aiTopbarTitle: document.getElementById("ai-topbar-title"),
+  aiUsageMeter: document.getElementById("ai-usage-meter"),
+  aiUsageMeterText: document.getElementById("ai-usage-meter-text"),
   aiHistoryToggle: document.getElementById("ai-history-toggle"),
   aiHistory: document.getElementById("ai-history"),
   aiHistoryList: document.getElementById("ai-history-list"),

@@ -1,5 +1,8 @@
 # 有料化導線メモ（実装案）
 
+> DEPRECATED: このメモは「アプリ全体を有料化して閲覧のみへ落とす」前提で書かれています。
+> 現行方針は「AI機能のみ課金」です。最新の有料化設計は `docs/platform-api-contract-v2-google-oauth.md` と `docs/ai-subscription-implementation-plan.md` を参照してください。
+
 ## 前提
 - ベータ期間は無料・ログイン不要・オフラインでも利用可能。
 - 有料化後は「未契約は閲覧のみ」。編集/ビルド/挿入などは無効化。

@@ -35,7 +35,7 @@ CI:
 
 - PR / `main` push: `.github/workflows/unit.yml` で `test:unit:with-build` を実行
 - Nightly: `.github/workflows/nightly.yml` を毎日 `10:00 UTC`（`02:00 PST` / `03:00 PDT`）に実行
-- Tag push（例: `v0.1.0`）: `.github/workflows/release.yml` で配布物（`dist/`）をビルドして artifact として保存
+- Tag push（例: `v0.1.0`）: `.github/workflows/release.yml` で **macOS 配布物** をビルドし、`downloads.tex64.com` へ公開（artifact も保存）
 - Nightly は実行ログ/メタ情報を artifact (`nightly-test-log-<run_id>`) として14日保存
 - Nightly 失敗時は GitHub Issue (`Nightly Input Tests failing`) を自動作成/追記し、復旧時に自動クローズ
 - Nightly 通知のラベル/担当者は repository variables で調整可能: `NIGHTLY_ALERT_LABEL`, `NIGHTLY_ALERT_ASSIGNEE`
@@ -43,7 +43,8 @@ CI:
 配布（Release）:
 
 - `npm run electron:pack`（unpacked / 起動確認用）
-- `npm run electron:dist`（配布物生成）
+- `npm run electron:dist:mac`（配布物生成: dmg/zip）
+- `npm run -s release:bundle`（`release/checksums-sha256.txt` と `update/stable.json` を生成）
 - 詳細: `docs/distribution.md`
 
 SyncTeX forward ベンチ:
@@ -145,9 +146,10 @@ SyncTeX forward ベンチ:
 
 ### 実行環境（ユーザー）
 
-- TeX Distribution（TeX Live / MacTeX / BasicTeX / MiKTeX など）が必要。
+- TeX Distribution（TeX Live / MacTeX / BasicTeX など）が必要。
 - `latexmk` / `latexindent` / `synctex` を使用（通常は TeX Distribution に同梱）。
 - コンパイルエンジンは `lualatex` / `pdflatex` / `xelatex` / `uplatex` のいずれかが必要。
+- 初回起動時は実行環境チェックを自動実行し、不足がある場合は設定 > 実行環境を自動で開く。
 
 ### アウトライン/検索/Issues
 

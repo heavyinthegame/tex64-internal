@@ -8,14 +8,64 @@ const hasSupportedInternalVersion = (mathfieldApi) => {
     }
     return true;
 };
+const PLACEHOLDER_TOKEN_REGEX = /\\placeholder(?:\[[^\]]*\])?\{(?:[^{}]|\\.)*\}/g;
+const getLiteralPlaceholderRanges = (mathfieldApi, lastOffset) => {
+    if (typeof (mathfieldApi === null || mathfieldApi === void 0 ? void 0 : mathfieldApi.getValue) !== "function") {
+        return [];
+    }
+    if (lastOffset === null || !Number.isFinite(lastOffset) || lastOffset <= 0) {
+        return [];
+    }
+    let latex = "";
+    try {
+        const value = mathfieldApi.getValue(0, lastOffset, "latex");
+        if (typeof value === "string") {
+            latex = value;
+        }
+    }
+    catch {
+        return [];
+    }
+    if (!latex || !latex.includes("\\placeholder")) {
+        return [];
+    }
+    const ranges = [];
+    const seen = new Set();
+    let match = PLACEHOLDER_TOKEN_REGEX.exec(latex);
+    while (match) {
+        const startIndex = match.index;
+        const endIndex = startIndex + match[0].length;
+        const start = indexToOffsetInRange(mathfieldApi, 0, lastOffset, startIndex, "floor");
+        const end = indexToOffsetInRange(mathfieldApi, 0, lastOffset, endIndex, "ceil");
+        if (Number.isFinite(start) &&
+            Number.isFinite(end) &&
+            start >= 0 &&
+            end > start &&
+            !(start <= 0 && end >= lastOffset)) {
+            const key = `${start}:${end}`;
+            if (!seen.has(key)) {
+                seen.add(key);
+                ranges.push({ start, end });
+            }
+        }
+        match = PLACEHOLDER_TOKEN_REGEX.exec(latex);
+    }
+    ranges.sort((a, b) => a.start - b.start || a.end - b.end);
+    return ranges;
+};
 export const getInternalSelectionRanges = (mathfieldApi) => {
     if (!hasSupportedInternalVersion(mathfieldApi)) {
-        return [];
+        return getLiteralPlaceholderRanges(mathfieldApi, typeof (mathfieldApi === null || mathfieldApi === void 0 ? void 0 : mathfieldApi.lastOffset) === "number" ? mathfieldApi.lastOffset : null);
     }
     const internal = mathfieldApi === null || mathfieldApi === void 0 ? void 0 : mathfieldApi._mathfield;
     const model = internal === null || internal === void 0 ? void 0 : internal.model;
     if (!model || !Array.isArray(model.atoms) || typeof model.offsetOf !== "function") {
-        return [];
+        const lastOffsetFallback = typeof (mathfieldApi === null || mathfieldApi === void 0 ? void 0 : mathfieldApi.lastOffset) === "number"
+            ? mathfieldApi.lastOffset
+            : typeof (model === null || model === void 0 ? void 0 : model.lastOffset) === "number"
+                ? model.lastOffset
+                : null;
+        return getLiteralPlaceholderRanges(mathfieldApi, lastOffsetFallback);
     }
     const lastOffset = typeof mathfieldApi.lastOffset === "number"
         ? mathfieldApi.lastOffset
@@ -60,7 +110,10 @@ export const getInternalSelectionRanges = (mathfieldApi) => {
         ranges.push({ start, end });
     }
     ranges.sort((a, b) => a.start - b.start || a.end - b.end);
-    return ranges;
+    if (ranges.length > 0) {
+        return ranges;
+    }
+    return getLiteralPlaceholderRanges(mathfieldApi, lastOffset);
 };
 export const setSelectionRange = (mathfieldApi, start, end) => {
     if (typeof (mathfieldApi === null || mathfieldApi === void 0 ? void 0 : mathfieldApi.setSelectionRange) === "function") {

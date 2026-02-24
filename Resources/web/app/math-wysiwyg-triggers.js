@@ -1629,6 +1629,78 @@ const MANUAL_TRIGGERS = [
         ],
     },
     {
+        trigger: "label",
+        priority: 80,
+        pack: "math",
+        candidates: [{ latex: "\\label{#?}", label: "label", displayLatex: "\\label{eq:id}" }],
+    },
+    {
+        trigger: "tag",
+        priority: 80,
+        pack: "math",
+        candidates: [{ latex: "\\tag{#?}", label: "tag", displayLatex: "\\tag{A1}" }],
+    },
+    {
+        trigger: "tagstar",
+        priority: 78,
+        pack: "math",
+        candidates: [{ latex: "\\tag*{#?}", label: "tag*", displayLatex: "\\tag*{A1}" }],
+    },
+    {
+        trigger: "notag",
+        priority: 78,
+        pack: "math",
+        candidates: [{ latex: "\\notag", label: "notag", displayLatex: "\\notag" }],
+    },
+    {
+        trigger: "nonumber",
+        priority: 78,
+        pack: "math",
+        candidates: [{ latex: "\\nonumber", label: "nonumber", displayLatex: "\\nonumber" }],
+    },
+    {
+        trigger: "eqref",
+        priority: 78,
+        pack: "math",
+        candidates: [{ latex: "\\eqref{#?}", label: "eqref", displayLatex: "\\eqref{eq:id}" }],
+    },
+    {
+        trigger: "ref",
+        priority: 76,
+        pack: "math",
+        candidates: [{ latex: "\\ref{#?}", label: "ref", displayLatex: "\\ref{sec:id}" }],
+    },
+    {
+        trigger: "pageref",
+        priority: 76,
+        pack: "math",
+        candidates: [{ latex: "\\pageref{#?}", label: "pageref", displayLatex: "\\pageref{sec:id}" }],
+    },
+    {
+        trigger: "autoref",
+        priority: 76,
+        pack: "math",
+        candidates: [{ latex: "\\autoref{#?}", label: "autoref", displayLatex: "\\autoref{sec:id}" }],
+    },
+    {
+        trigger: "intertext",
+        priority: 76,
+        pack: "math",
+        candidates: [{ latex: "\\intertext{#?}", label: "intertext", displayLatex: "\\intertext{text}" }],
+    },
+    {
+        trigger: "shortintertext",
+        priority: 76,
+        pack: "math",
+        candidates: [
+            {
+                latex: "\\shortintertext{#?}",
+                label: "shortintertext",
+                displayLatex: "\\shortintertext{text}",
+            },
+        ],
+    },
+    {
         trigger: "aligned",
         priority: 80,
         candidates: [
@@ -1656,9 +1728,9 @@ const MANUAL_TRIGGERS = [
         pack: "math",
         candidates: [
             {
-                latex: "\\begin{align*}#?&=#?\\quad #?&=#?\\end{align*}",
+                latex: "\\begin{aligned}\\txalnat#?&=#?\\quad #?&=#?\\end{aligned}",
                 label: "alignat*",
-                displayLatex: "\\begin{align*}a&=b\\quad c&=d\\end{align*}",
+                displayLatex: "\\begin{alignat*}{2}a&=b\\quad c&=d\\end{alignat*}",
             },
         ],
     },
@@ -1668,9 +1740,9 @@ const MANUAL_TRIGGERS = [
         pack: "math",
         candidates: [
             {
-                latex: "\\begin{align*}#? &= #?\\end{align*}",
+                latex: "\\begin{aligned}\\txflaln#? &= #?\\end{aligned}",
                 label: "flalign*",
-                displayLatex: "\\begin{align*}a &= b\\end{align*}",
+                displayLatex: "\\begin{flalign*}a &= b\\end{flalign*}",
             },
         ],
     },
@@ -1704,9 +1776,9 @@ const MANUAL_TRIGGERS = [
         pack: "math",
         candidates: [
             {
-                latex: "\\begin{subequations}\\begin{align}#? &= #?\\\\#? &= #?\\end{align}\\end{subequations}",
+                latex: "\\begin{subequations}\\begin{aligned}#? &= #?\\\\#? &= #?\\end{aligned}\\end{subequations}",
                 label: "subequations",
-                displayLatex: "\\begin{subequations}\\begin{align}a &= b\\\\c &= d\\end{align}\\end{subequations}",
+                displayLatex: "\\begin{subequations}\\begin{aligned}a &= b\\\\c &= d\\end{aligned}\\end{subequations}",
             },
         ],
     },
@@ -1730,9 +1802,9 @@ const MANUAL_TRIGGERS = [
                 displayLatex: "\\begin{array}{rcl}a&=&b\\\\c&=&d\\end{array}",
             },
             {
-                latex: "\\begin{array}{#?}#?\\end{array}",
+                latex: "\\begin{aligned}\\txarrcf#?&#?&#?\\\\#?&#?&#?\\end{aligned}",
                 label: "array{...}",
-                displayLatex: "\\begin{array}{cc}a&b\\\\c&d\\end{array}",
+                displayLatex: "\\begin{array}{@{}>r<{}c@{|}l<{}@{}}a&b&c\\\\d&e&f\\end{array}",
             },
         ],
     },

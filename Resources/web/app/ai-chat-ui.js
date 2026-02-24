@@ -14,11 +14,9 @@ const AUTONOMOUS_CONTINUE_DELAY_MS = 120;
 const MAX_IMAGE_ATTACHMENTS = 4;
 const MAX_IMAGE_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 const MAX_IMAGE_ATTACHMENT_TOTAL_BYTES = 8 * 1024 * 1024;
-const AI_ACCESS_STALE_MS = 60000;
 const USAGE_REFRESH_DELAY_MS = 300;
-const LOCAL_FALLBACK_NOTE = "AIが利用できない間も、編集・ビルド・保存などローカル機能は利用できます。";
 export const initAiChatUi = (context, deps) => {
-    const { aiChatLog, aiChat, aiProposals, aiAttachments, aiAttach, aiAttachInput, aiInput, aiSend, aiStatus, aiChatNew, aiTopbarTitle, aiHistoryToggle, aiHistory, aiHistoryList, aiContextBar, aiStop, } = context.dom;
+    const { aiChatLog, aiChat, aiProposals, aiAttachments, aiAttach, aiAttachInput, aiInput, aiSend, aiStatus, aiChatNew, aiTopbarTitle, aiUsageMeter, aiUsageMeterText, aiHistoryToggle, aiHistory, aiHistoryList, aiAuthTopbar, aiContextBar, aiStop, } = context.dom;
     const chats = [];
     const chatIndex = new Map();
     const proposalIndex = new Map();
@@ -37,12 +35,6 @@ export const initAiChatUi = (context, deps) => {
     let usageRefreshTimer = null;
     let requestedInitialUsage = false;
     const makeChatId = () => `chat-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`;
-    const numberFormat = new Intl.NumberFormat("en-US");
-    const PLAN_LABELS = {
-        free: "Free",
-        basic: "Basic",
-        pro: "Pro",
-    };
     const requestPlatformState = () => {
         deps.postToNative({ type: "platform:state:get" }, true);
     };
@@ -52,75 +44,10 @@ export const initAiChatUi = (context, deps) => {
     const requestPlatformUsage = (force = false) => {
         deps.postToNative({ type: "platform:usage:get", force }, true);
     };
-    const openPricingPage = () => {
-        var _a, _b;
-        const url = (_b = (_a = platformAiAccess === null || platformAiAccess === void 0 ? void 0 : platformAiAccess.pricingUrl) !== null && _a !== void 0 ? _a : platformAuth === null || platformAuth === void 0 ? void 0 : platformAuth.pricingUrl) !== null && _b !== void 0 ? _b : TEX64_LINKS.pricing;
-        deps.postToNative({ type: "shell:openExternal", url }, true);
-    };
-    const formatTokens = (value) => Number.isFinite(value) ? numberFormat.format(Math.max(0, Math.round(value))) : "0";
-    const formatDate = (iso) => {
-        if (!iso)
-            return "";
-        const timestamp = Date.parse(iso);
-        if (!Number.isFinite(timestamp))
-            return "";
-        const date = new Date(timestamp);
-        const year = date.getFullYear();
-        const month = `${date.getMonth() + 1}`.padStart(2, "0");
-        const day = `${date.getDate()}`.padStart(2, "0");
-        return `${year}-${month}-${day}`;
-    };
-    const formatPlan = (plan) => {
-        var _a;
-        if (!plan || typeof plan !== "string") {
-            return "未設定";
-        }
-        return (_a = PLAN_LABELS[plan]) !== null && _a !== void 0 ? _a : plan;
-    };
-    const parseCounter = (value, fallback = Number.NaN) => {
-        if (typeof value === "number" && Number.isFinite(value)) {
-            return value;
-        }
-        if (typeof value === "string" && value.trim()) {
-            const parsed = Number.parseFloat(value);
-            if (Number.isFinite(parsed)) {
-                return parsed;
-            }
-        }
-        return fallback;
-    };
-    const normalizeQuotaSummary = (quota) => {
-        if (!quota || typeof quota !== "object") {
-            return null;
-        }
-        const limitTokens = Math.max(0, Math.round(parseCounter(quota.limitTokens, 0)));
-        const usedTokens = Math.max(0, Math.round(parseCounter(quota.usedTokens, 0)));
-        const maxRemainingTokens = Math.max(0, limitTokens - usedTokens);
-        const rawRemainingTokens = parseCounter(quota.remainingTokens, Number.NaN);
-        const normalizedRemainingTokens = Number.isFinite(rawRemainingTokens)
-            ? Math.max(0, Math.round(rawRemainingTokens))
-            : maxRemainingTokens;
-        return {
-            limitTokens,
-            usedTokens,
-            remainingTokens: Math.min(normalizedRemainingTokens, maxRemainingTokens),
-            usedRequests: Math.max(0, Math.round(parseCounter(quota.usedRequests, 0))),
-            remainingRequests: Math.max(0, Math.round(parseCounter(quota.remainingRequests, 0))),
-            periodStart: typeof quota.periodStart === "string" ? quota.periodStart : null,
-            periodEnd: typeof quota.periodEnd === "string" ? quota.periodEnd : null,
-        };
-    };
     const normalizeUsageSnapshot = (usage) => {
-        if (!usage || typeof usage !== "object") {
+        if (!usage || typeof usage !== "object")
             return null;
-        }
-        return {
-            ...usage,
-            summary: normalizeQuotaSummary(usage.summary),
-            fetchedAt: typeof usage.fetchedAt === "number" && Number.isFinite(usage.fetchedAt)
-                ? usage.fetchedAt
-                : Date.now(),
-        };
+        return usage;
     };
     const scheduleUsageRefresh = (force = true) => {
         if (usageRefreshTimer !== null) {
@@ -132,52 +59,109 @@ export const initAiChatUi = (context, deps) => {
             requestPlatformUsage(force);
         }, USAGE_REFRESH_DELAY_MS);
     };
-    const isAccessFresh = () => {
-        const fetchedAt = platformAiAccess === null || platformAiAccess === void 0 ? void 0 : platformAiAccess.fetchedAt;
-        if (!Number.isFinite(fetchedAt)) {
-            return false;
-        }
-        return Date.now() - fetchedAt <= AI_ACCESS_STALE_MS;
-    };
-    const isAiBlocked = () => Boolean(platformAiAccess && platformAiAccess.allowed === false && isAccessFresh());
-    const needsLogin = () => Boolean((platformAiAccess &&
-        platformAiAccess.allowed === false &&
-        (!platformAiAccess.authenticated ||
-            platformAiAccess.reason === "AUTH_REQUIRED" ||
-            platformAiAccess.reason === "TOKEN_EXPIRED") &&
-        isAccessFresh()));
+    const isAiBlocked = () => Boolean(platformAiAccess && platformAiAccess.allowed === false);
+    const needsLogin = () => Boolean(!(platformAuth === null || platformAuth === void 0 ? void 0 : platformAuth.authenticated) ||
+        (platformAiAccess &&
+            (!platformAiAccess.authenticated ||
+                platformAiAccess.reason === "AUTH_REQUIRED" ||
+                platformAiAccess.reason === "TOKEN_EXPIRED")));
     const withUtilityActions = (actions) => {
         return Array.isArray(actions) ? [...actions] : [];
     };
-    const mergeDetailWithUpdate = (detail) => {
-        return detail !== null && detail !== void 0 ? detail : "";
+    const normalizeAuthError = (error) => {
+        if (!error || typeof error !== "object") {
+            return null;
+        }
+        const code = typeof error.code === "string" ? error.code : "";
+        const fallbackMessage = typeof error.message === "string" && error.message.trim()
+            ? error.message.trim()
+            : "ログインに失敗しました。";
+        switch (code) {
+            case "AUTH_START_INVALID_URL":
+                return {
+                    code,
+                    message: "ログインページを開けませんでした。",
+                };
+            case "AUTH_BROWSER_UNAVAILABLE":
+                return {
+                    code,
+                    message: "ブラウザを起動できませんでした。",
+                };
+            case "AUTH_BROWSER_OPEN_FAILED":
+                return {
+                    code,
+                    message: "ログインページを開けませんでした。",
+                };
+            case "OAUTH_PENDING_EXPIRED":
+                return {
+                    code,
+                    message: "ログインがタイムアウトしました。",
+                };
+            case "OAUTH_NO_PENDING":
+                return {
+                    code,
+                    message: "ログイン状態を確認できませんでした。",
+                };
+            case "OAUTH_STATE_MISMATCH":
+            case "OAUTH_CALLBACK_MISMATCH":
+            case "OAUTH_INVALID_CALLBACK":
+                return {
+                    code,
+                    message: "ログイン結果の検証に失敗しました。",
+                };
+            case "OAUTH_DENIED":
+                return {
+                    code,
+                    message: "Googleログインがキャンセルされました。",
+                };
+            default:
+                return { code, message: fallbackMessage };
+        }
     };
-    const withLocalFallbackDetail = (detail) => {
-        if (!detail) {
-            return LOCAL_FALLBACK_NOTE;
+    const tokenNumberFormat = new Intl.NumberFormat("ja-JP");
+    const formatTokenCount = (value) => tokenNumberFormat.format(Math.max(0, Math.round(value)));
+    const formatTokenCompact = (value) => {
+        const v = Math.max(0, Math.round(value));
+        if (v < 10000) {
+            return formatTokenCount(v);
         }
-        if (detail.includes(LOCAL_FALLBACK_NOTE)) {
-            return detail;
+        if (v < 1000000) {
+            const k = v / 1000;
+            if (k < 100) {
+                return `${k.toFixed(1).replace(/\\.0$/, "")}k`;
+            }
+            return `${Math.floor(k)}k`;
         }
-        return `${detail} · ${LOCAL_FALLBACK_NOTE}`;
+        const m = v / 1000000;
+        if (m < 100) {
+            return `${m.toFixed(1).replace(/\\.0$/, "")}M`;
+        }
+        return `${Math.floor(m)}M`;
     };
     const renderStatus = (headline, detail, actions) => {
         if (!(aiStatus instanceof HTMLElement)) {
             return;
         }
         aiStatus.replaceChildren();
+        aiStatus.classList.remove("ai-status--actions-only");
         aiStatus.classList.remove("ai-status--error");
         aiStatus.classList.remove("ai-status--warn");
         aiStatus.classList.remove("ai-status--ok");
-        if (!headline && !detail) {
+        const hasActions = Array.isArray(actions) && actions.length > 0;
+        if (!headline && !detail && !hasActions) {
             aiStatus.style.display = "none";
             return;
         }
         aiStatus.style.display = "block";
-        const head = document.createElement("div");
-        head.className = "ai-status-line";
-        head.textContent = headline;
-        aiStatus.appendChild(head);
+        if (!headline && !detail && hasActions) {
+            aiStatus.classList.add("ai-status--actions-only");
+        }
+        if (headline) {
+            const head = document.createElement("div");
+            head.className = "ai-status-line";
+            head.textContent = headline;
+            aiStatus.appendChild(head);
+        }
         if (detail) {
             const body = document.createElement("div");
             body.className = "ai-status-detail";
@@ -197,6 +181,72 @@ export const initAiChatUi = (context, deps) => {
             });
             aiStatus.appendChild(actionWrap);
         }
+    };
+    const updateTopbarAuthButton = () => {
+        if (!(aiAuthTopbar instanceof HTMLButtonElement)) {
+            return;
+        }
+        const authenticated = Boolean(platformAuth === null || platformAuth === void 0 ? void 0 : platformAuth.authenticated);
+        aiAuthTopbar.classList.toggle("is-hidden", authenticated);
+        aiAuthTopbar.textContent = "ログイン";
+        aiAuthTopbar.disabled = false;
+    };
+    const updateUsageMeter = () => {
+        var _a, _b;
+        if (!(aiUsageMeter instanceof HTMLElement)) {
+            return;
+        }
+        const quota = (_b = (_a = platformUsage === null || platformUsage === void 0 ? void 0 : platformUsage.summary) !== null && _a !== void 0 ? _a : platformAiAccess === null || platformAiAccess === void 0 ? void 0 : platformAiAccess.quota) !== null && _b !== void 0 ? _b : null;
+        const limitTokens = typeof (quota === null || quota === void 0 ? void 0 : quota.limitTokens) === "number" && Number.isFinite(quota.limitTokens)
+            ? Math.max(0, Math.round(quota.limitTokens))
+            : 0;
+        const usedTokens = typeof (quota === null || quota === void 0 ? void 0 : quota.usedTokens) === "number" && Number.isFinite(quota.usedTokens)
+            ? Math.max(0, Math.round(quota.usedTokens))
+            : 0;
+        if (!limitTokens) {
+            aiUsageMeter.classList.add("is-hidden");
+            aiUsageMeter.classList.remove("is-warn");
+            aiUsageMeter.classList.remove("is-critical");
+            aiUsageMeter.style.removeProperty("--ai-usage-pct");
+            aiUsageMeter.removeAttribute("title");
+            aiUsageMeter.setAttribute("aria-label", "AI使用量");
+            if (aiUsageMeterText instanceof HTMLElement) {
+                aiUsageMeterText.textContent = "-";
+            }
+            return;
+        }
+        const pct = Math.max(0, Math.min(100, (usedTokens / limitTokens) * 100));
+        aiUsageMeter.classList.remove("is-hidden");
+        aiUsageMeter.classList.toggle("is-warn", pct >= 80 && pct < 95);
+        aiUsageMeter.classList.toggle("is-critical", pct >= 95);
+        aiUsageMeter.style.setProperty("--ai-usage-pct", pct.toFixed(2));
+        const label = `${formatTokenCount(usedTokens)} / ${formatTokenCount(limitTokens)} トークン`;
+        aiUsageMeter.setAttribute("aria-label", `AI使用量: ${label}`);
+        aiUsageMeter.title = label;
+        if (aiUsageMeterText instanceof HTMLElement) {
+            aiUsageMeterText.textContent = formatTokenCompact(usedTokens);
+        }
+    };
+    const openExternalUrl = (url) => {
+        if (typeof url !== "string" || !/^https?:\/\//i.test(url.trim())) {
+            return;
+        }
+        deps.postToNative({ type: "shell:openExternal", url: url.trim() }, true);
+    };
+    const resolvePricingUrl = () => {
+        const fromAccess = typeof (platformAiAccess === null || platformAiAccess === void 0 ? void 0 : platformAiAccess.pricingUrl) === "string" && platformAiAccess.pricingUrl.trim()
+            ? platformAiAccess.pricingUrl.trim()
+            : "";
+        if (fromAccess) {
+            return fromAccess;
+        }
+        const fromAuth = typeof (platformAuth === null || platformAuth === void 0 ? void 0 : platformAuth.pricingUrl) === "string" && platformAuth.pricingUrl.trim()
+            ? platformAuth.pricingUrl.trim()
+            : "";
+        if (fromAuth) {
+            return fromAuth;
+        }
+        return TEX64_LINKS.pricing;
     };
     // ── Helpers ───────────────────────────────────────────
     const getChat = (chatId) => getChatState(chatIndex, activeChatId, chatId);
@@ -311,6 +361,11 @@ export const initAiChatUi = (context, deps) => {
     };
     if (aiHistoryToggle instanceof HTMLButtonElement) {
         aiHistoryToggle.addEventListener("click", toggleHistory);
+    }
+    if (aiAuthTopbar instanceof HTMLButtonElement) {
+        aiAuthTopbar.addEventListener("click", () => {
+            deps.postToNative({ type: "auth:google:start" });
+        });
     }
     // ── Context Bar ───────────────────────────────────────
     const updateContextBar = () => {
@@ -495,65 +550,65 @@ export const initAiChatUi = (context, deps) => {
         }
     };
     const updateStatusDisplay = () => {
-        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
-        const active = getChat(activeChatId);
-        const isRunning = Boolean(active && runningConversations.has(active.id));
-        if (isRunning) {
-            renderStatus("AI実行中...", mergeDetailWithUpdate("処理が終わるまでお待ちください。"), withUtilityActions());
-            return;
-        }
-        const actions = [];
-        if (platformAuth === null || platformAuth === void 0 ? void 0 : platformAuth.authenticated) {
-            actions.push({ action: "refresh", label: "使用量を更新" });
-            actions.push({ action: "signout", label: "ログアウト" });
-        }
-        if (isAiBlocked()) {
-            const reason = (_a = platformAiAccess === null || platformAiAccess === void 0 ? void 0 : platformAiAccess.reason) !== null && _a !== void 0 ? _a : "";
-            if (needsLogin()) {
-                renderStatus("AI機能を使うにはログインが必要です。", mergeDetailWithUpdate(withLocalFallbackDetail("Google OAuthで認証してください。")), withUtilityActions([{ action: "login", label: "Googleでログイン" }]));
-                return;
-            }
-            if (reason === "QUOTA_EXCEEDED") {
-                const quota = (_b = platformAiAccess === null || platformAiAccess === void 0 ? void 0 : platformAiAccess.quota) !== null && _b !== void 0 ? _b : null;
-                const periodEnd = formatDate((_c = platformAiAccess === null || platformAiAccess === void 0 ? void 0 : platformAiAccess.periodEnd) !== null && _c !== void 0 ? _c : quota === null || quota === void 0 ? void 0 : quota.periodEnd);
-                const detail = quota
-                    ? `使用済み ${formatTokens(quota.usedTokens)} / ${formatTokens(quota.limitTokens)} tokens${periodEnd ? ` · 期間終了 ${periodEnd}` : ""}`
-                    : "今月のトークン上限に達しました。";
-                renderStatus("今月のAIトークン上限に達しました。", mergeDetailWithUpdate(withLocalFallbackDetail(detail)), withUtilityActions([
-                    { action: "pricing", label: "プランを見る" },
-                    { action: "refresh", label: "再確認" },
-                ]));
-                return;
-            }
-            renderStatus("現在の契約状態ではAI機能を利用できません。", mergeDetailWithUpdate(withLocalFallbackDetail((_d = platformAiAccess === null || platformAiAccess === void 0 ? void 0 : platformAiAccess.message) !== null && _d !== void 0 ? _d : "契約状態を確認してください。")), withUtilityActions([
-                { action: "pricing", label: "プランを見る" },
-                { action: "refresh", label: "再確認" },
-            ]));
-            return;
-        }
+        var _a, _b;
+        updateTopbarAuthButton();
+        updateUsageMeter();
+        const pricingUrl = resolvePricingUrl();
+        const quota = (_b = (_a = platformUsage === null || platformUsage === void 0 ? void 0 : platformUsage.summary) !== null && _a !== void 0 ? _a : platformAiAccess === null || platformAiAccess === void 0 ? void 0 : platformAiAccess.quota) !== null && _b !== void 0 ? _b : null;
+        const periodEnd = typeof (platformAiAccess === null || platformAiAccess === void 0 ? void 0 : platformAiAccess.periodEnd) === "string" ? platformAiAccess.periodEnd : null;
+        const periodEndLabel = periodEnd && Number.isFinite(Date.parse(periodEnd))
+            ? new Date(periodEnd).toLocaleDateString("ja-JP")
+            : "";
         if (platformError === null || platformError === void 0 ? void 0 : platformError.message) {
-            const isOffline = typeof navigator !== "undefined" && navigator.onLine === false;
-            renderStatus(isOffline ? "オフラインです。ネットワーク接続を確認してください。" : platformError.message, mergeDetailWithUpdate(withLocalFallbackDetail(isOffline ? platformError.message : "")), withUtilityActions([{ action: "refresh", label: "再試行" }]));
-            return;
-        }
-        const usageSummary = normalizeQuotaSummary((_f = (_e = platformUsage === null || platformUsage === void 0 ? void 0 : platformUsage.summary) !== null && _e !== void 0 ? _e : platformAiAccess === null || platformAiAccess === void 0 ? void 0 : platformAiAccess.quota) !== null && _f !== void 0 ? _f : null);
-        if (usageSummary) {
-            const plan = formatPlan((_h = (_g = platformUsage === null || platformUsage === void 0 ? void 0 : platformUsage.plan) !== null && _g !== void 0 ? _g : platformAiAccess === null || platformAiAccess === void 0 ? void 0 : platformAiAccess.plan) !== null && _h !== void 0 ? _h : platformAuth === null || platformAuth === void 0 ? void 0 : platformAuth.plan);
-            const periodEnd = formatDate((_k = (_j = usageSummary.periodEnd) !== null && _j !== void 0 ? _j : platformAiAccess === null || platformAiAccess === void 0 ? void 0 : platformAiAccess.periodEnd) !== null && _k !== void 0 ? _k : null);
-            const headline = `Plan ${plan} · ${formatTokens(usageSummary.usedTokens)} / ${formatTokens(usageSummary.limitTokens)} tokens`;
-            const detail = `残り ${formatTokens(usageSummary.remainingTokens)} tokens${periodEnd ? ` · 期間終了 ${periodEnd}` : ""}`;
-            renderStatus(headline, mergeDetailWithUpdate(detail), withUtilityActions(actions));
+            renderStatus("ログインに失敗しました。", platformError.message, withUtilityActions([{ action: "login", label: "Googleでログイン" }]));
             return;
         }
         if (platformAuth === null || platformAuth === void 0 ? void 0 : platformAuth.pending) {
-            renderStatus("Googleログイン待ちです。", mergeDetailWithUpdate("ブラウザ認証後にこのアプリへ戻ってください。"), withUtilityActions());
+            renderStatus("Googleログインを処理中です。");
             return;
         }
-        if (platformAuth && !platformAuth.authenticated) {
-            renderStatus("AI機能はログイン後に利用できます。", mergeDetailWithUpdate(withLocalFallbackDetail()), withUtilityActions([{ action: "login", label: "Googleでログイン" }]));
+        if (needsLogin()) {
+            renderStatus("AI機能を使うにはGoogleログインが必要です。", "", withUtilityActions([{ action: "login", label: "Googleでログイン" }]));
             return;
         }
-        renderStatus("", mergeDetailWithUpdate(""), withUtilityActions());
+        if (isAiBlocked()) {
+            const reason = typeof (platformAiAccess === null || platformAiAccess === void 0 ? void 0 : platformAiAccess.reason) === "string" && platformAiAccess.reason
+                ? platformAiAccess.reason
+                : typeof (platformUsage === null || platformUsage === void 0 ? void 0 : platformUsage.errorCode) === "string" && platformUsage.errorCode
+                    ? platformUsage.errorCode
+                    : "";
+            if (reason === "QUOTA_EXCEEDED") {
+                const detailPieces = [];
+                if (quota &&
+                    typeof quota.usedTokens === "number" &&
+                    typeof quota.limitTokens === "number") {
+                    detailPieces.push(`${formatTokenCount(quota.usedTokens)} / ${formatTokenCount(quota.limitTokens)} トークン`);
+                }
+                if (periodEndLabel) {
+                    detailPieces.push(`次回リセット: ${periodEndLabel}`);
+                }
+                renderStatus("今月のトークン上限に達しました。", detailPieces.join(" / "), withUtilityActions([{ action: "pricing", label: "プランを見る" }]));
+                return;
+            }
+            if (reason === "PLAN_REQUIRED" ||
+                reason === "FEATURE_NOT_ENABLED" ||
+                reason === "PAYMENT_PAST_DUE") {
+                renderStatus("現在の契約状態ではAI機能を利用できません。", "プラン・契約状態を確認してください。", withUtilityActions([{ action: "pricing", label: "プランを見る" }]));
+                return;
+            }
+            const fallbackMessage = typeof (platformAiAccess === null || platformAiAccess === void 0 ? void 0 : platformAiAccess.message) === "string" && platformAiAccess.message.trim()
+                ? platformAiAccess.message.trim()
+                : typeof (platformUsage === null || platformUsage === void 0 ? void 0 : platformUsage.message) === "string" && platformUsage.message.trim()
+                    ? platformUsage.message.trim()
+                    : "AI機能を利用できません。";
+            renderStatus(fallbackMessage, "", withUtilityActions([{ action: "pricing", label: "プランを見る" }]));
+            return;
+        }
+        if (!pricingUrl) {
+            renderStatus("", "", withUtilityActions());
+            return;
+        }
+        renderStatus("", "", withUtilityActions());
     };
     // ── Context Builders ──────────────────────────────────
     const resolveMaxChars = (value, fallback) => {
@@ -1003,16 +1058,7 @@ export const initAiChatUi = (context, deps) => {
                 return;
             }
             if (action === "pricing") {
-                openPricingPage();
-                return;
-            }
-            if (action === "refresh") {
-                requestAiAccessCheck(true);
-                requestPlatformUsage(true);
-                return;
-            }
-            if (action === "signout") {
-                deps.postToNative({ type: "auth:signout" });
+                openExternalUrl(resolvePricingUrl());
                 return;
             }
         });
@@ -1210,7 +1256,7 @@ export const initAiChatUi = (context, deps) => {
     const handlePlatformAuth = (payload) => {
         var _a, _b, _c;
         platformAuth = (_a = payload === null || payload === void 0 ? void 0 : payload.auth) !== null && _a !== void 0 ? _a : null;
-        platformError = (_b = payload === null || payload === void 0 ? void 0 : payload.error) !== null && _b !== void 0 ? _b : null;
+        platformError = normalizeAuthError((_b = payload === null || payload === void 0 ? void 0 : payload.error) !== null && _b !== void 0 ? _b : null);
         if (!(platformAuth === null || platformAuth === void 0 ? void 0 : platformAuth.authenticated)) {
             platformAiAccess = null;
             platformUsage = null;

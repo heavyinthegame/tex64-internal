@@ -3,6 +3,7 @@ const createBuildHandlers = (deps) => {
     fs,
     path,
     buildService,
+    envService,
     formatterService,
     workspace,
     pdfWindowManager,
@@ -17,6 +18,62 @@ const createBuildHandlers = (deps) => {
     state,
     delay,
   } = deps;
+
+  const resolveBuildEngineCommand = (value) => {
+    if (typeof value !== "string" || !value.trim()) {
+      return "lualatex";
+    }
+    const normalized = value.trim().toLowerCase();
+    if (
+      normalized === "lualatex" ||
+      normalized === "pdflatex" ||
+      normalized === "xelatex" ||
+      normalized === "uplatex"
+    ) {
+      return normalized;
+    }
+    return "lualatex";
+  };
+
+  const ensureRuntimeReadyForBuild = async (engine) => {
+    if (!envService || typeof envService.checkCommand !== "function") {
+      return false;
+    }
+    const targetEngine = resolveBuildEngineCommand(engine);
+    const checks = [
+      {
+        key: "engine",
+        command: targetEngine,
+        label: `TeX Engine (${targetEngine})`,
+      },
+      { key: "latexmk", command: "latexmk", label: "latexmk" },
+      { key: "synctex", command: "synctex", label: "synctex" },
+    ];
+    const results = await Promise.all(
+      checks.map(async (entry) => ({
+        ...entry,
+        ok: await envService.checkCommand(entry.command),
+      }))
+    );
+    const missing = results.filter((entry) => entry.ok !== true);
+    if (missing.length === 0) {
+      return false;
+    }
+    const labels = missing.map((entry) => entry.label);
+    const summary =
+      labels.length > 0
+        ? `実行環境が不足しています: ${labels.join(", ")}`
+        : "実行環境が不足しています。";
+    sendBuildState("idle", summary);
+    sendIssues(missing.length, summary, "error", [
+      ...missing.map((entry) => ({
+        severity: "error",
+        message: `${entry.label} が未検出です。Settings > 実行環境で確認してください。`,
+        action: "open-runtime",
+      })),
+    ]);
+    return true;
+  };
 
   const resolveWorkspacePathFromRoot = (rootPath, targetPath) => {
     if (!targetPath || typeof targetPath !== "string") {
@@ -351,15 +408,19 @@ const createBuildHandlers = (deps) => {
   };
 
   const handleBuild = async (mainFile, options = {}) => {
-    const buildMessage = "ビルド中...";
-    sendBuildState("building", buildMessage);
-    sendIssues(0, buildMessage, "info", []);
     const rootPath = ensureWorkspace();
     if (!rootPath) {
       sendBuildState("idle", "キャンセル");
       sendIssues(0, "ビルドをキャンセルしました。", "info", []);
       return;
     }
+    const blockedByRuntime = await ensureRuntimeReadyForBuild(options?.engine);
+    if (blockedByRuntime) {
+      return;
+    }
+    const buildMessage = "ビルド中...";
+    sendBuildState("building", buildMessage);
+    sendIssues(0, buildMessage, "info", []);
     await updateWorkspaceIfNeeded(rootPath);
     const rootInfo = await workspace.rootInfo().catch(() => null);
     const requestedFile = mainFile && mainFile.trim() ? mainFile.trim() : null;

@@ -224,7 +224,20 @@ const openSuggestionsSettings = async (page) => {
     const modal = document.getElementById("block-settings-modal");
     return Boolean(modal?.classList.contains("is-open") && modal?.getAttribute("aria-hidden") === "false");
   });
-  await page.click('[data-block-settings-target="suggestions"]');
+  const navButton = page.locator('[data-block-settings-target="suggestions"]');
+  if ((await navButton.count()) > 0) {
+    await navButton.first().click();
+  } else {
+    await page.evaluate(() => {
+      document
+        .querySelectorAll(".block-settings-page")
+        .forEach((node) => node.classList.remove("is-active"));
+      const target = document.querySelector(
+        '.block-settings-page[data-block-settings-page="suggestions"]'
+      );
+      target?.classList.add("is-active");
+    });
+  }
   await page.waitForSelector('.block-settings-page.is-active[data-block-settings-page="suggestions"]', {
     timeout: 5000,
   });

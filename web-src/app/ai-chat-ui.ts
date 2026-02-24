@@ -7,7 +7,6 @@ import type {
   IssuesStatus,
   PlatformAiAccessSnapshot,
   PlatformAuthSnapshot,
-  PlatformQuotaSummary,
   PlatformUsageSnapshot,
   PlatformUpdateSnapshot,
 } from "./types.js";
@@ -84,10 +83,7 @@ const AUTONOMOUS_CONTINUE_DELAY_MS = 120;
 const MAX_IMAGE_ATTACHMENTS = 4;
 const MAX_IMAGE_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 const MAX_IMAGE_ATTACHMENT_TOTAL_BYTES = 8 * 1024 * 1024;
-const AI_ACCESS_STALE_MS = 60_000;
 const USAGE_REFRESH_DELAY_MS = 300;
-const LOCAL_FALLBACK_NOTE =
-  "AIが利用できない間も、編集・ビルド・保存などローカル機能は利用できます。";
 
 type AiImageAttachment = {
   mimeType: string;
@@ -110,7 +106,7 @@ type PendingAiRequest = {
 export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi => {
   const {
     aiChatLog, aiChat, aiProposals, aiAttachments, aiAttach, aiAttachInput, aiInput, aiSend, aiStatus, aiChatNew,
-    aiTopbarTitle, aiHistoryToggle, aiHistory, aiHistoryList,
+    aiTopbarTitle, aiUsageMeter, aiUsageMeterText, aiHistoryToggle, aiHistory, aiHistoryList, aiAuthTopbar,
     aiContextBar, aiStop,
   } = context.dom;
 
@@ -133,13 +129,6 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
   let requestedInitialUsage = false;
 
   const makeChatId = () => `chat-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`;
-  const numberFormat = new Intl.NumberFormat("en-US");
-  const PLAN_LABELS: Record<string, string> = {
-    free: "Free",
-    basic: "Basic",
-    pro: "Pro",
-  };
-
   const requestPlatformState = () => {
     deps.postToNative({ type: "platform:state:get" }, true);
   };
@@ -149,78 +138,9 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
   const requestPlatformUsage = (force = false) => {
     deps.postToNative({ type: "platform:usage:get", force }, true);
   };
-  const openPricingPage = () => {
-    const url =
-      platformAiAccess?.pricingUrl ??
-      platformAuth?.pricingUrl ??
-      TEX64_LINKS.pricing;
-    deps.postToNative({ type: "shell:openExternal", url }, true);
-  };
-  const formatTokens = (value?: number | null) =>
-    Number.isFinite(value) ? numberFormat.format(Math.max(0, Math.round(value as number))) : "0";
-  const formatDate = (iso?: string | null) => {
-    if (!iso) return "";
-    const timestamp = Date.parse(iso);
-    if (!Number.isFinite(timestamp)) return "";
-    const date = new Date(timestamp);
-    const year = date.getFullYear();
-    const month = `${date.getMonth() + 1}`.padStart(2, "0");
-    const day = `${date.getDate()}`.padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  };
-  const formatPlan = (plan?: string | null) => {
-    if (!plan || typeof plan !== "string") {
-      return "未設定";
-    }
-    return PLAN_LABELS[plan] ?? plan;
-  };
-  const parseCounter = (value: unknown, fallback = Number.NaN) => {
-    if (typeof value === "number" && Number.isFinite(value)) {
-      return value;
-    }
-    if (typeof value === "string" && value.trim()) {
-      const parsed = Number.parseFloat(value);
-      if (Number.isFinite(parsed)) {
-        return parsed;
-      }
-    }
-    return fallback;
-  };
-  const normalizeQuotaSummary = (quota?: PlatformQuotaSummary | null): PlatformQuotaSummary | null => {
-    if (!quota || typeof quota !== "object") {
-      return null;
-    }
-    const limitTokens = Math.max(0, Math.round(parseCounter(quota.limitTokens, 0)));
-    const usedTokens = Math.max(0, Math.round(parseCounter(quota.usedTokens, 0)));
-    const maxRemainingTokens = Math.max(0, limitTokens - usedTokens);
-    const rawRemainingTokens = parseCounter(quota.remainingTokens, Number.NaN);
-    const normalizedRemainingTokens = Number.isFinite(rawRemainingTokens)
-      ? Math.max(0, Math.round(rawRemainingTokens))
-      : maxRemainingTokens;
-    return {
-      limitTokens,
-      usedTokens,
-      remainingTokens: Math.min(normalizedRemainingTokens, maxRemainingTokens),
-      usedRequests: Math.max(0, Math.round(parseCounter(quota.usedRequests, 0))),
-      remainingRequests: Math.max(0, Math.round(parseCounter(quota.remainingRequests, 0))),
-      periodStart: typeof quota.periodStart === "string" ? quota.periodStart : null,
-      periodEnd: typeof quota.periodEnd === "string" ? quota.periodEnd : null,
-    };
-  };
-  const normalizeUsageSnapshot = (
-    usage?: PlatformUsageSnapshot | null
-  ): PlatformUsageSnapshot | null => {
-    if (!usage || typeof usage !== "object") {
-      return null;
-    }
-    return {
-      ...usage,
-      summary: normalizeQuotaSummary(usage.summary),
-      fetchedAt:
-        typeof usage.fetchedAt === "number" && Number.isFinite(usage.fetchedAt)
-          ? usage.fetchedAt
-          : Date.now(),
-    };
+  const normalizeUsageSnapshot = (usage?: PlatformUsageSnapshot | null): PlatformUsageSnapshot | null => {
+    if (!usage || typeof usage !== "object") return null;
+    return usage;
   };
   const scheduleUsageRefresh = (force = true) => {
     if (usageRefreshTimer !== null) {
@@ -232,46 +152,93 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
       requestPlatformUsage(force);
     }, USAGE_REFRESH_DELAY_MS);
   };
-  const isAccessFresh = () => {
-    const fetchedAt = platformAiAccess?.fetchedAt;
-    if (!Number.isFinite(fetchedAt)) {
-      return false;
-    }
-    return Date.now() - (fetchedAt as number) <= AI_ACCESS_STALE_MS;
-  };
   const isAiBlocked = () =>
-    Boolean(platformAiAccess && platformAiAccess.allowed === false && isAccessFresh());
+    Boolean(platformAiAccess && platformAiAccess.allowed === false);
   const needsLogin = () =>
     Boolean(
-      (platformAiAccess &&
-        platformAiAccess.allowed === false &&
-        (!platformAiAccess.authenticated ||
-          platformAiAccess.reason === "AUTH_REQUIRED" ||
-          platformAiAccess.reason === "TOKEN_EXPIRED") &&
-        isAccessFresh())
+      !platformAuth?.authenticated ||
+        (platformAiAccess &&
+          (!platformAiAccess.authenticated ||
+            platformAiAccess.reason === "AUTH_REQUIRED" ||
+            platformAiAccess.reason === "TOKEN_EXPIRED"))
     );
-
-  type StatusAction =
-    | "login"
-    | "pricing"
-    | "refresh"
-    | "signout";
+  type StatusAction = "login" | "pricing";
 
   const withUtilityActions = (actions?: Array<{ action: StatusAction; label: string }>) => {
     return Array.isArray(actions) ? [...actions] : [];
   };
-
-  const mergeDetailWithUpdate = (detail?: string) => {
-    return detail ?? "";
+  const normalizeAuthError = (error?: { code?: string; message?: string } | null) => {
+    if (!error || typeof error !== "object") {
+      return null;
+    }
+    const code = typeof error.code === "string" ? error.code : "";
+    const fallbackMessage =
+      typeof error.message === "string" && error.message.trim()
+        ? error.message.trim()
+        : "ログインに失敗しました。";
+    switch (code) {
+      case "AUTH_START_INVALID_URL":
+        return {
+          code,
+          message: "ログインページを開けませんでした。",
+        };
+      case "AUTH_BROWSER_UNAVAILABLE":
+        return {
+          code,
+          message: "ブラウザを起動できませんでした。",
+        };
+      case "AUTH_BROWSER_OPEN_FAILED":
+        return {
+          code,
+          message: "ログインページを開けませんでした。",
+        };
+      case "OAUTH_PENDING_EXPIRED":
+        return {
+          code,
+          message: "ログインがタイムアウトしました。",
+        };
+      case "OAUTH_NO_PENDING":
+        return {
+          code,
+          message: "ログイン状態を確認できませんでした。",
+        };
+      case "OAUTH_STATE_MISMATCH":
+      case "OAUTH_CALLBACK_MISMATCH":
+      case "OAUTH_INVALID_CALLBACK":
+        return {
+          code,
+          message: "ログイン結果の検証に失敗しました。",
+        };
+      case "OAUTH_DENIED":
+        return {
+          code,
+          message: "Googleログインがキャンセルされました。",
+        };
+      default:
+        return { code, message: fallbackMessage };
+    }
   };
-  const withLocalFallbackDetail = (detail?: string) => {
-    if (!detail) {
-      return LOCAL_FALLBACK_NOTE;
+
+  const tokenNumberFormat = new Intl.NumberFormat("ja-JP");
+  const formatTokenCount = (value: number) =>
+    tokenNumberFormat.format(Math.max(0, Math.round(value)));
+  const formatTokenCompact = (value: number) => {
+    const v = Math.max(0, Math.round(value));
+    if (v < 10_000) {
+      return formatTokenCount(v);
     }
-    if (detail.includes(LOCAL_FALLBACK_NOTE)) {
-      return detail;
+    if (v < 1_000_000) {
+      const k = v / 1000;
+      if (k < 100) {
+        return `${k.toFixed(1).replace(/\\.0$/, "")}k`;
+      }
+      return `${Math.floor(k)}k`;
     }
-    return `${detail} · ${LOCAL_FALLBACK_NOTE}`;
+    const m = v / 1_000_000;
+    if (m < 100) {
+      return `${m.toFixed(1).replace(/\\.0$/, "")}M`;
+    }
+    return `${Math.floor(m)}M`;
   };
 
   const renderStatus = (
@@ -283,18 +250,25 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
       return;
     }
     aiStatus.replaceChildren();
+    aiStatus.classList.remove("ai-status--actions-only");
     aiStatus.classList.remove("ai-status--error");
     aiStatus.classList.remove("ai-status--warn");
     aiStatus.classList.remove("ai-status--ok");
-    if (!headline && !detail) {
+    const hasActions = Array.isArray(actions) && actions.length > 0;
+    if (!headline && !detail && !hasActions) {
       aiStatus.style.display = "none";
       return;
     }
     aiStatus.style.display = "block";
-    const head = document.createElement("div");
-    head.className = "ai-status-line";
-    head.textContent = headline;
-    aiStatus.appendChild(head);
+    if (!headline && !detail && hasActions) {
+      aiStatus.classList.add("ai-status--actions-only");
+    }
+    if (headline) {
+      const head = document.createElement("div");
+      head.className = "ai-status-line";
+      head.textContent = headline;
+      aiStatus.appendChild(head);
+    }
     if (detail) {
       const body = document.createElement("div");
       body.className = "ai-status-detail";
@@ -314,6 +288,79 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
       });
       aiStatus.appendChild(actionWrap);
     }
+  };
+
+  const updateTopbarAuthButton = () => {
+    if (!(aiAuthTopbar instanceof HTMLButtonElement)) {
+      return;
+    }
+    const authenticated = Boolean(platformAuth?.authenticated);
+    aiAuthTopbar.classList.toggle("is-hidden", authenticated);
+    aiAuthTopbar.textContent = "ログイン";
+    aiAuthTopbar.disabled = false;
+  };
+
+  const updateUsageMeter = () => {
+    if (!(aiUsageMeter instanceof HTMLElement)) {
+      return;
+    }
+    const quota = platformUsage?.summary ?? platformAiAccess?.quota ?? null;
+    const limitTokens =
+      typeof quota?.limitTokens === "number" && Number.isFinite(quota.limitTokens)
+        ? Math.max(0, Math.round(quota.limitTokens))
+        : 0;
+    const usedTokens =
+      typeof quota?.usedTokens === "number" && Number.isFinite(quota.usedTokens)
+        ? Math.max(0, Math.round(quota.usedTokens))
+        : 0;
+    if (!limitTokens) {
+      aiUsageMeter.classList.add("is-hidden");
+      aiUsageMeter.classList.remove("is-warn");
+      aiUsageMeter.classList.remove("is-critical");
+      aiUsageMeter.style.removeProperty("--ai-usage-pct");
+      aiUsageMeter.removeAttribute("title");
+      aiUsageMeter.setAttribute("aria-label", "AI使用量");
+      if (aiUsageMeterText instanceof HTMLElement) {
+        aiUsageMeterText.textContent = "-";
+      }
+      return;
+    }
+    const pct = Math.max(0, Math.min(100, (usedTokens / limitTokens) * 100));
+    aiUsageMeter.classList.remove("is-hidden");
+    aiUsageMeter.classList.toggle("is-warn", pct >= 80 && pct < 95);
+    aiUsageMeter.classList.toggle("is-critical", pct >= 95);
+    aiUsageMeter.style.setProperty("--ai-usage-pct", pct.toFixed(2));
+    const label = `${formatTokenCount(usedTokens)} / ${formatTokenCount(limitTokens)} トークン`;
+    aiUsageMeter.setAttribute("aria-label", `AI使用量: ${label}`);
+    aiUsageMeter.title = label;
+    if (aiUsageMeterText instanceof HTMLElement) {
+      aiUsageMeterText.textContent = formatTokenCompact(usedTokens);
+    }
+  };
+
+  const openExternalUrl = (url: string) => {
+    if (typeof url !== "string" || !/^https?:\/\//i.test(url.trim())) {
+      return;
+    }
+    deps.postToNative({ type: "shell:openExternal", url: url.trim() }, true);
+  };
+
+  const resolvePricingUrl = () => {
+    const fromAccess =
+      typeof platformAiAccess?.pricingUrl === "string" && platformAiAccess.pricingUrl.trim()
+        ? platformAiAccess.pricingUrl.trim()
+        : "";
+    if (fromAccess) {
+      return fromAccess;
+    }
+    const fromAuth =
+      typeof platformAuth?.pricingUrl === "string" && platformAuth.pricingUrl.trim()
+        ? platformAuth.pricingUrl.trim()
+        : "";
+    if (fromAuth) {
+      return fromAuth;
+    }
+    return TEX64_LINKS.pricing;
   };
 
   // ── Helpers ───────────────────────────────────────────
@@ -429,6 +476,11 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
 
   if (aiHistoryToggle instanceof HTMLButtonElement) {
     aiHistoryToggle.addEventListener("click", toggleHistory);
+  }
+  if (aiAuthTopbar instanceof HTMLButtonElement) {
+    aiAuthTopbar.addEventListener("click", () => {
+      deps.postToNative({ type: "auth:google:start" });
+    });
   }
 
   // ── Context Bar ───────────────────────────────────────
@@ -617,113 +669,93 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
   };
 
   const updateStatusDisplay = () => {
-    const active = getChat(activeChatId);
-    const isRunning = Boolean(active && runningConversations.has(active.id));
-    if (isRunning) {
-      renderStatus(
-        "AI実行中...",
-        mergeDetailWithUpdate("処理が終わるまでお待ちください。"),
-        withUtilityActions()
-      );
-      return;
-    }
-    const actions: Array<{
-      action: StatusAction;
-      label: string;
-    }> = [];
-    if (platformAuth?.authenticated) {
-      actions.push({ action: "refresh", label: "使用量を更新" });
-      actions.push({ action: "signout", label: "ログアウト" });
-    }
-
-    if (isAiBlocked()) {
-      const reason = platformAiAccess?.reason ?? "";
-      if (needsLogin()) {
-        renderStatus(
-          "AI機能を使うにはログインが必要です。",
-          mergeDetailWithUpdate(withLocalFallbackDetail("Google OAuthで認証してください。")),
-          withUtilityActions([{ action: "login", label: "Googleでログイン" }])
-        );
-        return;
-      }
-      if (reason === "QUOTA_EXCEEDED") {
-        const quota = platformAiAccess?.quota ?? null;
-        const periodEnd = formatDate(platformAiAccess?.periodEnd ?? quota?.periodEnd);
-        const detail = quota
-          ? `使用済み ${formatTokens(quota.usedTokens)} / ${formatTokens(
-              quota.limitTokens
-            )} tokens${periodEnd ? ` · 期間終了 ${periodEnd}` : ""}`
-          : "今月のトークン上限に達しました。";
-        renderStatus(
-          "今月のAIトークン上限に達しました。",
-          mergeDetailWithUpdate(withLocalFallbackDetail(detail)),
-          withUtilityActions([
-            { action: "pricing", label: "プランを見る" },
-            { action: "refresh", label: "再確認" },
-          ])
-        );
-        return;
-      }
-      renderStatus(
-        "現在の契約状態ではAI機能を利用できません。",
-        mergeDetailWithUpdate(
-          withLocalFallbackDetail(platformAiAccess?.message ?? "契約状態を確認してください。")
-        ),
-        withUtilityActions([
-          { action: "pricing", label: "プランを見る" },
-          { action: "refresh", label: "再確認" },
-        ])
-      );
-      return;
-    }
-
+    updateTopbarAuthButton();
+    updateUsageMeter();
+    const pricingUrl = resolvePricingUrl();
+    const quota = platformUsage?.summary ?? platformAiAccess?.quota ?? null;
+    const periodEnd = typeof platformAiAccess?.periodEnd === "string" ? platformAiAccess.periodEnd : null;
+    const periodEndLabel =
+      periodEnd && Number.isFinite(Date.parse(periodEnd))
+        ? new Date(periodEnd).toLocaleDateString("ja-JP")
+        : "";
     if (platformError?.message) {
-      const isOffline = typeof navigator !== "undefined" && navigator.onLine === false;
       renderStatus(
-        isOffline ? "オフラインです。ネットワーク接続を確認してください。" : platformError.message,
-        mergeDetailWithUpdate(withLocalFallbackDetail(isOffline ? platformError.message : "")),
-        withUtilityActions([{ action: "refresh", label: "再試行" }])
-      );
-      return;
-    }
-
-    const usageSummary = normalizeQuotaSummary(
-      platformUsage?.summary ?? platformAiAccess?.quota ?? null
-    );
-    if (usageSummary) {
-      const plan = formatPlan(platformUsage?.plan ?? platformAiAccess?.plan ?? platformAuth?.plan);
-      const periodEnd = formatDate(
-        usageSummary.periodEnd ?? platformAiAccess?.periodEnd ?? null
-      );
-      const headline = `Plan ${plan} · ${formatTokens(usageSummary.usedTokens)} / ${formatTokens(
-        usageSummary.limitTokens
-      )} tokens`;
-      const detail = `残り ${formatTokens(usageSummary.remainingTokens)} tokens${
-        periodEnd ? ` · 期間終了 ${periodEnd}` : ""
-      }`;
-      renderStatus(headline, mergeDetailWithUpdate(detail), withUtilityActions(actions));
-      return;
-    }
-
-    if (platformAuth?.pending) {
-      renderStatus(
-        "Googleログイン待ちです。",
-        mergeDetailWithUpdate("ブラウザ認証後にこのアプリへ戻ってください。"),
-        withUtilityActions()
-      );
-      return;
-    }
-
-    if (platformAuth && !platformAuth.authenticated) {
-      renderStatus(
-        "AI機能はログイン後に利用できます。",
-        mergeDetailWithUpdate(withLocalFallbackDetail()),
+        "ログインに失敗しました。",
+        platformError.message,
         withUtilityActions([{ action: "login", label: "Googleでログイン" }])
       );
       return;
     }
-
-    renderStatus("", mergeDetailWithUpdate(""), withUtilityActions());
+    if (platformAuth?.pending) {
+      renderStatus("Googleログインを処理中です。");
+      return;
+    }
+    if (needsLogin()) {
+      renderStatus(
+        "AI機能を使うにはGoogleログインが必要です。",
+        "",
+        withUtilityActions([{ action: "login", label: "Googleでログイン" }])
+      );
+      return;
+    }
+    if (isAiBlocked()) {
+      const reason =
+        typeof platformAiAccess?.reason === "string" && platformAiAccess.reason
+          ? platformAiAccess.reason
+          : typeof platformUsage?.errorCode === "string" && platformUsage.errorCode
+          ? platformUsage.errorCode
+          : "";
+      if (reason === "QUOTA_EXCEEDED") {
+        const detailPieces: string[] = [];
+        if (
+          quota &&
+          typeof quota.usedTokens === "number" &&
+          typeof quota.limitTokens === "number"
+        ) {
+          detailPieces.push(
+            `${formatTokenCount(quota.usedTokens)} / ${formatTokenCount(quota.limitTokens)} トークン`
+          );
+        }
+        if (periodEndLabel) {
+          detailPieces.push(`次回リセット: ${periodEndLabel}`);
+        }
+        renderStatus(
+          "今月のトークン上限に達しました。",
+          detailPieces.join(" / "),
+          withUtilityActions([{ action: "pricing", label: "プランを見る" }])
+        );
+        return;
+      }
+      if (
+        reason === "PLAN_REQUIRED" ||
+        reason === "FEATURE_NOT_ENABLED" ||
+        reason === "PAYMENT_PAST_DUE"
+      ) {
+        renderStatus(
+          "現在の契約状態ではAI機能を利用できません。",
+          "プラン・契約状態を確認してください。",
+          withUtilityActions([{ action: "pricing", label: "プランを見る" }])
+        );
+        return;
+      }
+      const fallbackMessage =
+        typeof platformAiAccess?.message === "string" && platformAiAccess.message.trim()
+          ? platformAiAccess.message.trim()
+          : typeof platformUsage?.message === "string" && platformUsage.message.trim()
+          ? platformUsage.message.trim()
+          : "AI機能を利用できません。";
+      renderStatus(
+        fallbackMessage,
+        "",
+        withUtilityActions([{ action: "pricing", label: "プランを見る" }])
+      );
+      return;
+    }
+    if (!pricingUrl) {
+      renderStatus("", "", withUtilityActions());
+      return;
+    }
+    renderStatus("", "", withUtilityActions());
   };
 
   // ── Context Builders ──────────────────────────────────
@@ -1152,16 +1184,7 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
         return;
       }
       if (action === "pricing") {
-        openPricingPage();
-        return;
-      }
-      if (action === "refresh") {
-        requestAiAccessCheck(true);
-        requestPlatformUsage(true);
-        return;
-      }
-      if (action === "signout") {
-        deps.postToNative({ type: "auth:signout" });
+        openExternalUrl(resolvePricingUrl());
         return;
       }
     });
@@ -1354,7 +1377,7 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
     error?: { code?: string; message?: string };
   }) => {
     platformAuth = payload?.auth ?? null;
-    platformError = payload?.error ?? null;
+    platformError = normalizeAuthError(payload?.error ?? null);
     if (!platformAuth?.authenticated) {
       platformAiAccess = null;
       platformUsage = null;

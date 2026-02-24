@@ -16,6 +16,14 @@ const MATH_ENV_HINTS = [
     "formula",
 ];
 export const createLatexBlockDetector = (deps) => {
+    const compareSpecificity = (a, b) => {
+        const sizeDiff = (a.end - a.start) - (b.end - b.start);
+        if (sizeDiff !== 0) {
+            return sizeDiff;
+        }
+        // Prefer deeper/inner ranges when sizes are equal.
+        return b.start - a.start;
+    };
     const looksLikeMathEnv = (name) => {
         const base = getEnvBaseName(normalizeEnvName(name)).toLowerCase();
         return MATH_ENV_HINTS.some((hint) => base.includes(hint));
@@ -191,13 +199,7 @@ export const createLatexBlockDetector = (deps) => {
         if (candidates.length === 0) {
             return null;
         }
-        candidates.sort((a, b) => {
-            const sizeDiff = (b.end - b.start) - (a.end - a.start);
-            if (sizeDiff !== 0) {
-                return sizeDiff;
-            }
-            return a.start - b.start;
-        });
+        candidates.sort(compareSpecificity);
         return candidates[0];
     };
     const detectLatexBlockInRange = (text, startOffset, endOffset) => {
@@ -212,13 +214,7 @@ export const createLatexBlockDetector = (deps) => {
         }
         const containing = candidates.filter((candidate) => candidate.start <= normalizedStart && candidate.end >= normalizedEnd);
         if (containing.length > 0) {
-            containing.sort((a, b) => {
-                const sizeDiff = (b.end - b.start) - (a.end - a.start);
-                if (sizeDiff !== 0) {
-                    return sizeDiff;
-                }
-                return a.start - b.start;
-            });
+            containing.sort(compareSpecificity);
             return containing[0];
         }
         candidates.sort((a, b) => {
@@ -227,11 +223,7 @@ export const createLatexBlockDetector = (deps) => {
             if (overlapA !== overlapB) {
                 return overlapB - overlapA;
             }
-            const sizeDiff = (b.end - b.start) - (a.end - a.start);
-            if (sizeDiff !== 0) {
-                return sizeDiff;
-            }
-            return a.start - b.start;
+            return compareSpecificity(a, b);
         });
         return candidates[0];
     };

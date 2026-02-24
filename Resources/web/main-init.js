@@ -39,6 +39,164 @@ import { initSearchUi } from "./app/search-ui.js";
 import { initSidebarVisibility } from "./app/sidebar-ui.js";
 import { initSettingsUi } from "./app/settings-ui.js";
 import { initWorkspaceController } from "./app/workspace-controller.js";
+const MAX_ERROR_REPORT_MESSAGE = 2000;
+const ERROR_REPORT_DEDUPE_WINDOW_MS = 30000;
+const ERROR_REPORTING_ENABLED_KEY = "tex64.errorReporting.enabled.v1";
+const clampErrorReportText = (value, maxLength = MAX_ERROR_REPORT_MESSAGE) => {
+    if (typeof value !== "string") {
+        return "";
+    }
+    const trimmed = value.trim();
+    if (!trimmed) {
+        return "";
+    }
+    if (trimmed.length <= maxLength) {
+        return trimmed;
+    }
+    return trimmed.slice(0, maxLength);
+};
+const buildUnhandledRejectionMessage = (reason) => {
+    var _a;
+    if (reason instanceof Error) {
+        return {
+            message: clampErrorReportText(reason.message),
+            stack: clampErrorReportText((_a = reason.stack) !== null && _a !== void 0 ? _a : "", 16000),
+        };
+    }
+    if (typeof reason === "string") {
+        return {
+            message: clampErrorReportText(reason),
+            stack: "",
+        };
+    }
+    if (reason && typeof reason === "object") {
+        const maybeMessage = typeof reason.message === "string"
+            ? reason.message
+            : "";
+        const maybeStack = typeof reason.stack === "string"
+            ? reason.stack
+            : "";
+        if (maybeMessage.trim()) {
+            return {
+                message: clampErrorReportText(maybeMessage),
+                stack: clampErrorReportText(maybeStack, 16000),
+            };
+        }
+        try {
+            return {
+                message: clampErrorReportText(JSON.stringify(reason)),
+                stack: "",
+            };
+        }
+        catch {
+            return { message: "Unhandled promise rejection", stack: "" };
+        }
+    }
+    return { message: "Unhandled promise rejection", stack: "" };
+};
+const readErrorReportingEnabledFromStorage = () => {
+    try {
+        const stored = localStorage.getItem(ERROR_REPORTING_ENABLED_KEY);
+        if (stored === null) {
+            return true;
+        }
+        return stored !== "false";
+    }
+    catch {
+        return true;
+    }
+};
+const initGlobalErrorReporting = (postToNative, isEnabled = () => true) => {
+    const sentMap = new Map();
+    const report = (payload) => {
+        var _a, _b, _c, _d, _e;
+        const message = clampErrorReportText(payload.message);
+        if (!message) {
+            return;
+        }
+        if (!isEnabled()) {
+            return;
+        }
+        const stack = clampErrorReportText((_a = payload.stack) !== null && _a !== void 0 ? _a : "", 16000);
+        const source = clampErrorReportText((_b = payload.source) !== null && _b !== void 0 ? _b : "", 256);
+        const url = typeof ((_c = window.location) === null || _c === void 0 ? void 0 : _c.href) === "string"
+            ? clampErrorReportText(window.location.href, 2000)
+            : "";
+        const fingerprint = [
+            payload.kind,
+            message,
+            stack ? stack.slice(0, 240) : "",
+            source,
+            String((_d = payload.line) !== null && _d !== void 0 ? _d : 0),
+            String((_e = payload.column) !== null && _e !== void 0 ? _e : 0),
+        ].join("|");
+        const now = Date.now();
+        const previous = sentMap.get(fingerprint);
+        if (typeof previous === "number" && now - previous < ERROR_REPORT_DEDUPE_WINDOW_MS) {
+            return;
+        }
+        sentMap.set(fingerprint, now);
+        if (sentMap.size > 200) {
+            for (const [key, timestamp] of sentMap.entries()) {
+                if (now - timestamp > ERROR_REPORT_DEDUPE_WINDOW_MS) {
+                    sentMap.delete(key);
+                }
+                if (sentMap.size <= 120) {
+                    break;
+                }
+            }
+        }
+        postToNative({
+            type: "error:report",
+            report: {
+                kind: payload.kind,
+                message,
+                stack: stack || undefined,
+                source: source || undefined,
+                line: typeof payload.line === "number" && Number.isFinite(payload.line)
+                    ? Math.max(0, Math.round(payload.line))
+                    : undefined,
+                column: typeof payload.column === "number" && Number.isFinite(payload.column)
+                    ? Math.max(0, Math.round(payload.column))
+                    : undefined,
+                url: url || undefined,
+                userAgent: typeof (navigator === null || navigator === void 0 ? void 0 : navigator.userAgent) === "string"
+                    ? clampErrorReportText(navigator.userAgent, 2000)
+                    : undefined,
+            },
+        }, true);
+    };
+    window.addEventListener("error", (event) => {
+        var _a;
+        const error = event.error;
+        const message = error instanceof Error
+            ? clampErrorReportText(error.message)
+            : clampErrorReportText(event.message);
+        if (!message) {
+            return;
+        }
+        report({
+            kind: "window_error",
+            message,
+            stack: error instanceof Error ? (_a = error.stack) !== null && _a !== void 0 ? _a : "" : "",
+            source: typeof event.filename === "string" ? event.filename : "",
+            line: typeof event.lineno === "number" && Number.isFinite(event.lineno)
+                ? event.lineno
+                : undefined,
+            column: typeof event.colno === "number" && Number.isFinite(event.colno)
+                ? event.colno
+                : undefined,
+        });
+    });
+    window.addEventListener("unhandledrejection", (event) => {
+        const payload = buildUnhandledRejectionMessage(event.reason);
+        report({
+            kind: "unhandled_rejection",
+            message: payload.message,
+            stack: payload.stack,
+        });
+    });
+};
 export const initMain = () => {
     window.addEventListener("DOMContentLoaded", () => {
         var _a;
@@ -46,7 +204,7 @@ export const initMain = () => {
             document.body.classList.add("is-ready");
         });
         const dom = getDomRefs();
-        const { tabs, editorHost, editorViewer, editorViewerImage, editorViewerPdf, editorHostSecondary, editorViewerSecondary, editorViewerImageSecondary, editorViewerPdfSecondary, editorFallbackSecondary, } = dom;
+        const { tabs, settingsTab, editorHost, editorViewer, editorViewerImage, editorViewerPdf, editorHostSecondary, editorViewerSecondary, editorViewerImageSecondary, editorViewerPdfSecondary, editorFallbackSecondary, } = dom;
         let postToNative = () => false;
         let isReverseSynctexEnabled = () => true;
         let blockAutoDetect = null;
@@ -138,6 +296,12 @@ export const initMain = () => {
             bridgeWindow,
             updateIssues: updateIssuesProxy,
         });
+        const errorReportingEnabled = readErrorReportingEnabledFromStorage();
+        postToNative({
+            type: "error:reporting:set",
+            enabled: errorReportingEnabled,
+        }, true);
+        initGlobalErrorReporting(postToNative, readErrorReportingEnabledFromStorage);
         const apiCompletionBroker = createApiCompletionBroker((payload, silent) => postToNative(payload, silent));
         const filePreviewBroker = createFilePreviewBroker((payload, silent) => postToNative(payload, silent));
         const fileExcerptBroker = createFileExcerptBroker((payload, silent) => postToNative(payload, silent));
@@ -159,6 +323,7 @@ export const initMain = () => {
         let onFilesTabActive = () => { };
         let onSettingsTabActive = () => { };
         let updateMathKeyboardVisibility = () => { };
+        let setSettingsTabAlert = (_hasAlert) => { };
         let updateInlineSuggestEnabled = (_enabled) => { };
         let updateGhostCompletionConfig = (_config) => { };
         let pendingGhostCompletionEnabled = null;
@@ -170,6 +335,12 @@ export const initMain = () => {
         });
         const setActiveTab = (tabKey) => {
             tabController.setActiveTab(tabKey);
+        };
+        setSettingsTabAlert = (hasAlert) => {
+            if (!(settingsTab instanceof HTMLElement)) {
+                return;
+            }
+            settingsTab.classList.toggle("is-alert", hasAlert);
         };
         const envRegistry = initEnvRegistry(appContext, {
             getWorkspaceRootKey: appActions.getWorkspaceRootKey,
@@ -190,6 +361,19 @@ export const initMain = () => {
             onGhostCompletionConfigChange: (config) => {
                 pendingGhostCompletionConfig = config;
                 updateGhostCompletionConfig(config);
+            },
+            onUpdateAttentionChange: (hasAttention) => {
+                setSettingsTabAlert(hasAttention);
+            },
+            onRuntimeSetupNeeded: () => {
+                setActiveTab("settings");
+                settingsUi.openSettingsPage("runtime");
+            },
+            onRequestFirstBuild: () => {
+                setActiveTab("files");
+                if (buildOps && typeof buildOps.startBuild === "function") {
+                    buildOps.startBuild();
+                }
             },
         });
         isReverseSynctexEnabled = () => settingsUi.getReverseSynctexEnabled();
@@ -532,6 +716,8 @@ export const initMain = () => {
                 getPdfViewerMode: settingsUi.getPdfViewerMode,
                 getAutoSynctexOnBuildEnabled: settingsUi.getAutoSynctexOnBuildEnabled,
                 buildFormatSettingsPayload: settingsUi.buildFormatSettingsPayload,
+                getRuntimeStatusSummary: settingsUi.getRuntimeStatusSummary,
+                checkEnvironmentStatus: settingsUi.checkEnvironmentStatus,
             },
         });
         rootSelectorUi = initRootSelectorUi(appContext, {
@@ -789,6 +975,8 @@ export const initMain = () => {
             },
             settings: {
                 updateEnvStatus: (command, available) => settingsUi.updateEnvStatus(command, available),
+                handleEnvInstallStart: (payload) => settingsUi.handleEnvInstallStart(payload),
+                handleEnvInstallResult: (payload) => settingsUi.handleEnvInstallResult(payload),
                 getSettingsSnapshot: () => settingsUi.getSettingsSnapshot(),
                 applySettingsPatch: (patch) => settingsUi.applySettingsPatch(patch),
             },
@@ -808,7 +996,10 @@ export const initMain = () => {
                 handleUsage: (payload) => apiCompletionBroker.handleUsage(payload),
             },
             platform: {
-                handleAuth: (payload) => aiChatUi === null || aiChatUi === void 0 ? void 0 : aiChatUi.handlePlatformAuth(payload),
+                handleAuth: (payload) => {
+                    aiChatUi === null || aiChatUi === void 0 ? void 0 : aiChatUi.handlePlatformAuth(payload);
+                    settingsUi.handlePlatformAuth(payload);
+                },
                 handleAiAccess: (payload) => aiChatUi === null || aiChatUi === void 0 ? void 0 : aiChatUi.handlePlatformAiAccess(payload),
                 handleUsage: (payload) => aiChatUi === null || aiChatUi === void 0 ? void 0 : aiChatUi.handlePlatformUsage(payload),
                 handleUpdate: (payload) => {

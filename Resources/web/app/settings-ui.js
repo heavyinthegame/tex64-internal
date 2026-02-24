@@ -1,10 +1,11 @@
 import { buildFormatSettingsPayload as buildFormatSettingsPayloadFromSettings, defaultEditorFormatSettings, normalizeEditorFormatSettings, normalizeVerbatimInput, } from "./settings-format.js";
 import { clampNumber, loadGhostCompletionConfig, saveGhostCompletionConfig, } from "./settings-completion.js";
-import { createEnvStatusManager } from "./settings-env.js";
+import { createEnvStatusManager, } from "./settings-env.js";
 import { initBuildProfilesUi } from "./settings-build-profiles.js";
 import { TEX64_LINKS } from "./platform-links.js";
 export const initSettingsUi = (context, deps) => {
-    const { settingsPanel, settingsNav, settingsNavItems, settingsPages, settingsPageItems, settingsBackButtons, settingsCompileEngineSelect, settingsEnvRefresh, editorAlignEnvToggle, editorFormatIndentSelect, editorFormatBeginEndToggle, editorFormatDocumentNoIndentToggle, editorFormatAlignMathToggle, editorFormatAlignTableToggle, editorFormatBlankLinesSelect, editorFormatVerbatimInput, editorFormatVerbatimAdd, editorFormatVerbatimHint, editorFormatVerbatimList, editorAutoSynctexBuildToggle, editorReverseSynctexToggle, editorGhostCompletionToggle, editorGhostCompletionDebounce, editorGhostCompletionMaxChars, editorPdfWindowToggle, settingsUpdateCurrent, settingsUpdateLatest, settingsUpdateStatus, settingsUpdateProgress, settingsUpdateProgressFill, settingsUpdateCheck, settingsUpdateDownload, settingsUpdateInstall, settingsUpdateOpen, settingsFeedbackCategory, settingsFeedbackMessage, settingsFeedbackEmail, settingsFeedbackSend, settingsFeedbackStatus, settingsLinkTerms, settingsLinkPrivacy, settingsLinkCommercial, settingsLinkRefund, settingsLinkSupport, settingsLinkContact, settingsLinkReleases, } = context.dom;
+    var _a;
+    const { settingsPanel, settingsNav, settingsNavItems, settingsPages, settingsPageItems, settingsBackButtons, settingsCompileEngineSelect, settingsEnvRefresh, editorAlignEnvToggle, editorFormatIndentSelect, editorFormatBeginEndToggle, editorFormatDocumentNoIndentToggle, editorFormatAlignMathToggle, editorFormatAlignTableToggle, editorFormatBlankLinesSelect, editorFormatVerbatimInput, editorFormatVerbatimAdd, editorFormatVerbatimHint, editorFormatVerbatimList, editorAutoSynctexBuildToggle, editorReverseSynctexToggle, editorGhostCompletionToggle, editorGhostCompletionDebounce, editorGhostCompletionMaxChars, editorPdfWindowToggle, settingsUpdateCurrent, settingsUpdateLatest, settingsUpdateStatus, settingsUpdateProgress, settingsUpdateProgressFill, settingsUpdateCheck, settingsUpdateApply, settingsUpdateOpen, settingsAuthStatus, settingsAuthLogout, settingsRuntimeAttention, settingsRuntimeInstallStatus, settingsRuntimeSetupStatus, settingsRuntimeOnboardingStatus, settingsRuntimeRunFirstBuild, settingsRuntimeOpenGettingStarted, settingsRuntimeOpenInstallDocs, settingsRuntimeOpenTexDocs, settingsFeedbackCategory, settingsFeedbackMessage, settingsFeedbackEmail, settingsFeedbackIncludeDiagnostics, settingsFeedbackSend, settingsFeedbackStatus, settingsErrorReportingEnabled, settingsLinkTerms, settingsLinkPrivacy, settingsLinkCommercial, settingsLinkRefund, settingsLinkSupport, settingsLinkContact, settingsLinkReleases, } = context.dom;
     let activeSettingsPage = null;
     let editorAlignEnvEnabled = true;
     let editorFormatSettings = {
@@ -16,9 +17,18 @@ export const initSettingsUi = (context, deps) => {
     let ghostCompletionDebounceMs = 120;
     let ghostCompletionMaxChars = 140;
     let pdfViewerMode = "window";
+    let platformAuth = null;
     let platformUpdate = null;
     let platformUpdateStatus = null;
+    let updateAutoCheckStarted = false;
+    let runtimeStatusSummary = null;
+    let runtimeSetupPromptInFlight = false;
     let feedbackPending = false;
+    let feedbackQueue = [];
+    let feedbackFlushTimer = null;
+    let feedbackInFlightId = null;
+    let feedbackIncludeDiagnostics = false;
+    let errorReportingEnabled = true;
     const compileEngineKey = "tex64.compileEngine";
     const editorAutoSynctexOnBuildKey = "tex64.editor.autoSynctexOnBuild";
     const editorReverseSynctexKey = "tex64.editor.reverseSynctex";
@@ -29,6 +39,13 @@ export const initSettingsUi = (context, deps) => {
     const editorPdfViewerModeKey = "tex64.editor.pdfViewerMode";
     const editorAlignEnvKey = "tex64.editor.alignEnv";
     const editorFormatSettingsKey = "tex64.editor.formatSettings";
+    const runtimeSetupPromptedKey = "tex64.runtimeSetupPrompted.v1";
+    const firstBuildCompletedKey = "tex64.onboarding.firstBuildCompleted.v1";
+    const updateLastAutoCheckAtKey = "tex64.update.lastAutoCheckAt.v1";
+    const feedbackQueueKey = "tex64.feedback.queue.v1";
+    const feedbackIncludeDiagnosticsKey = "tex64.feedback.includeDiagnostics.v1";
+    const errorReportingEnabledKey = "tex64.errorReporting.enabled.v1";
+    const updateAutoCheckIntervalMs = 1000 * 60 * 60 * 6;
     const ghostCompletionDebounceRange = { min: 0, max: 2000 };
     const ghostCompletionMaxCharsRange = { min: 20, max: 400 };
     const texEngineCommands = new Set(["lualatex", "pdflatex", "xelatex", "uplatex"]);
@@ -47,8 +64,15 @@ export const initSettingsUi = (context, deps) => {
         envCheckTargets,
         envDisplayTargets,
         texEngineCommands,
+        onStatusSummaryChange: (summary) => {
+            runtimeStatusSummary = summary;
+            updateRuntimeSetupUi();
+            syncUpdateAttentionUi();
+            maybePromptRuntimeSetup(summary);
+        },
     });
     const { checkEnvironmentStatus, updateEnvStatus } = envManager;
+    const runtimeSettingsNavItem = (_a = settingsNavItems.find((button) => button.dataset.settingsTarget === "runtime")) !== null && _a !== void 0 ? _a : null;
     const updateEngineUI = () => {
         if (!(settingsCompileEngineSelect instanceof HTMLSelectElement)) {
             return;
@@ -59,6 +83,60 @@ export const initSettingsUi = (context, deps) => {
     };
     const buildFormatSettingsPayload = () => buildFormatSettingsPayloadFromSettings(editorFormatSettings, deps.envRegistry);
     const envBtns = Array.from(document.querySelectorAll(".env-btn"));
+    const resolveEnvInstallTargetLabel = (target) => {
+        if (target === "basictex") {
+            return "TeX Distribution";
+        }
+        if (target === "latexmk") {
+            return "latexmk";
+        }
+        return target || "実行環境";
+    };
+    const setRuntimeInstallStatus = (message, tone = "neutral") => {
+        if (!(settingsRuntimeInstallStatus instanceof HTMLElement)) {
+            return;
+        }
+        const text = typeof message === "string" ? message.trim() : "";
+        const isVisible = Boolean(text);
+        settingsRuntimeInstallStatus.textContent = text;
+        settingsRuntimeInstallStatus.classList.toggle("is-hidden", !isVisible);
+        settingsRuntimeInstallStatus.setAttribute("aria-hidden", isVisible ? "false" : "true");
+        settingsRuntimeInstallStatus.classList.toggle("is-success", tone === "success");
+        settingsRuntimeInstallStatus.classList.toggle("is-error", tone === "error");
+    };
+    const handleEnvInstallStart = (payload) => {
+        const target = typeof (payload === null || payload === void 0 ? void 0 : payload.target) === "string" && payload.target.trim()
+            ? payload.target.trim()
+            : "";
+        if (!target) {
+            setRuntimeInstallStatus("インストールを開始しました。");
+            return;
+        }
+        const label = resolveEnvInstallTargetLabel(target);
+        setRuntimeInstallStatus(`${label} をインストールしています...`);
+        envBtns
+            .filter((btn) => btn.dataset.target === target)
+            .forEach((btn) => {
+            btn.textContent = "インストール中...";
+            btn.disabled = true;
+        });
+    };
+    const handleEnvInstallResult = (payload) => {
+        const target = typeof (payload === null || payload === void 0 ? void 0 : payload.target) === "string" && payload.target.trim()
+            ? payload.target.trim()
+            : "";
+        const success = (payload === null || payload === void 0 ? void 0 : payload.success) === true;
+        const rawMessage = typeof (payload === null || payload === void 0 ? void 0 : payload.message) === "string" && payload.message.trim()
+            ? payload.message.trim()
+            : "";
+        const label = resolveEnvInstallTargetLabel(target);
+        const message = rawMessage ||
+            (success
+                ? `${label} のインストールを実行しました。`
+                : `${label} のインストールに失敗しました。`);
+        setRuntimeInstallStatus(message, success ? "success" : "error");
+        checkEnvironmentStatus();
+    };
     envBtns.forEach((btn) => {
         btn.addEventListener("click", () => {
             const target = btn.dataset.target;
@@ -205,10 +283,11 @@ export const initSettingsUi = (context, deps) => {
         if (settingsPanel instanceof HTMLElement) {
             settingsPanel.scrollTop = 0;
         }
+        syncUpdateAttentionUi();
         if (pageId === "runtime") {
+            updateRuntimeOnboardingUi();
             checkEnvironmentStatus();
-            deps.postToNative({ type: "update:status:get" }, true);
-            deps.postToNative({ type: "update:check", force: false }, true);
+            maybeRequestPlatformUpdateCheck(false);
         }
     };
     const loadEditorAlignEnvState = () => {
@@ -363,6 +442,157 @@ export const initSettingsUi = (context, deps) => {
         }
         return `${(value / (1024 * 1024 * 1024)).toFixed(1)} GB`;
     };
+    const resolveRuntimeMissingLabel = (key) => {
+        if (key === "engine") {
+            return "TeX Engine (lualatex / pdflatex / xelatex / uplatex)";
+        }
+        if (key === "latexmk") {
+            return "latexmk";
+        }
+        if (key === "synctex") {
+            return "synctex";
+        }
+        if (key === "latexindent") {
+            return "latexindent";
+        }
+        return key;
+    };
+    const hasPromptedRuntimeSetup = () => {
+        try {
+            return localStorage.getItem(runtimeSetupPromptedKey) === "1";
+        }
+        catch {
+            return false;
+        }
+    };
+    const markRuntimeSetupPrompted = () => {
+        try {
+            localStorage.setItem(runtimeSetupPromptedKey, "1");
+        }
+        catch {
+            // ignore storage failures
+        }
+    };
+    const maybePromptRuntimeSetup = (summary) => {
+        var _a;
+        if (!summary || !summary.hasAnyResult || summary.runtimeReady) {
+            runtimeSetupPromptInFlight = false;
+            return;
+        }
+        if (runtimeSetupPromptInFlight || hasPromptedRuntimeSetup()) {
+            return;
+        }
+        runtimeSetupPromptInFlight = true;
+        markRuntimeSetupPrompted();
+        (_a = deps.onRuntimeSetupNeeded) === null || _a === void 0 ? void 0 : _a.call(deps, summary);
+    };
+    const hasCompletedFirstBuild = () => {
+        try {
+            return localStorage.getItem(firstBuildCompletedKey) === "1";
+        }
+        catch {
+            return false;
+        }
+    };
+    const updateRuntimeOnboardingUi = () => {
+        const summary = runtimeStatusSummary;
+        const hasWorkspace = Boolean(deps.getWorkspaceRootKey());
+        const firstBuildCompleted = hasCompletedFirstBuild();
+        if (settingsRuntimeOnboardingStatus instanceof HTMLElement) {
+            settingsRuntimeOnboardingStatus.classList.remove("is-warning", "is-success");
+            if (!summary || !summary.hasAnyResult) {
+                settingsRuntimeOnboardingStatus.textContent =
+                    "初回セットアップ: 1) 実行環境を確認中 2) ワークスペースを開く 3) 最初のビルドを実行";
+            }
+            else if (firstBuildCompleted) {
+                settingsRuntimeOnboardingStatus.classList.add("is-success");
+                settingsRuntimeOnboardingStatus.textContent =
+                    "初回セットアップ完了: いつでも Build を実行できます。";
+            }
+            else if (!summary.runtimeReady) {
+                const missing = summary.missingRequired.map((item) => resolveRuntimeMissingLabel(item));
+                settingsRuntimeOnboardingStatus.classList.add("is-warning");
+                settingsRuntimeOnboardingStatus.textContent =
+                    missing.length > 0
+                        ? `初回セットアップ: 1/3 実行環境が不足 (${missing.join(", ")})。`
+                        : "初回セットアップ: 1/3 実行環境が不足しています。";
+            }
+            else if (!hasWorkspace) {
+                settingsRuntimeOnboardingStatus.classList.add("is-warning");
+                settingsRuntimeOnboardingStatus.textContent =
+                    "初回セットアップ: 2/3 ワークスペースを開いてください。";
+            }
+            else {
+                settingsRuntimeOnboardingStatus.classList.add("is-success");
+                settingsRuntimeOnboardingStatus.textContent =
+                    "初回セットアップ: 3/3 最初のビルドを実行してください。";
+            }
+        }
+        if (settingsRuntimeRunFirstBuild instanceof HTMLButtonElement) {
+            const canRunBuild = Boolean((summary === null || summary === void 0 ? void 0 : summary.runtimeReady) && hasWorkspace);
+            settingsRuntimeRunFirstBuild.disabled = !canRunBuild;
+            settingsRuntimeRunFirstBuild.textContent = firstBuildCompleted
+                ? "ビルドを実行"
+                : "最初のビルドを実行";
+        }
+    };
+    const updateRuntimeSetupUi = () => {
+        if (!(settingsRuntimeSetupStatus instanceof HTMLElement)) {
+            return;
+        }
+        const summary = runtimeStatusSummary;
+        settingsRuntimeSetupStatus.classList.remove("is-warning", "is-success");
+        if (!summary || !summary.hasAnyResult) {
+            settingsRuntimeSetupStatus.textContent = "実行環境を確認中です。";
+            updateRuntimeOnboardingUi();
+            return;
+        }
+        if (summary.runtimeReady) {
+            settingsRuntimeSetupStatus.classList.add("is-success");
+            if (summary.missingRecommended.includes("latexindent")) {
+                settingsRuntimeSetupStatus.textContent =
+                    "利用開始の準備は完了しています（任意: latexindent 未検出）。";
+            }
+            else {
+                settingsRuntimeSetupStatus.textContent = "利用開始の準備が完了しています。";
+            }
+            updateRuntimeOnboardingUi();
+            return;
+        }
+        settingsRuntimeSetupStatus.classList.add("is-warning");
+        const missing = summary.missingRequired.map((item) => resolveRuntimeMissingLabel(item));
+        settingsRuntimeSetupStatus.textContent = `不足: ${missing.join(", ")}。TeX環境を整備して再チェックしてください。`;
+        updateRuntimeOnboardingUi();
+    };
+    const hasRuntimeSetupAttention = () => Boolean((runtimeStatusSummary === null || runtimeStatusSummary === void 0 ? void 0 : runtimeStatusSummary.hasAnyResult) && (runtimeStatusSummary === null || runtimeStatusSummary === void 0 ? void 0 : runtimeStatusSummary.runtimeReady) === false);
+    const hasUpdateAttention = () => {
+        var _a;
+        const phase = (_a = platformUpdateStatus === null || platformUpdateStatus === void 0 ? void 0 : platformUpdateStatus.phase) !== null && _a !== void 0 ? _a : "idle";
+        if (phase === "available" || phase === "downloaded" || phase === "error") {
+            return true;
+        }
+        if (phase === "idle" && (platformUpdate === null || platformUpdate === void 0 ? void 0 : platformUpdate.hasUpdate)) {
+            return true;
+        }
+        return false;
+    };
+    const syncUpdateAttentionUi = () => {
+        var _a;
+        const updateAttention = hasUpdateAttention();
+        const runtimeAttention = hasRuntimeSetupAttention();
+        const attention = updateAttention || runtimeAttention;
+        const hideAlertWhileRuntimeOpen = activeSettingsPage === "runtime";
+        const showTabAlert = attention && !hideAlertWhileRuntimeOpen;
+        if (runtimeSettingsNavItem instanceof HTMLElement) {
+            runtimeSettingsNavItem.classList.toggle("has-alert", attention);
+        }
+        if (settingsRuntimeAttention instanceof HTMLElement) {
+            settingsRuntimeAttention.textContent = runtimeAttention ? "要設定" : "更新あり";
+            settingsRuntimeAttention.classList.toggle("is-hidden", !attention);
+            settingsRuntimeAttention.setAttribute("aria-hidden", attention ? "false" : "true");
+        }
+        (_a = deps.onUpdateAttentionChange) === null || _a === void 0 ? void 0 : _a.call(deps, showTabAlert);
+    };
     const resolveUpdateStatusText = () => {
         var _a, _b, _c, _d, _e, _f;
         const phase = (_a = platformUpdateStatus === null || platformUpdateStatus === void 0 ? void 0 : platformUpdateStatus.phase) !== null && _a !== void 0 ? _a : "idle";
@@ -433,19 +663,50 @@ export const initSettingsUi = (context, deps) => {
         if (settingsUpdateCheck instanceof HTMLButtonElement) {
             settingsUpdateCheck.disabled = phase === "checking" || phase === "downloading";
         }
-        if (settingsUpdateDownload instanceof HTMLButtonElement) {
-            settingsUpdateDownload.disabled =
-                !hasUpdate || phase === "checking" || phase === "downloading";
-        }
-        if (settingsUpdateInstall instanceof HTMLButtonElement) {
-            settingsUpdateInstall.disabled =
-                phase === "checking" ||
+        const canApplyUpdate = hasUpdate || hasDownloadedInstaller || phase === "available" || phase === "downloaded";
+        if (settingsUpdateApply instanceof HTMLButtonElement) {
+            settingsUpdateApply.classList.toggle("is-hidden", !canApplyUpdate);
+            settingsUpdateApply.setAttribute("aria-hidden", canApplyUpdate ? "false" : "true");
+            settingsUpdateApply.disabled =
+                !canApplyUpdate ||
+                    phase === "checking" ||
                     phase === "downloading" ||
-                    (!hasDownloadedInstaller && phase !== "downloaded");
+                    phase === "installing";
         }
         if (settingsUpdateOpen instanceof HTMLButtonElement) {
             settingsUpdateOpen.disabled = false;
         }
+        syncUpdateAttentionUi();
+    };
+    const updatePlatformAuthUi = () => {
+        var _a;
+        const authenticated = Boolean(platformAuth === null || platformAuth === void 0 ? void 0 : platformAuth.authenticated);
+        const pending = Boolean(platformAuth === null || platformAuth === void 0 ? void 0 : platformAuth.pending);
+        const userLabel = typeof ((_a = platformAuth === null || platformAuth === void 0 ? void 0 : platformAuth.user) === null || _a === void 0 ? void 0 : _a.email) === "string" && platformAuth.user.email.trim()
+            ? platformAuth.user.email.trim()
+            : "";
+        if (settingsAuthStatus instanceof HTMLElement) {
+            if (authenticated) {
+                settingsAuthStatus.textContent = userLabel
+                    ? `ログイン済み: ${userLabel}`
+                    : "ログイン済み";
+            }
+            else if (pending) {
+                settingsAuthStatus.textContent = "ログイン処理中";
+            }
+            else {
+                settingsAuthStatus.textContent = "未ログイン";
+            }
+        }
+        if (settingsAuthLogout instanceof HTMLButtonElement) {
+            settingsAuthLogout.classList.toggle("is-hidden", !authenticated);
+            settingsAuthLogout.disabled = !authenticated;
+        }
+    };
+    const handlePlatformAuth = (payload) => {
+        var _a;
+        platformAuth = (_a = payload === null || payload === void 0 ? void 0 : payload.auth) !== null && _a !== void 0 ? _a : null;
+        updatePlatformAuthUi();
     };
     const handlePlatformUpdate = (payload) => {
         var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p;
@@ -508,6 +769,239 @@ export const initSettingsUi = (context, deps) => {
         settingsFeedbackSend.disabled = feedbackPending;
         settingsFeedbackSend.textContent = feedbackPending ? "送信中..." : "送信";
     };
+    const saveFeedbackQueue = () => {
+        try {
+            localStorage.setItem(feedbackQueueKey, JSON.stringify(feedbackQueue));
+        }
+        catch {
+            // ignore storage failures
+        }
+    };
+    const normalizeFeedbackQueueItem = (value) => {
+        if (!value || typeof value !== "object") {
+            return null;
+        }
+        const record = value;
+        const id = typeof record.id === "string" && record.id.trim()
+            ? record.id.trim()
+            : `fb-${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 8)}`;
+        const rawCategory = typeof record.category === "string" && record.category.trim()
+            ? record.category.trim()
+            : "other";
+        const category = rawCategory === "bug" ||
+            rawCategory === "idea" ||
+            rawCategory === "other" ||
+            rawCategory === "general"
+            ? rawCategory
+            : "other";
+        const message = typeof record.message === "string" && record.message.trim()
+            ? record.message.trim()
+            : "";
+        if (!message) {
+            return null;
+        }
+        const contactEmail = typeof record.contactEmail === "string" && record.contactEmail.trim()
+            ? record.contactEmail.trim()
+            : undefined;
+        const diagnostics = record.diagnostics && typeof record.diagnostics === "object"
+            ? record.diagnostics
+            : undefined;
+        const createdAt = typeof record.createdAt === "number" && Number.isFinite(record.createdAt)
+            ? record.createdAt
+            : Date.now();
+        const attempts = typeof record.attempts === "number" && Number.isFinite(record.attempts)
+            ? Math.max(0, Math.round(record.attempts))
+            : 0;
+        const nextRetryAt = typeof record.nextRetryAt === "number" && Number.isFinite(record.nextRetryAt)
+            ? Math.max(0, Math.round(record.nextRetryAt))
+            : 0;
+        return {
+            id,
+            category,
+            message,
+            contactEmail,
+            diagnostics,
+            createdAt,
+            attempts,
+            nextRetryAt,
+        };
+    };
+    const loadFeedbackQueue = () => {
+        const raw = localStorage.getItem(feedbackQueueKey);
+        if (!raw) {
+            feedbackQueue = [];
+            return;
+        }
+        try {
+            const parsed = JSON.parse(raw);
+            if (!Array.isArray(parsed)) {
+                feedbackQueue = [];
+                return;
+            }
+            feedbackQueue = parsed
+                .map((entry) => normalizeFeedbackQueueItem(entry))
+                .filter((entry) => Boolean(entry));
+            saveFeedbackQueue();
+        }
+        catch {
+            feedbackQueue = [];
+        }
+    };
+    const readFeedbackIncludeDiagnosticsState = () => {
+        try {
+            const stored = localStorage.getItem(feedbackIncludeDiagnosticsKey);
+            return stored === "true";
+        }
+        catch {
+            return false;
+        }
+    };
+    const saveFeedbackIncludeDiagnosticsState = () => {
+        try {
+            localStorage.setItem(feedbackIncludeDiagnosticsKey, feedbackIncludeDiagnostics ? "true" : "false");
+        }
+        catch {
+            // ignore storage failures
+        }
+    };
+    const updateFeedbackIncludeDiagnosticsUi = () => {
+        if (settingsFeedbackIncludeDiagnostics instanceof HTMLInputElement) {
+            settingsFeedbackIncludeDiagnostics.checked = feedbackIncludeDiagnostics;
+        }
+    };
+    const readErrorReportingEnabledState = () => {
+        try {
+            const stored = localStorage.getItem(errorReportingEnabledKey);
+            if (stored === null) {
+                return true;
+            }
+            return stored !== "false";
+        }
+        catch {
+            return true;
+        }
+    };
+    const saveErrorReportingEnabledState = () => {
+        try {
+            localStorage.setItem(errorReportingEnabledKey, errorReportingEnabled ? "true" : "false");
+        }
+        catch {
+            // ignore storage failures
+        }
+    };
+    const updateErrorReportingUi = () => {
+        if (settingsErrorReportingEnabled instanceof HTMLInputElement) {
+            settingsErrorReportingEnabled.checked = errorReportingEnabled;
+        }
+    };
+    const syncErrorReportingEnabled = () => {
+        deps.postToNative({
+            type: "error:reporting:set",
+            enabled: errorReportingEnabled,
+        }, true);
+    };
+    const buildFeedbackDiagnostics = () => {
+        var _a;
+        if (!feedbackIncludeDiagnostics) {
+            return undefined;
+        }
+        const diagnostics = {
+            source: "settings-feedback-form",
+            sentAt: new Date().toISOString(),
+            appUrl: typeof ((_a = window.location) === null || _a === void 0 ? void 0 : _a.href) === "string" ? window.location.href : "",
+            online: typeof (navigator === null || navigator === void 0 ? void 0 : navigator.onLine) === "boolean" ? navigator.onLine : undefined,
+            language: typeof (navigator === null || navigator === void 0 ? void 0 : navigator.language) === "string" ? navigator.language : undefined,
+            userAgent: typeof (navigator === null || navigator === void 0 ? void 0 : navigator.userAgent) === "string" ? navigator.userAgent : undefined,
+        };
+        if (Array.isArray(navigator === null || navigator === void 0 ? void 0 : navigator.languages) && navigator.languages.length > 0) {
+            diagnostics.languages = navigator.languages.slice(0, 8);
+        }
+        return diagnostics;
+    };
+    const computeFeedbackRetryDelayMs = (attempts) => {
+        const safeAttempts = Math.max(1, Math.round(attempts));
+        const baseMs = 5000;
+        return Math.min(1000 * 60 * 5, baseMs * 2 ** Math.min(7, safeAttempts - 1));
+    };
+    const scheduleFeedbackFlush = (delayMs = 0) => {
+        if (feedbackFlushTimer !== null) {
+            window.clearTimeout(feedbackFlushTimer);
+            feedbackFlushTimer = null;
+        }
+        feedbackFlushTimer = window.setTimeout(() => {
+            feedbackFlushTimer = null;
+            flushFeedbackQueue();
+        }, Math.max(0, Math.round(delayMs)));
+    };
+    const removeFeedbackQueueItem = (itemId) => {
+        if (!itemId) {
+            return null;
+        }
+        const index = feedbackQueue.findIndex((entry) => entry.id === itemId);
+        if (index < 0) {
+            return null;
+        }
+        const [removed] = feedbackQueue.splice(index, 1);
+        saveFeedbackQueue();
+        return removed !== null && removed !== void 0 ? removed : null;
+    };
+    const markFeedbackRetry = (item, baseMessage) => {
+        item.attempts = Math.max(0, item.attempts) + 1;
+        const delayMs = computeFeedbackRetryDelayMs(item.attempts);
+        item.nextRetryAt = Date.now() + delayMs;
+        saveFeedbackQueue();
+        const seconds = Math.max(1, Math.round(delayMs / 1000));
+        const prefix = typeof baseMessage === "string" && baseMessage.trim()
+            ? baseMessage.trim()
+            : "フィードバック送信に失敗しました。再送します。";
+        setFeedbackStatus(`${prefix} (${seconds}秒後に再試行)`, "error");
+        scheduleFeedbackFlush(delayMs + 60);
+    };
+    const flushFeedbackQueue = () => {
+        if (feedbackPending) {
+            return;
+        }
+        if (feedbackQueue.length === 0) {
+            return;
+        }
+        const now = Date.now();
+        let nextItem = null;
+        for (const entry of feedbackQueue) {
+            if (entry.nextRetryAt <= now) {
+                nextItem = entry;
+                break;
+            }
+        }
+        if (!nextItem) {
+            const nextRetryAt = feedbackQueue.reduce((min, entry) => {
+                if (!Number.isFinite(entry.nextRetryAt) || entry.nextRetryAt <= 0) {
+                    return min;
+                }
+                return Math.min(min, entry.nextRetryAt);
+            }, Number.POSITIVE_INFINITY);
+            if (Number.isFinite(nextRetryAt)) {
+                scheduleFeedbackFlush(Math.max(250, nextRetryAt - now));
+            }
+            return;
+        }
+        feedbackPending = true;
+        feedbackInFlightId = nextItem.id;
+        updateFeedbackSendState();
+        setFeedbackStatus("フィードバックを送信しています...");
+        const posted = deps.postToNative({
+            type: "feedback:send",
+            category: nextItem.category,
+            message: nextItem.message,
+            contactEmail: nextItem.contactEmail || undefined,
+            diagnostics: nextItem.diagnostics || undefined,
+        }, true);
+        if (!posted) {
+            feedbackPending = false;
+            feedbackInFlightId = null;
+            updateFeedbackSendState();
+            markFeedbackRetry(nextItem, "フィードバック送信を開始できませんでした。");
+        }
+    };
     const sendFeedback = () => {
         if (!(settingsFeedbackMessage instanceof HTMLTextAreaElement)) {
             return;
@@ -533,36 +1027,51 @@ export const initSettingsUi = (context, deps) => {
             settingsFeedbackEmail.focus();
             return;
         }
-        feedbackPending = true;
-        updateFeedbackSendState();
-        setFeedbackStatus("フィードバックを送信しています...");
-        const posted = deps.postToNative({
-            type: "feedback:send",
+        const item = {
+            id: `fb-${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 8)}`,
             category,
             message,
             contactEmail: contactEmail || undefined,
-        }, true);
-        if (!posted) {
-            feedbackPending = false;
-            updateFeedbackSendState();
-            setFeedbackStatus("フィードバック送信を開始できませんでした。", "error");
-        }
+            diagnostics: buildFeedbackDiagnostics(),
+            createdAt: Date.now(),
+            attempts: 0,
+            nextRetryAt: 0,
+        };
+        feedbackQueue.push(item);
+        saveFeedbackQueue();
+        setFeedbackStatus("送信キューに追加しました。");
+        flushFeedbackQueue();
     };
     const handlePlatformFeedback = (payload) => {
-        var _a;
+        var _a, _b;
+        const inFlightId = feedbackInFlightId;
+        const inFlightItem = inFlightId !== null
+            ? (_a = feedbackQueue.find((entry) => entry.id === inFlightId)) !== null && _a !== void 0 ? _a : null
+            : null;
         feedbackPending = false;
+        feedbackInFlightId = null;
         updateFeedbackSendState();
         if (payload === null || payload === void 0 ? void 0 : payload.ok) {
-            if (settingsFeedbackMessage instanceof HTMLTextAreaElement) {
+            const removed = removeFeedbackQueueItem(inFlightId);
+            if (removed &&
+                settingsFeedbackMessage instanceof HTMLTextAreaElement &&
+                settingsFeedbackMessage.value.trim() === removed.message) {
                 settingsFeedbackMessage.value = "";
             }
             const suffix = payload.feedbackId ? ` (ID: ${payload.feedbackId})` : "";
-            setFeedbackStatus(`フィードバックを送信しました${suffix}`, "success");
+            const remainCount = feedbackQueue.length;
+            const remainLabel = remainCount > 0 ? ` 残り${remainCount}件を再送待ちです。` : "";
+            setFeedbackStatus(`フィードバックを送信しました${suffix}${remainLabel}`, "success");
+            scheduleFeedbackFlush(40);
             return;
         }
-        const message = ((_a = payload === null || payload === void 0 ? void 0 : payload.error) === null || _a === void 0 ? void 0 : _a.message) && payload.error.message.trim()
+        const message = ((_b = payload === null || payload === void 0 ? void 0 : payload.error) === null || _b === void 0 ? void 0 : _b.message) && payload.error.message.trim()
             ? payload.error.message.trim()
             : "フィードバック送信に失敗しました。";
+        if (inFlightItem) {
+            markFeedbackRetry(inFlightItem, `${message} 再送キューに保存しました。`);
+            return;
+        }
         setFeedbackStatus(message, "error");
     };
     const setEditorAlignEnvEnabled = (enabled) => {
@@ -676,18 +1185,81 @@ export const initSettingsUi = (context, deps) => {
         saveEditorPdfViewerModeState();
         updateEditorPdfViewerModeUI();
     };
+    const readUpdateLastAutoCheckAt = () => {
+        try {
+            const raw = localStorage.getItem(updateLastAutoCheckAtKey);
+            if (!raw) {
+                return 0;
+            }
+            const parsed = Number.parseInt(raw, 10);
+            if (!Number.isFinite(parsed) || parsed <= 0) {
+                return 0;
+            }
+            return parsed;
+        }
+        catch {
+            return 0;
+        }
+    };
+    const markUpdateAutoCheckAt = (timestamp) => {
+        if (!Number.isFinite(timestamp) || timestamp <= 0) {
+            return;
+        }
+        try {
+            localStorage.setItem(updateLastAutoCheckAtKey, String(Math.round(timestamp)));
+        }
+        catch {
+            // ignore storage failures
+        }
+    };
+    const maybeRequestPlatformUpdateCheck = (force = false) => {
+        deps.postToNative({ type: "update:status:get" }, true);
+        if (force) {
+            markUpdateAutoCheckAt(Date.now());
+            updateAutoCheckStarted = true;
+            deps.postToNative({ type: "update:check", force: true }, true);
+            return;
+        }
+        if (!updateAutoCheckStarted) {
+            updateAutoCheckStarted = true;
+            markUpdateAutoCheckAt(Date.now());
+            deps.postToNative({ type: "update:check", force: false, source: "background" }, true);
+            return;
+        }
+        const now = Date.now();
+        const last = readUpdateLastAutoCheckAt();
+        if (now - last < updateAutoCheckIntervalMs) {
+            return;
+        }
+        markUpdateAutoCheckAt(now);
+        deps.postToNative({ type: "update:check", force: false, source: "background" }, true);
+    };
     const loadStartupSettings = () => {
         loadEditorAutoSynctexBuildState();
         loadEditorReverseSynctexState();
         loadEditorGhostCompletionState();
         loadEditorGhostCompletionConfig();
         loadEditorPdfViewerModeState();
+        loadFeedbackQueue();
+        feedbackIncludeDiagnostics = readFeedbackIncludeDiagnosticsState();
+        updateFeedbackIncludeDiagnosticsUi();
+        errorReportingEnabled = readErrorReportingEnabledState();
+        updateErrorReportingUi();
+        syncErrorReportingEnabled();
+        if (feedbackQueue.length > 0) {
+            scheduleFeedbackFlush(200);
+        }
+        checkEnvironmentStatus();
+        deps.postToNative({ type: "platform:state:get" }, true);
+        maybeRequestPlatformUpdateCheck(false);
+        updateRuntimeOnboardingUi();
     };
     const loadWorkspaceSettings = () => {
         loadStartupSettings();
         loadEditorAlignEnvState();
         loadEditorFormatSettings();
         buildProfilesUi.render();
+        updateRuntimeOnboardingUi();
     };
     const getSettingsSnapshot = () => ({
         compileEngine: localStorage.getItem(compileEngineKey) || "lualatex",
@@ -869,17 +1441,24 @@ export const initSettingsUi = (context, deps) => {
     }
     if (settingsUpdateCheck instanceof HTMLButtonElement) {
         settingsUpdateCheck.addEventListener("click", () => {
-            deps.postToNative({ type: "update:check", force: true }, true);
+            maybeRequestPlatformUpdateCheck(true);
         });
     }
-    if (settingsUpdateDownload instanceof HTMLButtonElement) {
-        settingsUpdateDownload.addEventListener("click", () => {
-            deps.postToNative({ type: "update:download" }, true);
-        });
-    }
-    if (settingsUpdateInstall instanceof HTMLButtonElement) {
-        settingsUpdateInstall.addEventListener("click", () => {
-            deps.postToNative({ type: "update:install" }, true);
+    if (settingsUpdateApply instanceof HTMLButtonElement) {
+        settingsUpdateApply.addEventListener("click", () => {
+            var _a;
+            const phase = (_a = platformUpdateStatus === null || platformUpdateStatus === void 0 ? void 0 : platformUpdateStatus.phase) !== null && _a !== void 0 ? _a : "idle";
+            const hasDownloadedInstaller = Boolean(platformUpdateStatus === null || platformUpdateStatus === void 0 ? void 0 : platformUpdateStatus.downloadedPath);
+            if (phase === "downloaded" || hasDownloadedInstaller) {
+                deps.postToNative({ type: "update:install", openFallbackOnError: true }, true);
+                return;
+            }
+            deps.postToNative({
+                type: "update:download",
+                forceCheck: true,
+                autoInstall: true,
+                openFallbackOnError: true,
+            }, true);
         });
     }
     if (settingsUpdateOpen instanceof HTMLButtonElement) {
@@ -887,6 +1466,35 @@ export const initSettingsUi = (context, deps) => {
             var _a, _b;
             const fallbackUrl = (_b = (_a = platformUpdate === null || platformUpdate === void 0 ? void 0 : platformUpdate.artifactUrl) !== null && _a !== void 0 ? _a : platformUpdate === null || platformUpdate === void 0 ? void 0 : platformUpdate.notesUrl) !== null && _b !== void 0 ? _b : TEX64_LINKS.download;
             openExternalUrl(fallbackUrl);
+        });
+    }
+    if (settingsAuthLogout instanceof HTMLButtonElement) {
+        settingsAuthLogout.addEventListener("click", () => {
+            deps.postToNative({ type: "auth:signout" });
+        });
+    }
+    if (settingsRuntimeOpenInstallDocs instanceof HTMLButtonElement) {
+        settingsRuntimeOpenInstallDocs.addEventListener("click", () => {
+            openExternalUrl(TEX64_LINKS.docsInstallMac);
+        });
+    }
+    if (settingsRuntimeOpenGettingStarted instanceof HTMLButtonElement) {
+        settingsRuntimeOpenGettingStarted.addEventListener("click", () => {
+            openExternalUrl(TEX64_LINKS.docsGettingStarted);
+        });
+    }
+    if (settingsRuntimeOpenTexDocs instanceof HTMLButtonElement) {
+        settingsRuntimeOpenTexDocs.addEventListener("click", () => {
+            openExternalUrl(TEX64_LINKS.docsTexDistribution);
+        });
+    }
+    if (settingsRuntimeRunFirstBuild instanceof HTMLButtonElement) {
+        settingsRuntimeRunFirstBuild.addEventListener("click", () => {
+            var _a;
+            if (settingsRuntimeRunFirstBuild.disabled) {
+                return;
+            }
+            (_a = deps.onRequestFirstBuild) === null || _a === void 0 ? void 0 : _a.call(deps);
         });
     }
     const settingsLinkEntries = [
@@ -919,8 +1527,31 @@ export const initSettingsUi = (context, deps) => {
             }
         });
     }
+    if (settingsFeedbackIncludeDiagnostics instanceof HTMLInputElement) {
+        settingsFeedbackIncludeDiagnostics.addEventListener("change", () => {
+            feedbackIncludeDiagnostics = settingsFeedbackIncludeDiagnostics.checked;
+            saveFeedbackIncludeDiagnosticsState();
+            updateFeedbackIncludeDiagnosticsUi();
+        });
+    }
+    if (settingsErrorReportingEnabled instanceof HTMLInputElement) {
+        settingsErrorReportingEnabled.addEventListener("change", () => {
+            errorReportingEnabled = settingsErrorReportingEnabled.checked;
+            saveErrorReportingEnabledState();
+            updateErrorReportingUi();
+            syncErrorReportingEnabled();
+        });
+    }
+    window.addEventListener("online", () => {
+        scheduleFeedbackFlush(120);
+    });
     updateFeedbackSendState();
     setFeedbackStatus("");
+    updateFeedbackIncludeDiagnosticsUi();
+    updateErrorReportingUi();
+    updatePlatformAuthUi();
+    updateRuntimeSetupUi();
+    updateRuntimeOnboardingUi();
     updatePlatformUpdateUi();
     return {
         getEditorAlignEnvEnabled: () => editorAlignEnvEnabled,
@@ -937,11 +1568,15 @@ export const initSettingsUi = (context, deps) => {
         applySettingsPatch,
         checkEnvironmentStatus,
         updateEnvStatus,
+        handleEnvInstallStart,
+        handleEnvInstallResult,
         refreshCompileEngine: updateEngineUI,
         handlePlatformFeedback,
+        handlePlatformAuth,
         handlePlatformUpdate,
         handlePlatformUpdateStatus,
         openSettingsPage: (pageId) => setSettingsPage(pageId),
+        getRuntimeStatusSummary: () => runtimeStatusSummary ? { ...runtimeStatusSummary } : null,
         loadStartupSettings,
         loadWorkspaceSettings,
     };

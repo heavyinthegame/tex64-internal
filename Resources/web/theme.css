@@ -216,12 +216,62 @@ body.has-launcher .app {
   display: none;
 }
 
-/* Template section (hidden) */
-.launcher-template,
-.launcher-label,
-.launcher-toggle,
+/* Template section */
+.launcher-template {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.launcher-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.launcher-toggle {
+  display: flex;
+  padding: 2px;
+  gap: 2px;
+  border-radius: 8px;
+  border: 1px solid var(--panel-border);
+  background: var(--panel);
+}
+
 .launcher-template-button {
-  display: none;
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--text-soft);
+  font-size: 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.launcher-template-button:hover {
+  color: var(--text);
+  background: var(--panel-strong);
+}
+
+.launcher-template-button.is-active {
+  color: var(--text);
+  background: var(--accent-soft);
+}
+
+.launcher-status {
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--danger-faint);
+  border: 1px solid var(--danger-border);
+  color: var(--danger-text);
 }
 
 /* Action buttons - vertical layout */
@@ -345,6 +395,50 @@ body.has-launcher .app {
   overflow-y: auto;
   flex: 1;
   min-height: 0;
+}
+
+.launcher-recent-row {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.launcher-recent-row .launcher-recent-item {
+  flex: 1;
+  min-width: 0;
+}
+
+.launcher-recent-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  min-width: 34px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+  opacity: 0.55;
+  flex-shrink: 0;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.launcher-recent-row:hover .launcher-recent-remove,
+.launcher-recent-row:focus-within .launcher-recent-remove {
+  opacity: 1;
+}
+
+.launcher-recent-remove:hover {
+  background: var(--panel);
+  color: var(--danger-text);
+}
+
+.launcher-recent-remove:active {
+  background: var(--panel-strong);
 }
 
 .launcher-recent-item {
@@ -1601,6 +1695,13 @@ math-field.block-math-field::placeholder {
   overflow: hidden;
 }
 
+.settings-nav-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .settings-nav-item::before {
   content: "";
   position: absolute;
@@ -1631,6 +1732,26 @@ math-field.block-math-field::placeholder {
   font-weight: 600;
   color: var(--text);
   transition: color 0.15s ease;
+}
+
+.settings-nav-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid rgba(248, 81, 73, 0.35);
+  background: rgba(248, 81, 73, 0.16);
+  color: var(--danger-text);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+.settings-nav-item.has-alert {
+  border-color: rgba(248, 81, 73, 0.26);
+  background: rgba(248, 81, 73, 0.08);
 }
 
 .settings-nav-item:hover .settings-nav-title {
@@ -1895,10 +2016,25 @@ math-field.block-math-field::placeholder {
   background: rgba(125, 211, 139, 0.08);
 }
 
+.settings-help-text.is-warning {
+  color: #ffd38a;
+  border-color: rgba(255, 211, 138, 0.35);
+  background: rgba(255, 211, 138, 0.08);
+}
+
 .settings-help-text.is-error {
   color: #ff9b9b;
   border-color: rgba(255, 155, 155, 0.35);
   background: rgba(255, 155, 155, 0.08);
+}
+
+.settings-runtime-setup-status {
+  font-weight: 500;
+}
+
+.settings-runtime-onboarding {
+  font-weight: 500;
+  margin-top: 10px;
 }
 
 /* Settings Subsection */
@@ -4114,6 +4250,58 @@ body.has-editor .editor-group:not(.is-empty) .editor-placeholder {
   white-space: nowrap;
   letter-spacing: 0.01em;
 }
+.ai-topbar-auth.panel-button {
+  min-height: 26px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 1;
+}
+.ai-usage-meter {
+  --ai-usage-pct: 0;
+  --ai-usage-fg: rgba(99, 102, 241, 0.95);
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  position: relative;
+  flex-shrink: 0;
+  cursor: default;
+  background: conic-gradient(
+    var(--ai-usage-fg) calc(var(--ai-usage-pct) * 1%),
+    rgba(255, 255, 255, 0.1) 0
+  );
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.ai-usage-meter::before {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: inherit;
+  background: rgba(8, 12, 18, 0.92);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+.ai-usage-meter:hover {
+  transform: translateY(-1px);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1), 0 10px 24px rgba(0, 0, 0, 0.35);
+}
+.ai-usage-meter.is-warn {
+  --ai-usage-fg: rgba(245, 158, 11, 0.95);
+}
+.ai-usage-meter.is-critical {
+  --ai-usage-fg: rgba(239, 68, 68, 0.95);
+}
+.ai-usage-meter-text {
+  position: relative;
+  z-index: 1;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  color: rgba(226, 232, 240, 0.92);
+  letter-spacing: -0.02em;
+}
 .ai-icon-btn {
   width: 28px;
   height: 28px;
@@ -4696,6 +4884,12 @@ body.has-editor .editor-group:not(.is-empty) .editor-placeholder {
 .ai-status:empty {
   display: none;
 }
+.ai-status.ai-status--actions-only {
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
 .ai-status-line {
   font-size: 12px;
   font-weight: 600;
@@ -4712,6 +4906,9 @@ body.has-editor .editor-group:not(.is-empty) .editor-placeholder {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
+}
+.ai-status.ai-status--actions-only .ai-status-actions {
+  margin-top: 0;
 }
 .ai-status-action {
   border: 1px solid rgba(148, 163, 184, 0.38);

@@ -21,6 +21,7 @@ import {
 } from "./input-ui-math-field.js";
 import {
   normalizeMatrixSyntax,
+  restoreUnsupportedEnvBegins,
   shouldWrapAligned,
   stripEmptyAlignedRows,
   unwrapAligned,
@@ -43,6 +44,11 @@ import {
   saveMathWysiwygAutoSuggest,
   saveMathWysiwygPacks,
 } from "./math-wysiwyg-settings.js";
+import {
+  decodeMathAuxCommands,
+  encodeMathAuxCommands,
+  encodeMathAuxCommandsWithCursor,
+} from "./math-aux-command-escape.js";
 
 export type BlockInputApi = {
   getActiveBlockType: () => BlockType;
@@ -86,27 +92,28 @@ export const initBlockInputUi = (
     blockFormatButton,
     blockFormatMenu,
     blockFormatOptions,
-    blockSuggestButton,
     blocksPanelBody,
   } = context.dom;
 
   type BlockSettingsPage = "menu" | "insert-format" | "suggestions";
 
   const { moveMathFieldPlaceholder } = createPlaceholderNavigator();
+  const normalizeAuxCommandsForOutput = (value: string) =>
+    decodeMathAuxCommands(encodeMathAuxCommands(value));
 
   const normalizeMathValueForOutput = (value: string) => {
-    const resolved = mathFieldWrapped ? unwrapAligned(value).value : value;
-    return normalizeMatrixSyntax(resolved);
+    const decoded = normalizeAuxCommandsForOutput(value);
+    const resolved = mathFieldWrapped ? unwrapAligned(decoded).value : decoded;
+    const restored = restoreUnsupportedEnvBegins(resolved);
+    return normalizeMatrixSyntax(restored);
   };
 
   const prepareMathValueForField = (value: string) => {
     if (!value) {
       return value;
     }
-    if (!shouldWrapAligned(value)) {
-      return value;
-    }
-    return wrapAligned(value);
+    const wrapped = shouldWrapAligned(value) ? wrapAligned(value) : value;
+    return encodeMathAuxCommands(wrapped);
   };
 
   let activeBlockType: BlockType = "math";
@@ -116,7 +123,6 @@ export const initBlockInputUi = (
   let mathFieldWrapped = false;
   let mathKeyboardVisibilityHandler = () => {};
   let mathWysiwygApi: MathWysiwygApi | null = null;
-  let openMatrixOpsPaletteForSuggestButton: (() => boolean) | null = null;
   let globalWysiwygKeydownBound = false;
   const attachedMathInputListeners = new WeakSet<HTMLElement>();
   const TEXTAREA_MATHFIELD_SHIM = Symbol("tex64.textarea-mathfield-shim");
@@ -139,6 +145,7 @@ export const initBlockInputUi = (
   );
   const STYLE_WRAPPER_TEMPLATE_RE =
     /^\\(?:mathbb|mathcal|mathfrak|mathsf|mathrm|mathbf|mathit|mathtt|operatorname)\{#\?\}$/;
+  type BackslashHandledEvent = KeyboardEvent & { __tex64BackslashHandled?: boolean };
   const isPlainBackslashInput = (event: KeyboardEvent) => {
     if (event.metaKey || event.ctrlKey || event.altKey) {
       return false;
@@ -154,6 +161,11 @@ export const initBlockInputUi = (
     if (!isPlainBackslashInput(event)) {
       return false;
     }
+    const tagged = event as BackslashHandledEvent;
+    if (tagged.__tex64BackslashHandled) {
+      return true;
+    }
+    tagged.__tex64BackslashHandled = true;
     event.preventDefault();
     event.stopImmediatePropagation();
     const opened = Boolean(mathWysiwygApi?.openExplicitSuggestions());
@@ -426,7 +438,6 @@ export const initBlockInputUi = (
   const setMathInputElement = (element: HTMLElement | null) => {
     mathInput = element;
     mathFieldWrapped = false;
-    openMatrixOpsPaletteForSuggestButton = null;
     if (!mathInput) {
       return;
     }
@@ -472,26 +483,27 @@ export const initBlockInputUi = (
       const rawValue = readMathFieldValue(
         mathInput as { getValue?: (format?: string) => unknown; value?: unknown }
       );
+      const decodedValue = normalizeAuxCommandsForOutput(rawValue);
       if (mathFieldWrapped) {
-        const { value: unwrapped, didUnwrap } = unwrapAligned(rawValue);
+        const { value: unwrapped, didUnwrap } = unwrapAligned(decodedValue);
         if (didUnwrap) {
           currentMathValue = unwrapped;
           return unwrapped;
         }
         mathFieldWrapped = false;
       }
-      currentMathValue = rawValue;
-      return rawValue;
+      currentMathValue = decodedValue;
+      return decodedValue;
     }
 
     if (mathInput instanceof HTMLTextAreaElement) {
       mathFieldWrapped = false;
-      currentMathValue = mathInput.value;
+      currentMathValue = normalizeAuxCommandsForOutput(mathInput.value);
       return currentMathValue;
     }
     mathFieldWrapped = false;
     const value = (mathInput as { value?: string }).value;
-    return typeof value === "string" ? value : "";
+    return typeof value === "string" ? normalizeAuxCommandsForOutput(value) : "";
   };
 
   const setMathInputValue = (value: string) => {
@@ -642,13 +654,49 @@ export const initBlockInputUi = (
 
     let mathFieldNormalizing = false;
 
-    const syncMathFieldValue = () => {
+    const syncMathFieldValue = (event?: Event) => {
       if (mathFieldNormalizing) {
         return;
       }
-      const rawValue = readMathFieldValue(
+      let rawValue = readMathFieldValue(
         mathfield as { getValue?: (format?: string) => unknown; value?: unknown }
       );
+      const finalizeBare = event?.type === "change";
+      if (finalizeBare) {
+        const escapedValue = encodeMathAuxCommands(rawValue);
+        if (escapedValue !== rawValue) {
+          mathFieldNormalizing = true;
+          writeMathFieldValue(
+            mathfield as { setValue?: (value: string) => void; value?: string },
+            escapedValue
+          );
+          rawValue = escapedValue;
+          mathFieldNormalizing = false;
+        }
+      } else {
+        const mathfieldApi = mathfield as MathFieldPlaceholderApi;
+        const selection = getMathFieldSelectionRange(mathfieldApi);
+        const cursorIndex = offsetToIndex(mathfieldApi, selection.end);
+        const roundtripOffset = indexToOffset(mathfieldApi, cursorIndex);
+        const cursorMappingReliable = Math.abs(roundtripOffset - selection.end) <= 1;
+        const escaped = encodeMathAuxCommandsWithCursor(rawValue, cursorIndex, {
+          deferBare: !cursorMappingReliable,
+          deferCommandArgs: !cursorMappingReliable,
+        });
+        if (escaped.changed) {
+          mathFieldNormalizing = true;
+          writeMathFieldValue(
+            mathfield as { setValue?: (value: string) => void; value?: string },
+            escaped.value
+          );
+          const nextOffset = cursorMappingReliable
+            ? indexToOffset(mathfieldApi, escaped.cursorIndex)
+            : selection.end;
+          setSelectionRange(mathfieldApi, nextOffset, nextOffset);
+          rawValue = escaped.value;
+          mathFieldNormalizing = false;
+        }
+      }
       if (mathFieldWrapped) {
         const { value: unwrapped, didUnwrap } = unwrapAligned(rawValue);
         if (didUnwrap) {
@@ -659,12 +707,12 @@ export const initBlockInputUi = (
               mathfield as { setValue?: (value: string) => void; value?: string },
               wrapAligned(trimmed)
             );
-            currentMathValue = trimmed;
+            currentMathValue = normalizeAuxCommandsForOutput(trimmed);
             mathFieldWrapped = true;
             mathFieldNormalizing = false;
             return;
           }
-          currentMathValue = unwrapped;
+          currentMathValue = normalizeAuxCommandsForOutput(unwrapped);
           return;
         }
         mathFieldWrapped = false;
@@ -682,12 +730,12 @@ export const initBlockInputUi = (
         } else {
           mathfieldApi.position = 0;
         }
-        currentMathValue = rawValue;
+        currentMathValue = normalizeAuxCommandsForOutput(rawValue);
         mathFieldWrapped = true;
         mathFieldNormalizing = false;
         return;
       }
-      currentMathValue = rawValue;
+      currentMathValue = normalizeAuxCommandsForOutput(rawValue);
     };
     mathfield.addEventListener("input", syncMathFieldValue);
     mathfield.addEventListener("change", syncMathFieldValue);
@@ -855,41 +903,151 @@ export const initBlockInputUi = (
     };
 
     const splitRows = (body: string) => {
+      const isEscapedAt = (text: string, index: number) => {
+        let count = 0;
+        for (let i = index - 1; i >= 0 && text[i] === "\\"; i -= 1) {
+          count += 1;
+        }
+        return count % 2 === 1;
+      };
+      const readEnvironmentTokenAt = (text: string, index: number) => {
+        if (text[index] !== "\\") {
+          return null;
+        }
+        const match = /^\\(begin|end)\{([A-Za-z*]+)\}/.exec(text.slice(index));
+        if (!match) {
+          return null;
+        }
+        return {
+          kind: match[1] as "begin" | "end",
+          name: match[2],
+          length: match[0].length,
+        };
+      };
+      const state = {
+        braceDepth: 0,
+        bracketDepth: 0,
+        envStack: [] as string[],
+      };
+      const isTopLevel = () =>
+        state.braceDepth === 0 &&
+        state.bracketDepth === 0 &&
+        state.envStack.length === 0;
+      const consumeStructuralToken = (text: string, index: number) => {
+        const envToken = readEnvironmentTokenAt(text, index);
+        if (envToken) {
+          if (envToken.kind === "begin") {
+            state.envStack.push(envToken.name);
+          } else {
+            for (let i = state.envStack.length - 1; i >= 0; i -= 1) {
+              if (state.envStack[i] !== envToken.name) {
+                continue;
+              }
+              state.envStack.splice(i, 1);
+              break;
+            }
+          }
+          return index + envToken.length - 1;
+        }
+        const ch = text[index];
+        if (ch === "{" && !isEscapedAt(text, index)) {
+          state.braceDepth += 1;
+        } else if (ch === "}" && !isEscapedAt(text, index)) {
+          state.braceDepth = Math.max(0, state.braceDepth - 1);
+        } else if (ch === "[" && !isEscapedAt(text, index)) {
+          state.bracketDepth += 1;
+        } else if (ch === "]" && !isEscapedAt(text, index)) {
+          state.bracketDepth = Math.max(0, state.bracketDepth - 1);
+        }
+        return index;
+      };
+
       const rows: Array<{ text: string; start: number; end: number }> = [];
-      let depth = 0;
       let rowStart = 0;
       for (let i = 0; i < body.length; i += 1) {
         const ch = body[i];
-        if (ch === "{") {
-          depth += 1;
-        } else if (ch === "}") {
-          depth = Math.max(0, depth - 1);
-        }
-        if (ch === "\\" && body[i + 1] === "\\" && depth === 0) {
+        if (ch === "\\" && body[i + 1] === "\\" && !isEscapedAt(body, i) && isTopLevel()) {
           rows.push({ text: body.slice(rowStart, i), start: rowStart, end: i });
           i += 1;
           rowStart = i + 1;
+          continue;
         }
+        i = consumeStructuralToken(body, i);
       }
       rows.push({ text: body.slice(rowStart), start: rowStart, end: body.length });
       return rows;
     };
 
     const splitCells = (rowText: string) => {
+      const isEscapedAt = (text: string, index: number) => {
+        let count = 0;
+        for (let i = index - 1; i >= 0 && text[i] === "\\"; i -= 1) {
+          count += 1;
+        }
+        return count % 2 === 1;
+      };
+      const readEnvironmentTokenAt = (text: string, index: number) => {
+        if (text[index] !== "\\") {
+          return null;
+        }
+        const match = /^\\(begin|end)\{([A-Za-z*]+)\}/.exec(text.slice(index));
+        if (!match) {
+          return null;
+        }
+        return {
+          kind: match[1] as "begin" | "end",
+          name: match[2],
+          length: match[0].length,
+        };
+      };
+      const state = {
+        braceDepth: 0,
+        bracketDepth: 0,
+        envStack: [] as string[],
+      };
+      const isTopLevel = () =>
+        state.braceDepth === 0 &&
+        state.bracketDepth === 0 &&
+        state.envStack.length === 0;
+      const consumeStructuralToken = (text: string, index: number) => {
+        const envToken = readEnvironmentTokenAt(text, index);
+        if (envToken) {
+          if (envToken.kind === "begin") {
+            state.envStack.push(envToken.name);
+          } else {
+            for (let i = state.envStack.length - 1; i >= 0; i -= 1) {
+              if (state.envStack[i] !== envToken.name) {
+                continue;
+              }
+              state.envStack.splice(i, 1);
+              break;
+            }
+          }
+          return index + envToken.length - 1;
+        }
+        const ch = text[index];
+        if (ch === "{" && !isEscapedAt(text, index)) {
+          state.braceDepth += 1;
+        } else if (ch === "}" && !isEscapedAt(text, index)) {
+          state.braceDepth = Math.max(0, state.braceDepth - 1);
+        } else if (ch === "[" && !isEscapedAt(text, index)) {
+          state.bracketDepth += 1;
+        } else if (ch === "]" && !isEscapedAt(text, index)) {
+          state.bracketDepth = Math.max(0, state.bracketDepth - 1);
+        }
+        return index;
+      };
+
       const cells: Array<{ text: string; start: number; end: number }> = [];
-      let depth = 0;
       let cellStart = 0;
       for (let i = 0; i < rowText.length; i += 1) {
         const ch = rowText[i];
-        if (ch === "{") {
-          depth += 1;
-        } else if (ch === "}") {
-          depth = Math.max(0, depth - 1);
-        }
-        if (ch === "&" && depth === 0) {
+        if (ch === "&" && !isEscapedAt(rowText, i) && isTopLevel()) {
           cells.push({ text: rowText.slice(cellStart, i), start: cellStart, end: i });
           cellStart = i + 1;
+          continue;
         }
+        i = consumeStructuralToken(rowText, i);
       }
       cells.push({ text: rowText.slice(cellStart), start: cellStart, end: rowText.length });
       return cells;
@@ -1055,6 +1213,23 @@ export const initBlockInputUi = (
     const tryInsertMatrixRow = () => tryApplyMatrixEdit("row");
     const tryInsertMatrixColumn = () => tryApplyMatrixEdit("column");
 
+    const stripPlaceholderAndWhitespace = (value: string) =>
+      value.replace(/\\placeholder\{\}/g, "").replace(/\s+/g, "");
+
+    const extractSingleEnvironmentInner = (value: string) => {
+      const match = value.match(/^\\begin\{([A-Za-z*]+)\}([\s\S]*)\\end\{\1\}$/);
+      return match ? match[2] : value;
+    };
+
+    const isRowInsertionStable = (before: string, after: string) => {
+      const beforeCore = stripPlaceholderAndWhitespace(extractSingleEnvironmentInner(before));
+      const afterCore = stripPlaceholderAndWhitespace(extractSingleEnvironmentInner(after));
+      if (!beforeCore) {
+        return afterCore.length > 0;
+      }
+      return afterCore.includes(beforeCore);
+    };
+
     const openMatrixOpsPalette = () => {
       if (!mathWysiwygApi) {
         return false;
@@ -1097,12 +1272,6 @@ export const initBlockInputUi = (
       ]);
       return true;
     };
-    openMatrixOpsPaletteForSuggestButton = () => {
-      if (mathInput !== mathfield) {
-        return false;
-      }
-      return openMatrixOpsPalette();
-    };
 
     const handleMathFieldKeydown = (event: KeyboardEvent) => {
       if (event.isComposing) {
@@ -1135,18 +1304,42 @@ export const initBlockInputUi = (
         const mathfieldApi = mathfield as {
           executeCommand?: (command: string, ...args: unknown[]) => boolean;
           getValue?: (format?: string) => unknown;
+          setValue?: (value: string, options?: Record<string, unknown>) => void;
         };
         if (!event.metaKey && !event.ctrlKey) {
-          let handled = false;
-          if (typeof mathfieldApi.executeCommand === "function") {
+          let handled = tryInsertMatrixRow();
+          if (!handled && typeof mathfieldApi.executeCommand === "function") {
+            const before = readMathFieldLatex(mathfieldApi, "latex");
             try {
-              handled = Boolean(mathfieldApi.executeCommand("addRowAfter"));
+              const ok = Boolean(mathfieldApi.executeCommand("addRowAfter"));
+              if (ok) {
+                const after = readMathFieldLatex(mathfieldApi, "latex");
+                handled =
+                  typeof before === "string" && typeof after === "string"
+                    ? before !== after && isRowInsertionStable(before, after)
+                    : ok;
+                if (!handled && typeof mathfieldApi.setValue === "function" && typeof before === "string") {
+                  try {
+                    mathfieldApi.setValue(before, { focus: true, feedback: false });
+                  } catch {
+                    // ignore restore failure
+                  }
+                }
+              }
             } catch {
               handled = false;
             }
           }
-          if (!handled) {
-            handled = tryInsertMatrixRow();
+          if (!handled && typeof mathfieldApi.setValue === "function") {
+            const rawValue = readMathFieldLatex(mathfieldApi, "latex");
+            if (typeof rawValue === "string" && shouldWrapAligned(rawValue)) {
+              try {
+                mathfieldApi.setValue(wrapAligned(rawValue), { focus: true, feedback: false });
+                handled = tryInsertMatrixRow();
+              } catch {
+                handled = false;
+              }
+            }
           }
           if (handled) {
             event.preventDefault();
@@ -1193,7 +1386,31 @@ export const initBlockInputUi = (
       if (event.key === "Tab" && !event.metaKey && !event.ctrlKey && !event.altKey) {
         event.preventDefault();
         event.stopImmediatePropagation();
-        moveMathFieldPlaceholder(mathfield, event.shiftKey ? "backward" : "forward");
+        const mathfieldApi = mathfield as {
+          executeCommand?: (command: string, ...args: unknown[]) => boolean;
+        };
+        let handled = false;
+        const beforeSelection = getMathFieldSelectionRange(mathfield as any);
+        if (typeof mathfieldApi.executeCommand === "function") {
+          try {
+            const movedByCommand = Boolean(
+              mathfieldApi.executeCommand(
+                event.shiftKey ? "moveToPreviousPlaceholder" : "moveToNextPlaceholder"
+              )
+            );
+            const afterSelection = getMathFieldSelectionRange(mathfield as any);
+            handled =
+              movedByCommand &&
+              (afterSelection.start !== afterSelection.end ||
+                afterSelection.start !== beforeSelection.start ||
+                afterSelection.end !== beforeSelection.end);
+          } catch {
+            handled = false;
+          }
+        }
+        if (!handled) {
+          moveMathFieldPlaceholder(mathfield, event.shiftKey ? "backward" : "forward");
+        }
         return;
       }
       if (event.defaultPrevented) {
@@ -1491,9 +1708,6 @@ export const initBlockInputUi = (
       }
     }
 
-    // Some single-slot style wrappers (e.g. \mathbb{#?}) can degrade to a one-atom selection
-    // in MathLive when inserted via \placeholder{}, causing the next keystroke to replace
-    // the whole expression. Insert "{}" directly and place the caret inside instead.
     if (
       !scriptKind &&
       !templateKind &&
@@ -1508,15 +1722,32 @@ export const initBlockInputUi = (
           end: offsetToIndex(mathField, selectionOffset.end),
         };
         const selectedText = rawValue.slice(selectionIndex.start, selectionIndex.end);
-        const replacement = key.latex.replace(/#\?/g, selectedText);
+        const seed = selectedText.length > 0 ? selectedText : "\\,";
+        const replacement = key.latex.replace(/#\?/g, seed);
         const nextText =
           rawValue.slice(0, selectionIndex.start) +
           replacement +
           rawValue.slice(selectionIndex.end);
         writeMathFieldValue(mathField, nextText);
-        const cursorIndex = selectionIndex.start + replacement.length - 1;
-        const cursorOffset = indexToOffset(mathField, cursorIndex);
-        setSelectionRange(mathField as MathFieldPlaceholderApi, cursorOffset, cursorOffset);
+
+        const slotPrefix = key.latex.split("#?")[0] ?? "";
+        const slotStartIndex = selectionIndex.start + slotPrefix.length;
+        const slotEndIndex = slotStartIndex + seed.length;
+        const slotStartOffset = indexToOffset(mathField, slotStartIndex);
+        const slotEndOffset = indexToOffset(mathField, slotEndIndex);
+        if (selectedText.length === 0) {
+          setSelectionRange(
+            mathField as MathFieldPlaceholderApi,
+            slotStartOffset,
+            slotEndOffset
+          );
+        } else {
+          setSelectionRange(
+            mathField as MathFieldPlaceholderApi,
+            slotEndOffset,
+            slotEndOffset
+          );
+        }
         mathInput.dispatchEvent(new Event("input", { bubbles: true }));
         return;
       }
@@ -1593,21 +1824,6 @@ export const initBlockInputUi = (
   if (blockCaptureButton instanceof HTMLButtonElement) {
     blockCaptureButton.addEventListener("click", () => {
       deps.onMathCaptureRequest?.();
-    });
-  }
-
-  if (blockSuggestButton instanceof HTMLButtonElement) {
-    blockSuggestButton.addEventListener("click", () => {
-      if (!mathInput) {
-        return;
-      }
-      const opened = Boolean(mathWysiwygApi?.openExplicitSuggestions());
-      const fallbackOpened = opened ? false : Boolean(openMatrixOpsPaletteForSuggestButton?.());
-      if (opened || fallbackOpened) {
-        if (typeof (mathInput as { focus?: () => void }).focus === "function") {
-          (mathInput as { focus?: () => void }).focus?.();
-        }
-      }
     });
   }
 

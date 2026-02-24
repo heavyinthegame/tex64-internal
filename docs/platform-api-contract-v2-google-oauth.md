@@ -12,7 +12,7 @@
 
 ## 1. Base
 
-- API Base URL: `https://tex64.com/v2`
+- API Base URL: `https://tex64.com/api/v2`
 - Web Base URL: `https://tex64.com`
 - 文字コード: UTF-8
 - Content-Type: `application/json`
@@ -88,6 +88,32 @@ Request:
 ```
 
 Response: `accessToken` / `refreshToken` を再発行。
+
+### 2.4 POST `/auth/logout`
+
+Request:
+
+```json
+{
+  "deviceId": "uuid-v4",
+  "allDevices": false
+}
+```
+
+Response:
+
+```json
+{
+  "requestId": "req_...",
+  "status": "ok",
+  "revokedCount": 1
+}
+```
+
+### 2.5 GET `/auth/google/callback`
+
+Google OAuth の redirect URI を `https://tex64.com/api/v2/auth/google/callback` にした場合、
+このエンドポイントが `tex64://oauth/callback` へ `302` で中継する。
 
 ## 3. プランと状態
 
@@ -378,3 +404,20 @@ Response:
 - 表示してよい: `plan`, `limitTokens`, `usedTokens`, `remainingTokens`, `periodEnd`
 - 表示しない: `$1`, `$10`, USD金額、単価
 - 無料機能（編集/ビルド/閲覧等）は常に利用可
+
+## 13. 内部Webhook契約（課金状態反映）
+
+`tex64.com` 側のWebhook処理は、最終的に以下へ反映する。
+
+- `POST /internal/subscription`
+- Header:
+  - `X-Tex64-Admin-Secret`
+  - `X-Tex64-Webhook-Source`（推奨）
+  - `X-Tex64-Event-Id`（推奨）
+
+冪等:
+
+- `source + eventId` を重複キーとして扱う
+- 既処理イベントは `200` + `duplicate=true` を返す
+
+詳細運用は `docs/subscription-webhook-bridge.md` を参照。

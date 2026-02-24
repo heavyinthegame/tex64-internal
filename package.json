@@ -7,11 +7,11 @@
   "main": "electron/main.cjs",
   "scripts": {
     "electron:dev": "electron .",
-    "electron:pack": "npm run -s web:build && electron-builder --dir",
-    "electron:dist": "npm run -s web:build && electron-builder --publish never",
-    "electron:dist:mac": "npm run -s web:build && electron-builder --mac --publish never",
-    "electron:dist:win": "npm run -s web:build && electron-builder --win --publish never",
-    "electron:dist:linux": "npm run -s web:build && electron-builder --linux --publish never",
+    "dist:bootstrap": "node scripts/bootstrap-electron-assets.cjs",
+    "dist:prep": "npm run -s dist:bootstrap && npm run -s legal:notice",
+    "electron:pack": "npm run -s dist:prep && npm run -s web:build && electron-builder --dir",
+    "electron:dist": "npm run -s dist:prep && npm run -s web:build && electron-builder --publish never",
+    "electron:dist:mac": "npm run -s dist:prep && npm run -s web:build && electron-builder --mac --publish never",
     "web:build": "tsc -p web-src/tsconfig.json",
     "test:unit": "node --test tests/unit/*.test.mjs",
     "test:unit:with-build": "npm run -s web:build && npm run -s test:unit",
@@ -22,6 +22,9 @@
     "release:artifact-hash": "node scripts/release-artifact-hash.cjs",
     "release:checksums": "node scripts/release-checksums.cjs",
     "release:update-feed": "node scripts/release-update-feed.cjs",
+    "release:bundle": "node scripts/release-bundle.cjs",
+    "release:mac": "node scripts/release-macos.cjs",
+    "legal:notice": "node scripts/generate-third-party-notices.cjs --lock package-lock.json --out NOTICE.md --project tex64",
     "e2e:completion": "node tests/e2e/completion.e2e.mjs",
     "e2e:ai:input-send": "node tests/e2e/ai.input-send.e2e.mjs",
     "e2e:ai:attachments": "node tests/e2e/ai.attachments.e2e.mjs",
@@ -34,6 +37,7 @@
     "e2e:ai:full": "npm run -s e2e:ai:input-send && npm run -s e2e:ai:functions && npm run -s e2e:ai:autonomous-writing && npm run -s e2e:ai:copilot-workflows",
     "e2e:chapter13": "npm run -s e2e:ai:input-send && npm run -s e2e:ai:attachments && npm run -s e2e:ai:functions && npm run -s e2e:ai",
     "e2e:settings-runtime-env": "node tests/e2e/settings-runtime-env.e2e.mjs",
+    "e2e:runtime-onboarding-build-guard": "node tests/e2e/runtime-onboarding-build-guard.e2e.mjs",
     "e2e:chapter14": "npm run -s e2e:settings-runtime-env && npm run -s e2e:build && npm run -s e2e:clean && npm run -s e2e:formatter && npm run -s e2e:viewer-ops && npm run -s e2e:synctex-controls && npm run -s e2e:math-wysiwyg-boundary",
     "e2e:persistence-surfaces": "node tests/e2e/persistence-surfaces.e2e.mjs",
     "e2e:chapter15": "npm run -s e2e:workspace-model-root && npm run -s e2e:file-tree-ops && npm run -s e2e:math-wysiwyg-boundary && npm run -s e2e:build && npm run -s e2e:launcher-workspace && npm run -s e2e:persistence-surfaces",
@@ -91,6 +95,15 @@
   "build": {
     "appId": "com.wedd.tex64",
     "productName": "TeX64",
+    "icon": "Resources/icons/tex64.png",
+    "protocols": [
+      {
+        "name": "TeX64 URL Scheme",
+        "schemes": [
+          "tex64"
+        ]
+      }
+    ],
     "asarUnpack": [
       "**/*.node",
       "**/*.dll",
@@ -103,6 +116,8 @@
       "electron/**",
       "Resources/**",
       "package.json",
+      "LICENSE",
+      "NOTICE.md",
       "!**/tmp/**",
       "!**/tmp-tesseract/**",
       "!**/test-workspace/**",
@@ -121,21 +136,10 @@
         "zip"
       ],
       "artifactName": "${productName}-${version}-mac-${arch}.${ext}",
-      "identity": null
-    },
-    "win": {
-      "target": [
-        "nsis",
-        "zip"
-      ],
-      "artifactName": "${productName}-${version}-win-${arch}.${ext}"
-    },
-    "linux": {
-      "target": [
-        "AppImage",
-        "deb"
-      ],
-      "artifactName": "${productName}-${version}-linux-${arch}.${ext}"
+      "icon": "Resources/icons/tex64.icns",
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.inherit.plist"
     }
   },
   "devDependencies": {
@@ -149,6 +153,7 @@
     "node-fetch": "^2.6.7",
     "onnxruntime-node": "^1.23.2",
     "pdfjs-dist": "^4.7.76",
+    "pg": "^8.18.0",
     "tesseract.js": "^5.1.1",
     "tr46": "^0.0.3",
     "webidl-conversions": "^3.0.0",

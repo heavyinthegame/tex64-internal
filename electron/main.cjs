@@ -4,7 +4,9 @@ const {
   desktopCapturer,
   dialog,
   ipcMain,
+  safeStorage,
   shell,
+  Notification,
 } = require("electron");
 const fs = require("fs");
 const fsp = require("fs/promises");
@@ -35,7 +37,11 @@ const e2eUserDataPath =
   typeof process.env.TEX64_E2E_USERDATA === "string"
     ? process.env.TEX64_E2E_USERDATA.trim()
     : "";
-const e2eHeadless = process.env.TEX64_E2E_HEADLESS === "1";
+const isE2EContext =
+  process.env.TEX64_E2E === "1" ||
+  (typeof e2eUserDataPath === "string" && e2eUserDataPath.length > 0);
+const e2eHeadless =
+  isE2EContext && process.env.TEX64_E2E_FORCE_HEADLESS !== "0";
 if (e2eUserDataPath) {
   app.setPath("userData", path.resolve(e2eUserDataPath));
 }
@@ -149,6 +155,11 @@ const getPlatformAccessService = () => {
   if (!platformAccessService) {
     platformAccessService = new PlatformAccessService({
       userDataPath: app.getPath("userData"),
+      strictProduction: app.isPackaged === true,
+      allowDirectOAuthCallbackAuthUrl: app.isPackaged !== true && isE2EContext,
+      isEncryptionAvailable: () => safeStorage.isEncryptionAvailable(),
+      encryptString: (value) => safeStorage.encryptString(value),
+      decryptString: (value) => safeStorage.decryptString(value),
     });
   }
   return platformAccessService;
@@ -196,6 +207,7 @@ const buildHandlers = createBuildHandlers({
   fs,
   path,
   buildService,
+  envService,
   formatterService,
   workspace,
   pdfWindowManager,
@@ -218,15 +230,18 @@ const miscHandlers = createMiscHandlers({
   ensureUserSettings,
   workspace,
   shell,
+  Notification,
   sendToRenderer,
   blocksStore,
   apiUsageService: getApiUsageService(),
   platformService: getPlatformAccessService(),
+  ensureProtocolClient: registerProtocolClient,
   runtimeInfo: {
     version: app.getVersion(),
     platform: process.platform,
     arch: process.arch,
     userDataPath: app.getPath("userData"),
+    packaged: app.isPackaged === true,
   },
 });
 
@@ -237,13 +252,184 @@ const agentHandlers = createAgentHandlers({
   platformService: getPlatformAccessService(),
 });
 
+const MAIN_ERROR_DEDUP_WINDOW_MS = 30_000;
+const MAIN_ERROR_DEDUP_LIMIT = 200;
+const mainErrorFingerprintMap = new Map();
+let errorReportingEnabled = true;
+
+const clampMainErrorText = (value, maxLength = 4000) => {
+  if (typeof value !== "string") {
+    return "";
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+  if (trimmed.length <= maxLength) {
+    return trimmed;
+  }
+  return trimmed.slice(0, maxLength);
+};
+
+const toMainErrorMessage = (value) => {
+  if (value instanceof Error) {
+    const message = clampMainErrorText(value.message);
+    if (message) {
+      return message;
+    }
+  }
+  if (typeof value === "string") {
+    return clampMainErrorText(value);
+  }
+  if (value == null) {
+    return "Unknown error";
+  }
+  try {
+    return clampMainErrorText(JSON.stringify(value));
+  } catch {
+    return clampMainErrorText(String(value));
+  }
+};
+
+const toMainErrorStack = (value) => {
+  if (value instanceof Error) {
+    const stack = clampMainErrorText(value.stack, 16000);
+    if (stack) {
+      return stack;
+    }
+  }
+  return null;
+};
+
+const shouldReportMainError = (fingerprint) => {
+  const now = Date.now();
+  for (const [key, at] of mainErrorFingerprintMap) {
+    if (!Number.isFinite(at) || now - at > MAIN_ERROR_DEDUP_WINDOW_MS) {
+      mainErrorFingerprintMap.delete(key);
+    }
+  }
+  if (!fingerprint) {
+    return true;
+  }
+  const seenAt = mainErrorFingerprintMap.get(fingerprint);
+  if (Number.isFinite(seenAt) && now - seenAt <= MAIN_ERROR_DEDUP_WINDOW_MS) {
+    return false;
+  }
+  mainErrorFingerprintMap.set(fingerprint, now);
+  if (mainErrorFingerprintMap.size > MAIN_ERROR_DEDUP_LIMIT) {
+    const first = mainErrorFingerprintMap.keys().next();
+    if (first && !first.done) {
+      mainErrorFingerprintMap.delete(first.value);
+    }
+  }
+  return true;
+};
+
+const reportMainProcessError = (kind, value, diagnostics = {}) => {
+  if (!errorReportingEnabled) {
+    return;
+  }
+  const message = toMainErrorMessage(value);
+  if (!message) {
+    return;
+  }
+  const stack = toMainErrorStack(value);
+  const fingerprint = `${kind}::${message}::${stack || ""}`;
+  if (!shouldReportMainError(fingerprint)) {
+    return;
+  }
+  Promise.resolve(
+    miscHandlers.handleErrorReportSend({
+      report: {
+        kind,
+        source: "app-main",
+        message,
+        stack: stack || undefined,
+        diagnostics: {
+          processPlatform: process.platform,
+          processArch: process.arch,
+          ...diagnostics,
+        },
+      },
+    })
+  ).catch(() => {});
+};
+
+process.on("uncaughtExceptionMonitor", (error, origin) => {
+  reportMainProcessError("main_uncaught_exception", error, {
+    origin: typeof origin === "string" ? origin : null,
+  });
+});
+
+process.on("unhandledRejection", (reason) => {
+  reportMainProcessError("main_unhandled_rejection", reason, {});
+});
+
+const focusMainWindow = () => {
+  if (!state.mainWindow) {
+    return;
+  }
+  if (state.mainWindow.isMinimized()) {
+    state.mainWindow.restore();
+  }
+  state.mainWindow.focus();
+};
+
+function registerProtocolClient() {
+  if (process.defaultApp && process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient("tex64", process.execPath, [
+      path.resolve(process.argv[1]),
+    ]);
+    return;
+  }
+  app.setAsDefaultProtocolClient("tex64");
+}
+
+const normalizeOAuthPathname = (value) => {
+  const pathname = typeof value === "string" && value ? value : "/";
+  if (pathname === "/") {
+    return "/";
+  }
+  const normalized = pathname.replace(/\/+$/, "");
+  return normalized || "/";
+};
+
+const normalizeOAuthCallbackUrlInput = (value) => {
+  if (typeof value !== "string") {
+    return "";
+  }
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith("\"") && trimmed.endsWith("\"")) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+};
+
 const looksLikeOAuthCallbackUrl = (value) => {
-  if (typeof value !== "string" || !value.trim().startsWith("tex64://")) {
+  const candidate = normalizeOAuthCallbackUrlInput(value);
+  if (!/^tex64:\/\//i.test(candidate)) {
     return false;
   }
   try {
-    const parsed = new URL(value.trim());
-    return parsed.hostname === "oauth" && parsed.pathname === "/callback";
+    const parsed = new URL(candidate);
+    const hostname = parsed.hostname.toLowerCase();
+    const pathname = normalizeOAuthPathname(parsed.pathname || "/");
+    if (hostname === "oauth" && pathname === "/callback") {
+      return true;
+    }
+    if (!hostname && pathname === "/oauth/callback") {
+      return true;
+    }
+    if (hostname === "account" && pathname === "/oauth/callback") {
+      return true;
+    }
+    if (!hostname && pathname === "/account/oauth/callback") {
+      return true;
+    }
+    return false;
   } catch {
     return false;
   }
@@ -252,10 +438,10 @@ const looksLikeOAuthCallbackUrl = (value) => {
 const pendingOAuthCallbackUrls = [];
 
 const queueOAuthCallbackUrl = (value) => {
-  if (!looksLikeOAuthCallbackUrl(value)) {
+  const url = normalizeOAuthCallbackUrlInput(value);
+  if (!looksLikeOAuthCallbackUrl(url)) {
     return;
   }
-  const url = value.trim();
   if (app.isReady()) {
     miscHandlers.handleAuthGoogleCallback(url).catch(() => {});
     return;
@@ -263,14 +449,30 @@ const queueOAuthCallbackUrl = (value) => {
   pendingOAuthCallbackUrls.push(url);
 };
 
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on("second-instance", (_event, argv = []) => {
+    focusMainWindow();
+    argv.forEach((arg) => {
+      queueOAuthCallbackUrl(arg);
+    });
+  });
+}
+
 app.on("open-url", (event, url) => {
   event.preventDefault();
+  focusMainWindow();
   queueOAuthCallbackUrl(url);
 });
 
 app.whenReady().then(() => {
+  if (!hasSingleInstanceLock) {
+    return;
+  }
   createMainWindow();
-  app.setAsDefaultProtocolClient("tex64");
+  registerProtocolClient();
   while (pendingOAuthCallbackUrls.length > 0) {
     const url = pendingOAuthCallbackUrls.shift();
     if (url) {
@@ -280,6 +482,19 @@ app.whenReady().then(() => {
   process.argv.forEach((arg) => {
     queueOAuthCallbackUrl(arg);
   });
+  if (!e2eHeadless) {
+    const triggerUpdateCheck = () => {
+      Promise.resolve(
+        miscHandlers.handleUpdateCheck({ force: false, source: "background" })
+      ).catch(() => {});
+    };
+    setTimeout(() => {
+      triggerUpdateCheck();
+    }, 15_000);
+    setInterval(() => {
+      triggerUpdateCheck();
+    }, 6 * 60 * 60 * 1000);
+  }
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -593,6 +808,10 @@ ipcMain.on("tex64", (_event, message) => {
     miscHandlers.handleAuthGoogleStart();
     return;
   }
+  if (type === "auth:google:cancel") {
+    miscHandlers.handleAuthGoogleCancel();
+    return;
+  }
   if (type === "auth:signout") {
     miscHandlers.handleAuthSignOut();
     return;
@@ -603,6 +822,17 @@ ipcMain.on("tex64", (_event, message) => {
   }
   if (type === "feedback:send") {
     miscHandlers.handleFeedbackSend(message);
+    return;
+  }
+  if (type === "error:reporting:set") {
+    errorReportingEnabled = message?.enabled !== false;
+    return;
+  }
+  if (type === "error:report") {
+    if (!errorReportingEnabled) {
+      return;
+    }
+    miscHandlers.handleErrorReportSend(message);
     return;
   }
   if (type === "api:usage:get") {

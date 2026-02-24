@@ -6,6 +6,11 @@ const { requestGemini } = require("./agent-llm.cjs");
 const FEATURE_CACHE_TTL_MS = 60_000;
 const USAGE_CACHE_TTL_MS = 60_000;
 const TOKEN_REFRESH_LEEWAY_MS = 60_000;
+const OAUTH_PENDING_TTL_MS = 10 * 60_000;
+const SESSION_TOKEN_ENCRYPTION_KIND = "electron-safe-storage-v1";
+const PRODUCTION_PLATFORM_API_BASE_URL = "https://tex64.com/api/v2";
+const PRODUCTION_PLATFORM_WEB_BASE_URL = "https://tex64.com";
+const PRODUCTION_PLATFORM_OAUTH_REDIRECT_URI = "tex64://oauth/callback";
 
 const DEFAULT_STATE = {
   deviceId: null,
@@ -18,6 +23,7 @@ const DEFAULT_STATE = {
 };
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
+const isObject = (value) => Boolean(value && typeof value === "object" && !Array.isArray(value));
 
 const parseNumber = (value, fallback = 0) => {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -95,6 +101,112 @@ const sanitizeDigestText = (value) => {
     return null;
   }
   return digest;
+};
+
+const normalizePathname = (value) => {
+  const pathname = typeof value === "string" && value ? value : "/";
+  if (pathname === "/") {
+    return "/";
+  }
+  const normalized = pathname.replace(/\/+$/, "");
+  return normalized || "/";
+};
+
+const normalizeOAuthCallbackEndpoint = (value) => {
+  if (typeof value !== "string" || !value.trim()) {
+    return null;
+  }
+  try {
+    const parsed = new URL(value.trim());
+    const protocol = parsed.protocol.toLowerCase();
+    let hostname = parsed.hostname.toLowerCase();
+    let pathname = normalizePathname(parsed.pathname || "/");
+    if (protocol === "tex64:") {
+      const endpoint = `${hostname}${pathname}`;
+      if (
+        endpoint === "account/oauth/callback" ||
+        (!hostname &&
+          (pathname === "/account/oauth/callback" || pathname === "/oauth/callback"))
+      ) {
+        hostname = "oauth";
+        pathname = "/callback";
+      }
+    }
+    return { protocol, hostname, pathname };
+  } catch {
+    return null;
+  }
+};
+
+const isDirectOAuthCallbackUrl = (value) => {
+  const endpoint = normalizeOAuthCallbackEndpoint(value);
+  return Boolean(
+    endpoint &&
+      endpoint.protocol === "tex64:" &&
+      endpoint.hostname === "oauth" &&
+      endpoint.pathname === "/callback"
+  );
+};
+
+const sanitizeOAuthAuthUrl = (value) => {
+  if (typeof value !== "string" || !value.trim()) {
+    return null;
+  }
+  const url = value.trim();
+  if (/^https?:\/\//i.test(url)) {
+    return url;
+  }
+  if (isDirectOAuthCallbackUrl(url)) {
+    return url;
+  }
+  return null;
+};
+
+const isMatchingOAuthCallbackUrl = (actualUrl, expectedRedirectUri) => {
+  const expected = normalizeOAuthCallbackEndpoint(expectedRedirectUri);
+  const actual = normalizeOAuthCallbackEndpoint(actualUrl);
+  if (!expected || !actual) {
+    return false;
+  }
+  return (
+    expected.protocol === actual.protocol &&
+    expected.hostname === actual.hostname &&
+    expected.pathname === actual.pathname
+  );
+};
+
+const parseOAuthParamsFromHash = (hash) => {
+  if (typeof hash !== "string" || !hash) {
+    return new URLSearchParams();
+  }
+  const trimmed = hash.startsWith("#") ? hash.slice(1) : hash;
+  if (!trimmed) {
+    return new URLSearchParams();
+  }
+  const raw = trimmed.startsWith("?") ? trimmed.slice(1) : trimmed;
+  return new URLSearchParams(raw);
+};
+
+const pickOAuthParam = (url, hashParams, key) => {
+  const searchValue = url.searchParams.get(key);
+  if (typeof searchValue === "string" && searchValue.trim()) {
+    return searchValue;
+  }
+  const hashValue = hashParams.get(key);
+  if (typeof hashValue === "string" && hashValue.trim()) {
+    return hashValue;
+  }
+  return null;
+};
+
+const extractOAuthCallbackParams = (url) => {
+  const hashParams = parseOAuthParamsFromHash(url.hash);
+  return {
+    error: pickOAuthParam(url, hashParams, "error"),
+    errorDescription: pickOAuthParam(url, hashParams, "error_description"),
+    code: pickOAuthParam(url, hashParams, "code"),
+    state: pickOAuthParam(url, hashParams, "state"),
+  };
 };
 
 const parseVersionTokens = (value) => {
@@ -179,37 +291,176 @@ class PlatformApiError extends Error {
 
 class PlatformAccessService {
   constructor(options = {}) {
+    this.strictProduction = options.strictProduction === true;
     this.filePath = path.join(
       options.userDataPath || ".",
       "tex64-platform-session.json"
     );
     this.state = null;
     this.apiBaseUrl = sanitizeBaseUrl(
-      options.apiBaseUrl ||
-        process.env.TEX64_PLATFORM_API_BASE_URL ||
-        "https://tex64.com/v2",
-      "https://tex64.com/v2"
+      this.strictProduction
+        ? PRODUCTION_PLATFORM_API_BASE_URL
+        : options.apiBaseUrl ||
+            process.env.TEX64_PLATFORM_API_BASE_URL ||
+            PRODUCTION_PLATFORM_API_BASE_URL,
+      PRODUCTION_PLATFORM_API_BASE_URL
     );
     this.webBaseUrl = sanitizeBaseUrl(
-      options.webBaseUrl || process.env.TEX64_PLATFORM_WEB_BASE_URL || "https://tex64.com",
-      "https://tex64.com"
+      this.strictProduction
+        ? PRODUCTION_PLATFORM_WEB_BASE_URL
+        : options.webBaseUrl ||
+            process.env.TEX64_PLATFORM_WEB_BASE_URL ||
+            PRODUCTION_PLATFORM_WEB_BASE_URL,
+      PRODUCTION_PLATFORM_WEB_BASE_URL
     );
-    this.redirectUri =
-      options.redirectUri ||
-      process.env.TEX64_PLATFORM_OAUTH_REDIRECT_URI ||
-      "tex64://oauth/callback";
-    this.legacyProxyUrl = sanitizeBaseUrl(
-      options.legacyProxyUrl ||
-        process.env.TEX64_AI_PROXY_URL ||
-        "https://tex64.vercel.app/api/ai-chat",
-      "https://tex64.vercel.app/api/ai-chat"
-    );
-    this.bypassEntitlement =
+    this.redirectUri = this.strictProduction
+      ? PRODUCTION_PLATFORM_OAUTH_REDIRECT_URI
+      : options.redirectUri ||
+        process.env.TEX64_PLATFORM_OAUTH_REDIRECT_URI ||
+        PRODUCTION_PLATFORM_OAUTH_REDIRECT_URI;
+    this.allowDirectOAuthCallbackAuthUrl =
+      options.allowDirectOAuthCallbackAuthUrl === true && !this.strictProduction;
+    const legacyProxyFallback = this.strictProduction
+      ? ""
+      : "https://tex64.vercel.app/api/ai-chat";
+    this.legacyProxyUrl = this.strictProduction
+      ? ""
+      : sanitizeBaseUrl(
+          options.legacyProxyUrl ||
+            process.env.TEX64_AI_PROXY_URL ||
+            legacyProxyFallback,
+          legacyProxyFallback
+        );
+    this.encryptString =
+      typeof options.encryptString === "function" ? options.encryptString : null;
+    this.decryptString =
+      typeof options.decryptString === "function" ? options.decryptString : null;
+    this.isEncryptionAvailable =
+      typeof options.isEncryptionAvailable === "function"
+        ? options.isEncryptionAvailable
+        : null;
+    const requestedBypass =
       options.bypassEntitlement === true ||
       process.env.TEX64_AI_BYPASS_ENTITLEMENT === "1" ||
       process.env.TEX64_E2E_HEADLESS === "1" ||
       (typeof process.env.TEX64_E2E_USERDATA === "string" &&
         process.env.TEX64_E2E_USERDATA.trim().length > 0);
+    this.bypassEntitlement = this.strictProduction ? false : requestedBypass;
+  }
+
+  canEncryptSession() {
+    if (!this.encryptString || !this.decryptString || !this.isEncryptionAvailable) {
+      return false;
+    }
+    try {
+      return this.isEncryptionAvailable() === true;
+    } catch {
+      return false;
+    }
+  }
+
+  encryptSessionToken(value) {
+    if (typeof value !== "string" || !value.trim()) {
+      return null;
+    }
+    if (!this.canEncryptSession()) {
+      return value;
+    }
+    try {
+      const encrypted = this.encryptString(value);
+      if (!encrypted || (typeof encrypted !== "string" && !Buffer.isBuffer(encrypted))) {
+        return value;
+      }
+      const encoded = Buffer.isBuffer(encrypted)
+        ? encrypted.toString("base64")
+        : Buffer.from(encrypted, "utf8").toString("base64");
+      return {
+        kind: SESSION_TOKEN_ENCRYPTION_KIND,
+        data: encoded,
+      };
+    } catch {
+      return value;
+    }
+  }
+
+  decryptSessionToken(value) {
+    if (typeof value === "string") {
+      return value.trim() ? value.trim() : null;
+    }
+    if (!isObject(value)) {
+      return null;
+    }
+    if (value.kind !== SESSION_TOKEN_ENCRYPTION_KIND || typeof value.data !== "string") {
+      return null;
+    }
+    if (!this.canEncryptSession()) {
+      return null;
+    }
+    try {
+      const decrypted = this.decryptString(Buffer.from(value.data, "base64"));
+      return typeof decrypted === "string" && decrypted.trim() ? decrypted.trim() : null;
+    } catch {
+      return null;
+    }
+  }
+
+  serializeSession(session) {
+    if (!isObject(session)) {
+      return null;
+    }
+    const next = { ...session };
+    next.accessToken = this.encryptSessionToken(session.accessToken);
+    next.refreshToken = this.encryptSessionToken(session.refreshToken);
+    return next;
+  }
+
+  deserializeSession(session) {
+    if (!isObject(session)) {
+      return null;
+    }
+    const accessToken = this.decryptSessionToken(session.accessToken);
+    if (!accessToken) {
+      return null;
+    }
+    return {
+      ...session,
+      accessToken,
+      refreshToken: this.decryptSessionToken(session.refreshToken),
+    };
+  }
+
+  serializeState(state) {
+    if (!isObject(state)) {
+      return clone(DEFAULT_STATE);
+    }
+    return {
+      ...state,
+      session: this.serializeSession(state.session),
+    };
+  }
+
+  deserializeState(rawState) {
+    const stored = isObject(rawState) ? rawState : {};
+    const oauthPendingRaw = isObject(stored.oauthPending) ? stored.oauthPending : null;
+    const oauthPending =
+      oauthPendingRaw &&
+      typeof oauthPendingRaw.state === "string" &&
+      oauthPendingRaw.state.trim() &&
+      typeof oauthPendingRaw.codeVerifier === "string" &&
+      oauthPendingRaw.codeVerifier.trim()
+        ? {
+            state: oauthPendingRaw.state.trim(),
+            codeVerifier: oauthPendingRaw.codeVerifier.trim(),
+            createdAt: Math.max(0, parseInteger(oauthPendingRaw.createdAt, 0)),
+            authUrl: sanitizeOAuthAuthUrl(oauthPendingRaw.authUrl),
+          }
+        : null;
+    return {
+      ...clone(DEFAULT_STATE),
+      ...stored,
+      oauthPending,
+      session: this.deserializeSession(stored.session),
+    };
   }
 
   async load() {
@@ -220,10 +471,7 @@ class PlatformAccessService {
       .readFile(this.filePath, "utf8")
       .then((content) => JSON.parse(content))
       .catch(() => null);
-    this.state = {
-      ...clone(DEFAULT_STATE),
-      ...(stored && typeof stored === "object" ? stored : {}),
-    };
+    this.state = this.deserializeState(stored);
     return clone(this.state);
   }
 
@@ -231,7 +479,19 @@ class PlatformAccessService {
     if (!this.state) {
       return;
     }
-    await fsp.writeFile(this.filePath, JSON.stringify(this.state, null, 2), "utf8");
+    const serializedState = this.serializeState(this.state);
+    const dirPath = path.dirname(this.filePath);
+    const tempPath = `${this.filePath}.tmp-${process.pid}-${Date.now()}`;
+    const payload = JSON.stringify(serializedState, null, 2);
+    await fsp.mkdir(dirPath, { recursive: true });
+    try {
+      await fsp.writeFile(tempPath, payload, { encoding: "utf8", mode: 0o600 });
+      await fsp.rename(tempPath, this.filePath);
+      await fsp.chmod(this.filePath, 0o600).catch(() => {});
+    } catch (error) {
+      await fsp.unlink(tempPath).catch(() => {});
+      throw error;
+    }
   }
 
   async ensureLoadedState() {
@@ -255,6 +515,59 @@ class PlatformAccessService {
     return state.deviceId;
   }
 
+  resolveOAuthPendingState(state, options = {}) {
+    if (!isObject(state)) {
+      return {
+        pending: null,
+        changed: false,
+        expired: false,
+      };
+    }
+    const now = Date.now();
+    const pending = isObject(state.oauthPending) ? state.oauthPending : null;
+    if (!pending) {
+      if (state.oauthPending !== null) {
+        state.oauthPending = null;
+        return { pending: null, changed: true, expired: false };
+      }
+      return { pending: null, changed: false, expired: false };
+    }
+    const normalized =
+      typeof pending.state === "string" &&
+      pending.state.trim() &&
+      typeof pending.codeVerifier === "string" &&
+      pending.codeVerifier.trim()
+        ? {
+            state: pending.state.trim(),
+            codeVerifier: pending.codeVerifier.trim(),
+            createdAt: Math.max(0, parseInteger(pending.createdAt, 0)),
+            authUrl: sanitizeOAuthAuthUrl(pending.authUrl),
+          }
+        : null;
+    if (!normalized) {
+      state.oauthPending = null;
+      return { pending: null, changed: true, expired: false };
+    }
+    if (!normalized.createdAt) {
+      normalized.createdAt = now;
+    }
+    const expired = now - normalized.createdAt > OAUTH_PENDING_TTL_MS;
+    if (expired && options.allowExpired !== true) {
+      state.oauthPending = null;
+      return { pending: null, changed: true, expired: true };
+    }
+    const changed =
+      !pending ||
+      pending.state !== normalized.state ||
+      pending.codeVerifier !== normalized.codeVerifier ||
+      pending.createdAt !== normalized.createdAt ||
+      pending.authUrl !== normalized.authUrl;
+    if (changed) {
+      state.oauthPending = normalized;
+    }
+    return { pending: normalized, changed, expired: false };
+  }
+
   buildAuthSnapshot() {
     const session = this.state?.session ?? null;
     const user = session?.user && typeof session.user === "object" ? session.user : null;
@@ -274,7 +587,12 @@ class PlatformAccessService {
   }
 
   async getAuthSnapshot() {
-    await this.ensureLoadedState();
+    const state = await this.ensureLoadedState();
+    const resolved = this.resolveOAuthPendingState(state);
+    if (resolved.changed) {
+      this.state = state;
+      await this.save();
+    }
     return this.buildAuthSnapshot();
   }
 
@@ -866,6 +1184,12 @@ class PlatformAccessService {
   async requestAiChat(payload, options = {}) {
     const state = await this.ensureLoadedState();
     if (this.bypassEntitlement && !state.session?.accessToken) {
+      if (!this.legacyProxyUrl) {
+        throw new PlatformApiError(
+          "AI_PROXY_DISABLED",
+          "Legacy AI proxy is disabled in strict production mode."
+        );
+      }
       const response = await requestGemini({
         proxyUrl: this.legacyProxyUrl,
         model: payload?.model,
@@ -892,6 +1216,12 @@ class PlatformAccessService {
   async requestAiCompletion(payload, options = {}) {
     const state = await this.ensureLoadedState();
     if (this.bypassEntitlement && !state.session?.accessToken) {
+      if (!this.legacyProxyUrl) {
+        throw new PlatformApiError(
+          "AI_PROXY_DISABLED",
+          "Legacy AI proxy is disabled in strict production mode."
+        );
+      }
       const response = await requestGemini({
         proxyUrl: this.legacyProxyUrl,
         model: payload?.model,
@@ -1059,6 +1389,42 @@ class PlatformAccessService {
       feedbackId:
         typeof response?.feedbackId === "string" ? response.feedbackId : null,
       status: typeof response?.status === "string" ? response.status : "accepted",
+    };
+  }
+
+  async submitErrorReport(payload, options = {}) {
+    const reportBody =
+      payload && typeof payload === "object" ? { ...payload } : {};
+    const requestBody = {
+      report: reportBody,
+    };
+    const state = await this.ensureLoadedState();
+    const requestUrl = `${this.apiBaseUrl}/internal/error-report`;
+    const headers = {};
+    if (state?.session?.accessToken) {
+      try {
+        const token = await this.refreshAccessToken(false);
+        if (typeof token === "string" && token) {
+          headers.Authorization = `Bearer ${token}`;
+        }
+      } catch {
+        // Ignore auth refresh failures and submit anonymously as fallback.
+      }
+    }
+    const response = await this.requestJson(requestUrl, {
+      method: "POST",
+      headers,
+      body: requestBody,
+      signal: options.signal,
+    });
+    return {
+      requestId:
+        typeof response?.requestId === "string" ? response.requestId : null,
+      feedbackId:
+        typeof response?.feedbackId === "string" ? response.feedbackId : null,
+      status: typeof response?.status === "string" ? response.status : "accepted",
+      storage:
+        typeof response?.storage === "string" ? response.storage : null,
     };
   }
 
@@ -1357,6 +1723,19 @@ class PlatformAccessService {
         state: null,
       };
     }
+    const resolvedPending = this.resolveOAuthPendingState(state);
+    if (resolvedPending.changed) {
+      this.state = state;
+      await this.save();
+    }
+    if (resolvedPending.pending?.authUrl) {
+      return {
+        bypassed: false,
+        authUrl: resolvedPending.pending.authUrl,
+        state: resolvedPending.pending.state,
+        reused: true,
+      };
+    }
     const deviceId = await this.ensureDeviceId();
     const verifier = toBase64Url(crypto.randomBytes(48));
     const challenge = toBase64Url(crypto.createHash("sha256").update(verifier).digest());
@@ -1369,14 +1748,17 @@ class PlatformAccessService {
         codeChallengeMethod: "S256",
       },
     });
-    const authUrl =
-      typeof payload?.authUrl === "string" && payload.authUrl.trim()
-        ? payload.authUrl.trim()
-        : null;
+    const authUrl = sanitizeOAuthAuthUrl(payload?.authUrl);
     const oauthState =
       typeof payload?.state === "string" && payload.state.trim()
         ? payload.state.trim()
         : null;
+    if (authUrl && isDirectOAuthCallbackUrl(authUrl) && !this.allowDirectOAuthCallbackAuthUrl) {
+      throw new PlatformApiError(
+        "AUTH_INVALID_RESPONSE",
+        "OAuth start response contains an invalid authorization URL."
+      );
+    }
     if (!authUrl || !oauthState) {
       throw new PlatformApiError("AUTH_INVALID_RESPONSE", "OAuth start response is invalid.");
     }
@@ -1384,6 +1766,7 @@ class PlatformAccessService {
       state: oauthState,
       codeVerifier: verifier,
       createdAt: Date.now(),
+      authUrl,
     };
     this.state = state;
     await this.save();
@@ -1391,6 +1774,7 @@ class PlatformAccessService {
       bypassed: false,
       authUrl,
       state: oauthState,
+      reused: false,
     };
   }
 
@@ -1399,8 +1783,19 @@ class PlatformAccessService {
       throw new PlatformApiError("OAUTH_INVALID_CALLBACK", "Invalid OAuth callback URL.");
     }
     const state = await this.ensureLoadedState();
-    const pending = state.oauthPending;
+    const resolvedPending = this.resolveOAuthPendingState(state);
+    if (resolvedPending.changed) {
+      this.state = state;
+      await this.save();
+    }
+    const pending = resolvedPending.pending;
     if (!pending) {
+      if (resolvedPending.expired) {
+        throw new PlatformApiError(
+          "OAUTH_PENDING_EXPIRED",
+          "OAuth request expired. Start sign-in again."
+        );
+      }
       throw new PlatformApiError("OAUTH_NO_PENDING", "OAuth request was not started.");
     }
     let url;
@@ -1409,20 +1804,33 @@ class PlatformAccessService {
     } catch {
       throw new PlatformApiError("OAUTH_INVALID_CALLBACK", "Invalid OAuth callback URL.");
     }
-    const errorParam = url.searchParams.get("error");
+    if (!isMatchingOAuthCallbackUrl(callbackUrl, this.redirectUri)) {
+      throw new PlatformApiError(
+        "OAUTH_CALLBACK_MISMATCH",
+        "OAuth callback URL does not match the configured redirect URI."
+      );
+    }
+    const callbackParams = extractOAuthCallbackParams(url);
+    const errorParam = callbackParams.error;
     if (errorParam) {
       state.oauthPending = null;
       this.state = state;
       await this.save();
-      const message = url.searchParams.get("error_description") || errorParam;
+      const message = callbackParams.errorDescription || errorParam;
       throw new PlatformApiError("OAUTH_DENIED", message);
     }
-    const code = url.searchParams.get("code");
-    const oauthState = url.searchParams.get("state");
+    const code = callbackParams.code;
+    const oauthState = callbackParams.state;
     if (!code || !oauthState) {
+      state.oauthPending = null;
+      this.state = state;
+      await this.save();
       throw new PlatformApiError("OAUTH_INVALID_CALLBACK", "Missing OAuth code/state.");
     }
     if (oauthState !== pending.state) {
+      state.oauthPending = null;
+      this.state = state;
+      await this.save();
       throw new PlatformApiError("OAUTH_STATE_MISMATCH", "OAuth state does not match.");
     }
     const exchanged = await this.requestJson(`${this.apiBaseUrl}/auth/google/exchange`, {
@@ -1443,8 +1851,32 @@ class PlatformAccessService {
     return this.buildAuthSnapshot();
   }
 
+  async cancelGoogleAuthPending() {
+    const state = await this.ensureLoadedState();
+    const resolved = this.resolveOAuthPendingState(state, { allowExpired: true });
+    if (resolved.changed || state.oauthPending) {
+      state.oauthPending = null;
+      this.state = state;
+      await this.save();
+    }
+    return this.buildAuthSnapshot();
+  }
+
   async signOut() {
     const state = await this.ensureLoadedState();
+    if (state.session?.accessToken) {
+      try {
+        await this.authorizedRequest("/auth/logout", {
+          method: "POST",
+          body: {
+            deviceId: await this.ensureDeviceId(),
+            allDevices: false,
+          },
+        });
+      } catch {
+        // Ignore remote sign-out failures and clear local session anyway.
+      }
+    }
     state.session = null;
     state.oauthPending = null;
     this.clearCaches();

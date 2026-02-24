@@ -130,6 +130,25 @@ const cleanupStaleElectron = () => {
   }
 };
 
+const errorMessageIncludes = (error, needle) => {
+  if (!error) return false;
+  const message = error instanceof Error ? error.message : String(error);
+  if (message.includes(needle)) return true;
+  const cause = error?.cause;
+  if (cause && cause !== error) {
+    return errorMessageIncludes(cause, needle);
+  }
+  return false;
+};
+
+const isTransientElectronError = (error) =>
+  [
+    "Target page, context or browser has been closed",
+    "Target closed",
+    "Process failed to launch",
+    "Browser has been closed",
+  ].some((needle) => errorMessageIncludes(error, needle));
+
 const createWorkspaceCopy = async () => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "tex64-e2e-math-wysiwyg-famous-formulas-"));
   const workspacePath = path.join(tempDir, "workspace");
@@ -476,7 +495,7 @@ const FAMOUS_FORMULA_CHECKS = {
   "Stirling approximation": [["\\thickapprox", "\\sim", "≈"], ["\\surd", "\\sqrt", "√"], ["(n/e)^{n}", "(n/e)^n"]],
 };
 
-const run = async () => {
+const runOnce = async () => {
   const from = Math.max(1, Number.parseInt(process.env.E2E_FAMOUS_FROM ?? "1", 10) || 1);
   const toInput =
     Number.parseInt(process.env.E2E_FAMOUS_TO ?? String(FAMOUS_FORMULAS.length), 10) ||
@@ -601,6 +620,31 @@ const run = async () => {
       log(`workspace copy kept ${tempDir}`);
     }
   }
+};
+
+const run = async () => {
+  let lastError = null;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      if (attempt > 1) {
+        log(`retry attempt ${attempt}/3 after transient failure`);
+      }
+      await runOnce();
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt >= 3 || !isTransientElectronError(error)) {
+        throw error;
+      }
+      log(
+        `transient electron failure detected; retrying (${attempt}/3): ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+      await pause(250);
+    }
+  }
+  throw lastError ?? new Error("math-wysiwyg famous formulas e2e failed");
 };
 
 run().catch((error) => {

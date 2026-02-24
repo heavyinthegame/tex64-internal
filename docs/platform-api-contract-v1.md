@@ -2,6 +2,9 @@
 
 このドキュメントは、`AI機能のみ課金` の前提で、TeX64 アプリと `tex64.com` バックエンド間の API 契約を固定するための仕様です。
 
+> DEPRECATED: 現行の実装/運用は v2（Google OAuth + `/api/v2/*`）に統一しています。
+> 最新仕様は `docs/platform-api-contract-v2-google-oauth.md` を参照してください。
+
 ## 1. スコープ
 
 - 課金対象: AI 機能のみ（編集/ビルド/閲覧は無料で継続）

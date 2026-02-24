@@ -272,7 +272,12 @@ const createWorkspaceHandlers = (deps) => {
     requestIndex(rootPath);
     // Track recent project
     if (userSettings) {
-      userSettings.addRecentProject(rootPath).catch(() => {});
+      userSettings
+        .addRecentProject(rootPath)
+        .then((projects) => {
+          sendToRenderer("recentProjects", { projects });
+        })
+        .catch(() => {});
     }
     sendLauncherStatus({ isBusy: false, message: null });
   };
@@ -289,14 +294,24 @@ const createWorkspaceHandlers = (deps) => {
         sendLauncherStatus({ isBusy: false, message: "フォルダが見つかりません。" });
         // Remove from recent projects if it doesn't exist
         if (userSettings) {
-          userSettings.removeRecentProject(projectPath).catch(() => {});
+          userSettings
+            .removeRecentProject(projectPath)
+            .then((projects) => {
+              sendToRenderer("recentProjects", { projects });
+            })
+            .catch(() => {});
         }
         return;
       }
     } catch {
       sendLauncherStatus({ isBusy: false, message: "フォルダが見つかりません。" });
       if (userSettings) {
-        userSettings.removeRecentProject(projectPath).catch(() => {});
+        userSettings
+          .removeRecentProject(projectPath)
+          .then((projects) => {
+            sendToRenderer("recentProjects", { projects });
+          })
+          .catch(() => {});
       }
       return;
     }
@@ -307,7 +322,12 @@ const createWorkspaceHandlers = (deps) => {
     requestIndex(projectPath);
     // Track recent project (moves it to top)
     if (userSettings) {
-      userSettings.addRecentProject(projectPath).catch(() => {});
+      userSettings
+        .addRecentProject(projectPath)
+        .then((projects) => {
+          sendToRenderer("recentProjects", { projects });
+        })
+        .catch(() => {});
     }
     sendLauncherStatus({ isBusy: false, message: null });
   };
@@ -343,7 +363,12 @@ const createWorkspaceHandlers = (deps) => {
     requestIndex(rootPath);
     // Track recent project
     if (userSettings) {
-      userSettings.addRecentProject(rootPath).catch(() => {});
+      userSettings
+        .addRecentProject(rootPath)
+        .then((projects) => {
+          sendToRenderer("recentProjects", { projects });
+        })
+        .catch(() => {});
     }
     sendLauncherStatus({ isBusy: false, message: null });
   };
