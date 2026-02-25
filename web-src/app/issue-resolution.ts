@@ -41,6 +41,17 @@ const rules: ResolutionRule[] = [
   },
   {
     test: (_issue, message) =>
+      /class\s+revtex4-2\s+warning:\s+no type size specified/i.test(message),
+    resolution:
+      "documentclass のオプションに文字サイズを指定してください（例: \\documentclass[10pt]{revtex4-2}）。",
+  },
+  {
+    test: (_issue, message) => /(?:package\s+)?xypdf\s+error:/i.test(message),
+    resolution:
+      "qcircuit/xypic は lualatex で失敗することがあります。Settings > Build の Engine を pdflatex に変更して再ビルドしてください。",
+  },
+  {
+    test: (_issue, message) =>
       message.includes("SyncTeX") || message.toLowerCase().includes("synctex"),
     resolution: "ビルドしてPDFを生成し、.tex ファイルでSyncTeXを実行してください。",
   },
@@ -131,6 +142,9 @@ export const getIssueResolution = (issue: IssueItem) => {
     if (rule.test(issue, message)) {
       return rule.resolution;
     }
+  }
+  if (issue.severity === "warning") {
+    return "警告は自動で移動先を特定できないことがあります。ビルドログの前後行を確認して修正してください。";
   }
   return "ログと該当行を確認して修正してください。";
 };

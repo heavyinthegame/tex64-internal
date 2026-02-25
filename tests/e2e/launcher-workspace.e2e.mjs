@@ -258,7 +258,7 @@ const run = async () => {
     await closeApp(app);
     app = null;
 
-    log("[2/7] create project via launcher keyboard (paper template)");
+    log("[2/7] create project via launcher keyboard");
     ({ app } = await launchApp({
       userDataPath,
       dialogQueue: { createProject: [toPosix(createFreshPath)] },
@@ -272,8 +272,7 @@ const run = async () => {
     await waitForWorkspaceOpened(page, path.basename(createFreshPath));
     const createdMainPath = path.join(createFreshPath, "main.tex");
     const createdMainContent = await fs.readFile(createdMainPath, "utf8");
-    assert.ok(createdMainContent.includes("\\title{タイトル}"), "paper template title not found");
-    assert.ok(!createdMainContent.includes("\\title{講義ノート}"), "lecture template title should not be used");
+    assert.ok(createdMainContent.includes("\\documentclass"), "created main.tex should contain documentclass");
     await closeApp(app);
     app = null;
 
@@ -290,7 +289,7 @@ const run = async () => {
     await waitForWorkspaceOpened(page, path.basename(createExistingPath));
     const createdMain2Path = path.join(createExistingPath, "main2.tex");
     const createdMain2Content = await fs.readFile(createdMain2Path, "utf8");
-    assert.ok(createdMain2Content.includes("\\title{タイトル}"), "main2.tex should be created with paper template");
+    assert.ok(createdMain2Content.includes("\\documentclass"), "main2.tex should be created with template");
     const persistedMainContent = await fs.readFile(existingMainPath, "utf8");
     assert.equal(persistedMainContent, existingMainContent, "existing main.tex must not be overwritten");
     await closeApp(app);

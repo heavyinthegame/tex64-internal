@@ -418,7 +418,9 @@ export const initMain = () => {
   let updateMathKeyboardVisibility = () => {};
   let setSettingsTabAlert = (_hasAlert: boolean) => {};
   let updateInlineSuggestEnabled = (_enabled: boolean) => {};
+  let updateEditorWordWrap = (_enabled: boolean) => {};
   let updateGhostCompletionConfig = (_config: { debounceMs: number; maxChars: number }) => {};
+  let pendingEditorWordWrapEnabled: boolean | null = null;
   let pendingGhostCompletionEnabled: boolean | null = null;
   let pendingGhostCompletionConfig: { debounceMs: number; maxChars: number } | null = null;
   const tabController = initTabController(appContext, {
@@ -447,6 +449,10 @@ export const initMain = () => {
     getBuildProfiles,
     getBuildProfileId,
     postToNative: (payload, silent) => postToNative(payload, silent),
+    onEditorWordWrapChange: (enabled) => {
+      pendingEditorWordWrapEnabled = enabled;
+      updateEditorWordWrap(enabled);
+    },
     onGhostCompletionChange: (enabled) => {
       pendingGhostCompletionEnabled = enabled;
       updateInlineSuggestEnabled(enabled);
@@ -460,7 +466,7 @@ export const initMain = () => {
     },
     onRuntimeSetupNeeded: () => {
       setActiveTab("settings");
-      settingsUi.openSettingsPage("runtime");
+      settingsUi.openSettingsPage("env");
     },
     onRequestFirstBuild: () => {
       setActiveTab("files");
@@ -473,8 +479,8 @@ export const initMain = () => {
   onSettingsTabActive = () => settingsUi.checkEnvironmentStatus();
   const contextMenu = initContextMenu(appContext);
   const launcherUi = initLauncherUi(appContext, {
-    onCreate: (template) => {
-      postToNative({ type: "createProject", template });
+    onCreate: () => {
+      postToNative({ type: "createProject" });
     },
     onOpen: () => {
       postToNative({ type: "openWorkspace" });
@@ -884,7 +890,7 @@ export const initMain = () => {
     },
     onOpenRuntimeSettings: () => {
       setActiveTab("settings");
-      settingsUi.openSettingsPage("runtime");
+      settingsUi.openSettingsPage("env");
     },
   });
   workspaceController = initWorkspaceController(appContext, {
@@ -1169,6 +1175,7 @@ export const initMain = () => {
     getWorkspaceFiles,
     onCursorPositionChange: handleCursorPositionChange,
     onCursorSelectionChange: handleCursorPositionChange,
+    getEditorWordWrapEnabled: () => settingsUi.getEditorWordWrapEnabled(),
     getGhostCompletionEnabled: () => settingsUi.getGhostCompletionEnabled(),
     getGhostCompletionConfig: () => settingsUi.getGhostCompletionConfig(),
     requestFilePreview: (path) => filePreviewBroker.requestPreview(path),
@@ -1178,9 +1185,14 @@ export const initMain = () => {
       apiCompletionBroker.requestCompletion(payload),
   });
   updateInlineSuggestEnabled = monacoSetup.setInlineSuggestEnabled;
+  updateEditorWordWrap = monacoSetup.setWordWrapEnabled;
   updateGhostCompletionConfig = monacoSetup.setGhostCompletionConfig;
   updateInlineSuggestEnabled(settingsUi.getGhostCompletionEnabled());
+  updateEditorWordWrap(settingsUi.getEditorWordWrapEnabled());
   updateGhostCompletionConfig(settingsUi.getGhostCompletionConfig());
+  if (pendingEditorWordWrapEnabled !== null) {
+    updateEditorWordWrap(pendingEditorWordWrapEnabled);
+  }
   if (pendingGhostCompletionEnabled !== null) {
     updateInlineSuggestEnabled(pendingGhostCompletionEnabled);
   }

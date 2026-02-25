@@ -332,7 +332,7 @@ const createWorkspaceHandlers = (deps) => {
     sendLauncherStatus({ isBusy: false, message: null });
   };
 
-  const handleCreateProject = async (template) => {
+  const handleCreateProject = async () => {
     if (!state.mainWindow) {
       return;
     }
@@ -351,7 +351,7 @@ const createWorkspaceHandlers = (deps) => {
     }
     const rootPath = result.filePaths[0];
     try {
-      await workspace.initializeProject(rootPath, template === "lecture" ? "lecture" : "paper");
+      await workspace.initializeProject(rootPath);
     } catch (error) {
       sendLauncherStatus({ isBusy: false, message: error.message });
       return;

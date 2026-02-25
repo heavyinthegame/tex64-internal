@@ -1,8 +1,7 @@
 const INITIAL_VISIBLE_COUNT = 3;
 export const initLauncherUi = (context, deps) => {
-    const { launcher, launcherCreateButton, launcherOpenButton, launcherTemplateButtons, launcherStatusMessage, launcherRecent, launcherRecentList, launcherRecentEmpty, launcherRecentToggle, } = context.dom;
+    const { launcher, launcherCreateButton, launcherOpenButton, launcherStatusMessage, launcherRecent, launcherRecentList, launcherRecentEmpty, launcherRecentToggle, } = context.dom;
     let selectedActionIndex = 0;
-    let launcherTemplate = "paper";
     let launcherBusy = false;
     const launcherActions = [launcherOpenButton, launcherCreateButton];
     let recentProjects = [];
@@ -30,14 +29,6 @@ export const initLauncherUi = (context, deps) => {
             selectedActionIndex = 0;
             updateActionSelection();
         }
-    };
-    const setTemplate = (template) => {
-        launcherTemplate = template;
-        launcherTemplateButtons.forEach((button) => {
-            const isActive = button.dataset.template === template;
-            button.classList.toggle("is-active", isActive);
-            button.setAttribute("aria-selected", isActive ? "true" : "false");
-        });
     };
     const setStatus = (payload) => {
         if (typeof payload.isBusy === "boolean") {
@@ -162,19 +153,13 @@ export const initLauncherUi = (context, deps) => {
         }
     };
     window.addEventListener("keydown", handleLauncherKeydown);
-    launcherTemplateButtons.forEach((button) => {
-        button.addEventListener("click", () => {
-            const template = button.dataset.template === "lecture" ? "lecture" : "paper";
-            setTemplate(template);
-        });
-    });
     if (launcherCreateButton instanceof HTMLButtonElement) {
         launcherCreateButton.addEventListener("click", () => {
             if (launcherBusy) {
                 return;
             }
             setStatus({ isBusy: true, message: null });
-            deps.onCreate(launcherTemplate);
+            deps.onCreate();
         });
     }
     if (launcherOpenButton instanceof HTMLButtonElement) {
@@ -186,12 +171,9 @@ export const initLauncherUi = (context, deps) => {
             deps.onOpen();
         });
     }
-    setTemplate(launcherTemplate);
     return {
         setVisible,
         setStatus,
-        setTemplate,
-        getTemplate: () => launcherTemplate,
         isBusy: () => launcherBusy,
         updateRecentProjects,
     };

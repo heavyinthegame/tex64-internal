@@ -28,10 +28,22 @@ export const initMonacoSetup = (context, deps) => {
             (_a = editorAny === null || editorAny === void 0 ? void 0 : editorAny.updateOptions) === null || _a === void 0 ? void 0 : _a.call(editorAny, { inlineSuggest: { enabled } });
         });
     };
+    const setWordWrapEnabled = (enabled) => {
+        const wordWrap = enabled ? "on" : "off";
+        deps.editorSession.forEachEditorGroup((group) => {
+            var _a;
+            const editorAny = group.editor;
+            (_a = editorAny === null || editorAny === void 0 ? void 0 : editorAny.updateOptions) === null || _a === void 0 ? void 0 : _a.call(editorAny, { wordWrap });
+        });
+    };
     const setGhostCompletionConfig = (config) => {
         inlineController.applyGhostCompletionConfig(config);
     };
-    const api = { setInlineSuggestEnabled, setGhostCompletionConfig };
+    const api = {
+        setInlineSuggestEnabled,
+        setWordWrapEnabled,
+        setGhostCompletionConfig,
+    };
     if (!(editorHost instanceof HTMLElement)) {
         deps.updateFallback("エディタ領域が見つかりません。");
         return api;
@@ -90,7 +102,7 @@ export const initMonacoSetup = (context, deps) => {
             lineHeight: 20,
             lineNumbersMinChars: 3,
             scrollBeyondLastLine: false,
-            wordWrap: "off",
+            wordWrap: deps.getEditorWordWrapEnabled() ? "on" : "off",
             wordBasedSuggestions: "off",
             quickSuggestions: { other: true, comments: false, strings: true },
             quickSuggestionsDelay: 25,

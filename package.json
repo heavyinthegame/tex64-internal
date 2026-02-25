@@ -24,6 +24,8 @@
     "release:update-feed": "node scripts/release-update-feed.cjs",
     "release:bundle": "node scripts/release-bundle.cjs",
     "release:mac": "node scripts/release-macos.cjs",
+    "release:upload-downloads": "node scripts/release-upload-downloads.cjs",
+    "release:go-no-go": "node scripts/release-go-no-go.cjs",
     "legal:notice": "node scripts/generate-third-party-notices.cjs --lock package-lock.json --out NOTICE.md --project tex64",
     "e2e:completion": "node tests/e2e/completion.e2e.mjs",
     "e2e:ai:input-send": "node tests/e2e/ai.input-send.e2e.mjs",

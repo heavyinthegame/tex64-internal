@@ -1,5 +1,4 @@
 import type { AppContext } from "./context.js";
-import type { LauncherTemplate } from "./types.js";
 
 type RecentProject = {
   path: string;
@@ -8,7 +7,7 @@ type RecentProject = {
 };
 
 type LauncherUiDeps = {
-  onCreate: (template: LauncherTemplate) => void;
+  onCreate: () => void;
   onOpen: () => void;
   onOpenRecent: (path: string) => void;
   onRemoveRecent: (path: string) => void;
@@ -17,8 +16,6 @@ type LauncherUiDeps = {
 export type LauncherUiApi = {
   setVisible: (isVisible: boolean) => void;
   setStatus: (payload: { isBusy?: boolean; message?: string | null }) => void;
-  setTemplate: (template: LauncherTemplate) => void;
-  getTemplate: () => LauncherTemplate;
   isBusy: () => boolean;
   updateRecentProjects: (projects: RecentProject[]) => void;
 };
@@ -33,7 +30,6 @@ export const initLauncherUi = (
     launcher,
     launcherCreateButton,
     launcherOpenButton,
-    launcherTemplateButtons,
     launcherStatusMessage,
     launcherRecent,
     launcherRecentList,
@@ -42,7 +38,6 @@ export const initLauncherUi = (
   } = context.dom;
 
   let selectedActionIndex = 0;
-  let launcherTemplate: LauncherTemplate = "paper";
   let launcherBusy = false;
   const launcherActions = [launcherOpenButton, launcherCreateButton];
   
@@ -72,15 +67,6 @@ export const initLauncherUi = (
       selectedActionIndex = 0;
       updateActionSelection();
     }
-  };
-
-  const setTemplate = (template: LauncherTemplate) => {
-    launcherTemplate = template;
-    launcherTemplateButtons.forEach((button) => {
-      const isActive = button.dataset.template === template;
-      button.classList.toggle("is-active", isActive);
-      button.setAttribute("aria-selected", isActive ? "true" : "false");
-    });
   };
 
   const setStatus = (payload: { isBusy?: boolean; message?: string | null }) => {
@@ -223,20 +209,13 @@ export const initLauncherUi = (
 
   window.addEventListener("keydown", handleLauncherKeydown);
 
-  launcherTemplateButtons.forEach((button) => {
-    button.addEventListener("click", () => {
-      const template = button.dataset.template === "lecture" ? "lecture" : "paper";
-      setTemplate(template);
-    });
-  });
-
   if (launcherCreateButton instanceof HTMLButtonElement) {
     launcherCreateButton.addEventListener("click", () => {
       if (launcherBusy) {
         return;
       }
       setStatus({ isBusy: true, message: null });
-      deps.onCreate(launcherTemplate);
+      deps.onCreate();
     });
   }
 
@@ -250,13 +229,9 @@ export const initLauncherUi = (
     });
   }
 
-  setTemplate(launcherTemplate);
-
   return {
     setVisible,
     setStatus,
-    setTemplate,
-    getTemplate: () => launcherTemplate,
     isBusy: () => launcherBusy,
     updateRecentProjects,
   };

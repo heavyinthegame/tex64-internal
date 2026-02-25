@@ -224,3 +224,115 @@ test("saveDirtyFiles waits for composition completion before save", async () => 
   api.handleSaveResult({ path: "main.tex", ok: true });
   assert.equal(await pending, true);
 });
+
+test("requestOpenFile prefers requested group when same path exists in another group", () => {
+  ensureWindowShim();
+
+  const calls = {
+    postToNative: [],
+    cacheCurrentBuffer: 0,
+  };
+
+  const primary = createGroup("primary");
+  primary.editor = { getValue: () => "primary content" };
+  primary.currentFilePath = "shared.tex";
+  primary.openTabs = ["shared.tex", "primary-only.tex"];
+
+  const secondary = createGroup("secondary");
+  secondary.editor = { getValue: () => "secondary content" };
+  secondary.currentFilePath = "secondary-only.tex";
+  secondary.openTabs = ["secondary-only.tex", "shared.tex"];
+
+  const editorGroups = { primary, secondary };
+  const monacoModels = new Map();
+  const dirtyFiles = new Set();
+  const state = {
+    pendingOpenRequests: [],
+    pendingReveal: null,
+    pendingSave: null,
+    autoSaveTimer: null,
+    autoSavePending: false,
+  };
+
+  const deps = {
+    getMonacoApi: () => ({}),
+    getWorkspaceFiles: () => ["shared.tex", "secondary-only.tex"],
+    getRootFilePath: () => "shared.tex",
+    postToNative: (payload) => {
+      calls.postToNative.push(payload);
+      return true;
+    },
+    updateIssues: noop,
+    setAutoDetectedUi: noop,
+    setBlockPreviewActive: noop,
+    updateFallback: noop,
+    fileTree: {
+      setSelection: noop,
+      clearSelection: noop,
+      render: noop,
+      loadOpenState: noop,
+      setTreeFocus: noop,
+      handleRenameResult: noop,
+    },
+    outline: { render: noop },
+    editorTabs: { render: noop },
+    buildOps: {
+      updateSynctexButtonState: noop,
+      handleSaveFormatError: noop,
+    },
+    settings: {
+      buildFormatSettingsPayload: () => ({}),
+      updateEnvStatus: noop,
+    },
+    search: {
+      handleSearchUpdate: noop,
+      handleRenameResult: noop,
+    },
+  };
+
+  const api = createEditorSessionFileOps({
+    deps,
+    editorGroups,
+    monacoModels,
+    dirtyFiles,
+    state,
+    getActiveEditorGroupKey: () => "secondary",
+    getActiveGroup: () => secondary,
+    getEditorGroup: (key) => editorGroups[key],
+    isActiveGroup: (group) => group.key === "secondary",
+    resolveAutoOpenGroupKey: (preferredKey) => preferredKey,
+    findGroupKeyByPath: () => "primary",
+    setSplitViewEnabled: noop,
+    cacheCurrentBuffer: () => {
+      calls.cacheCurrentBuffer += 1;
+    },
+    clearJumpHighlight: noop,
+    clearTemporaryTabs: noop,
+    addOpenTab: (group, path) => {
+      if (!group.openTabs.includes(path)) {
+        group.openTabs.push(path);
+      }
+    },
+    updateDirtyState: noop,
+    restoreViewState: noop,
+    setEditorLanguage: noop,
+    updateBreadcrumbs: noop,
+    updateMiniOutline: noop,
+    revealLine: noop,
+    forEachEditorGroup: (handler) => {
+      Object.values(editorGroups).forEach(handler);
+    },
+    scheduleAfterComposition: noop,
+    getLanguageIdForPath: () => "latex",
+  });
+
+  const ok = api.requestOpenFile("shared.tex", "secondary", false);
+
+  assert.equal(ok, true);
+  assert.equal(calls.cacheCurrentBuffer, 1);
+  assert.equal(calls.postToNative.length, 1);
+  assert.equal(calls.postToNative[0].type, "openFile");
+  assert.deepEqual(state.pendingOpenRequests, [
+    { path: "shared.tex", group: "secondary" },
+  ]);
+});

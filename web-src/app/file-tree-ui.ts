@@ -68,6 +68,12 @@ export const initFileTreeUi = (
     renameModalHelp,
     renameModalCancel,
     renameModalSubmit,
+    deleteModal,
+    deleteModalTitle,
+    deleteModalTarget,
+    deleteModalHelp,
+    deleteModalCancel,
+    deleteModalSubmit,
     contextMenu: contextMenuEl,
   } = context.dom;
 
@@ -77,6 +83,8 @@ export const initFileTreeUi = (
   let createModalKind: CreateKind | null = null;
   let renameTargetPath: string | null = null;
   let renameTargetType: "file" | "dir" | null = null;
+  let deleteTargetPath: string | null = null;
+  let deleteTargetType: "file" | "dir" | null = null;
   let fileClipboard: { path: string; kind: "file" | "dir"; mode: "copy" | "cut" } | null =
     null;
   let openFolders = new Set<string>();
@@ -390,6 +398,44 @@ export const initFileTreeUi = (
     deps.postToNative({ type: "openInTerminal", path });
   };
 
+  const setDeleteModalOpen = (open: boolean) => {
+    if (!deleteModal) {
+      return;
+    }
+    deleteModal.classList.toggle("is-open", open);
+    deleteModal.setAttribute("aria-hidden", open ? "false" : "true");
+  };
+
+  const openDeleteModal = (path: string, kind: "file" | "dir") => {
+    deleteTargetPath = path;
+    deleteTargetType = kind;
+    const name = path.split("/").filter(Boolean).pop() ?? path;
+    setText(deleteModalTitle, kind === "dir" ? "フォルダを削除" : "ファイルを削除");
+    setText(deleteModalTarget, name);
+    if (deleteModalHelp instanceof HTMLElement) {
+      deleteModalHelp.textContent =
+        kind === "dir"
+          ? "フォルダとその中のすべてのファイルが削除されます。この操作は取り消せません。"
+          : "この操作は取り消せません。";
+      deleteModalHelp.classList.remove("is-error");
+    }
+    setDeleteModalOpen(true);
+  };
+
+  const closeDeleteModal = () => {
+    deleteTargetPath = null;
+    deleteTargetType = null;
+    setDeleteModalOpen(false);
+  };
+
+  const submitDeleteModal = () => {
+    if (!deleteTargetPath) {
+      return;
+    }
+    deps.postToNative({ type: "deleteItem", path: deleteTargetPath });
+    closeDeleteModal();
+  };
+
   const requestDeleteItem = (path: string, kind: "file" | "dir") => {
     const dirtyPaths = deps.getDirtyPaths();
     const hasDirtyAffected = Array.from(dirtyPaths).some((entryPath) => {
@@ -402,6 +448,10 @@ export const initFileTreeUi = (
       deps.updateIssues(1, "未保存の変更があります。削除前に保存してください。", "error", [
         { severity: "error", message: "未保存の変更があります。削除前に保存してください。" },
       ]);
+      return;
+    }
+    if (deleteModal instanceof HTMLElement) {
+      openDeleteModal(path, kind);
       return;
     }
     deps.postToNative({ type: "deleteItem", path });
@@ -697,6 +747,32 @@ export const initFileTreeUi = (
     renameModal.addEventListener("click", (event) => {
       if (event.target === renameModal) {
         closeRenameModal();
+      }
+    });
+  }
+
+  if (deleteModalCancel instanceof HTMLButtonElement) {
+    deleteModalCancel.addEventListener("click", () => {
+      closeDeleteModal();
+    });
+  }
+
+  if (deleteModalSubmit instanceof HTMLButtonElement) {
+    deleteModalSubmit.addEventListener("click", () => {
+      submitDeleteModal();
+    });
+  }
+
+  if (deleteModal instanceof HTMLElement) {
+    deleteModal.addEventListener("click", (event) => {
+      if (event.target === deleteModal) {
+        closeDeleteModal();
+      }
+    });
+    deleteModal.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeDeleteModal();
       }
     });
   }

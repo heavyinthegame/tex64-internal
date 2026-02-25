@@ -5,9 +5,10 @@ import { initBuildProfilesUi } from "./settings-build-profiles.js";
 import { TEX64_LINKS } from "./platform-links.js";
 export const initSettingsUi = (context, deps) => {
     var _a;
-    const { settingsPanel, settingsNav, settingsNavItems, settingsPages, settingsPageItems, settingsBackButtons, settingsCompileEngineSelect, settingsEnvRefresh, editorAlignEnvToggle, editorFormatIndentSelect, editorFormatBeginEndToggle, editorFormatDocumentNoIndentToggle, editorFormatAlignMathToggle, editorFormatAlignTableToggle, editorFormatBlankLinesSelect, editorFormatVerbatimInput, editorFormatVerbatimAdd, editorFormatVerbatimHint, editorFormatVerbatimList, editorAutoSynctexBuildToggle, editorReverseSynctexToggle, editorGhostCompletionToggle, editorGhostCompletionDebounce, editorGhostCompletionMaxChars, editorPdfWindowToggle, settingsUpdateCurrent, settingsUpdateLatest, settingsUpdateStatus, settingsUpdateProgress, settingsUpdateProgressFill, settingsUpdateCheck, settingsUpdateApply, settingsUpdateOpen, settingsAuthStatus, settingsAuthLogout, settingsRuntimeAttention, settingsRuntimeInstallStatus, settingsRuntimeSetupStatus, settingsRuntimeOnboardingStatus, settingsRuntimeRunFirstBuild, settingsRuntimeOpenGettingStarted, settingsRuntimeOpenInstallDocs, settingsRuntimeOpenTexDocs, settingsFeedbackCategory, settingsFeedbackMessage, settingsFeedbackEmail, settingsFeedbackIncludeDiagnostics, settingsFeedbackSend, settingsFeedbackStatus, settingsErrorReportingEnabled, settingsLinkTerms, settingsLinkPrivacy, settingsLinkCommercial, settingsLinkRefund, settingsLinkSupport, settingsLinkContact, settingsLinkReleases, } = context.dom;
+    const { settingsPanel, settingsNav, settingsNavItems, settingsPages, settingsPageItems, settingsBackButtons, settingsCompileEngineSelect, settingsEnvRefresh, editorAlignEnvToggle, editorFormatIndentSelect, editorFormatBeginEndToggle, editorFormatDocumentNoIndentToggle, editorFormatAlignMathToggle, editorFormatAlignTableToggle, editorFormatBlankLinesSelect, editorFormatVerbatimInput, editorFormatVerbatimAdd, editorFormatVerbatimHint, editorFormatVerbatimList, editorWordWrapToggle, editorAutoSynctexBuildToggle, editorReverseSynctexToggle, editorGhostCompletionToggle, editorGhostCompletionDebounce, editorGhostCompletionMaxChars, editorPdfWindowToggle, settingsUpdateCurrent, settingsUpdateLatest, settingsUpdateStatus, settingsUpdateProgress, settingsUpdateProgressFill, settingsUpdateCheck, settingsUpdateApply, settingsUpdateOpen, settingsAuthStatus, settingsAuthLogout, settingsRuntimeAttention, settingsRuntimeInstallStatus, settingsRuntimeSetupStatus, settingsRuntimeOnboardingStatus, settingsRuntimeRunFirstBuild, settingsRuntimeOpenGettingStarted, settingsRuntimeOpenInstallDocs, settingsRuntimeOpenTexDocs, settingsFeedbackCategory, settingsFeedbackMessage, settingsFeedbackEmail, settingsFeedbackIncludeDiagnostics, settingsFeedbackSend, settingsFeedbackStatus, settingsErrorReportingEnabled, settingsLinkTerms, settingsLinkPrivacy, settingsLinkCommercial, settingsLinkRefund, settingsLinkSupport, settingsLinkContact, settingsLinkReleases, } = context.dom;
     let activeSettingsPage = null;
     let editorAlignEnvEnabled = true;
+    let editorWordWrapEnabled = false;
     let editorFormatSettings = {
         ...defaultEditorFormatSettings,
     };
@@ -30,6 +31,7 @@ export const initSettingsUi = (context, deps) => {
     let feedbackIncludeDiagnostics = false;
     let errorReportingEnabled = true;
     const compileEngineKey = "tex64.compileEngine";
+    const editorWordWrapKey = "tex64.editor.wordWrap";
     const editorAutoSynctexOnBuildKey = "tex64.editor.autoSynctexOnBuild";
     const editorReverseSynctexKey = "tex64.editor.reverseSynctex";
     const editorGhostCompletionKey = "tex64.editor.ghostCompletion";
@@ -72,7 +74,7 @@ export const initSettingsUi = (context, deps) => {
         },
     });
     const { checkEnvironmentStatus, updateEnvStatus } = envManager;
-    const runtimeSettingsNavItem = (_a = settingsNavItems.find((button) => button.dataset.settingsTarget === "runtime")) !== null && _a !== void 0 ? _a : null;
+    const runtimeSettingsNavItem = (_a = settingsNavItems.find((button) => button.dataset.settingsTarget === "env")) !== null && _a !== void 0 ? _a : null;
     const updateEngineUI = () => {
         if (!(settingsCompileEngineSelect instanceof HTMLSelectElement)) {
             return;
@@ -217,6 +219,11 @@ export const initSettingsUi = (context, deps) => {
             editorAlignEnvToggle.checked = editorAlignEnvEnabled;
         }
     };
+    const updateEditorWordWrapUI = () => {
+        if (editorWordWrapToggle instanceof HTMLInputElement) {
+            editorWordWrapToggle.checked = editorWordWrapEnabled;
+        }
+    };
     const updateEditorAutoSynctexBuildUI = () => {
         if (editorAutoSynctexBuildToggle instanceof HTMLInputElement) {
             editorAutoSynctexBuildToggle.checked = autoSynctexOnBuildEnabled;
@@ -284,9 +291,11 @@ export const initSettingsUi = (context, deps) => {
             settingsPanel.scrollTop = 0;
         }
         syncUpdateAttentionUi();
-        if (pageId === "runtime") {
+        if (pageId === "env") {
             updateRuntimeOnboardingUi();
             checkEnvironmentStatus();
+        }
+        if (pageId === "env" || pageId === "account") {
             maybeRequestPlatformUpdateCheck(false);
         }
     };
@@ -310,6 +319,11 @@ export const initSettingsUi = (context, deps) => {
         }
         editorAlignEnvEnabled = true;
         updateEditorAlignEnvUI();
+    };
+    const loadEditorWordWrapState = () => {
+        const stored = localStorage.getItem(editorWordWrapKey);
+        editorWordWrapEnabled = stored === "true";
+        updateEditorWordWrapUI();
     };
     const loadEditorFormatSettings = () => {
         const stored = localStorage.getItem(editorFormatSettingsKey);
@@ -384,6 +398,9 @@ export const initSettingsUi = (context, deps) => {
     };
     const saveEditorAlignEnvState = () => {
         localStorage.setItem(editorAlignEnvKey, editorAlignEnvEnabled ? "true" : "false");
+    };
+    const saveEditorWordWrapState = () => {
+        localStorage.setItem(editorWordWrapKey, editorWordWrapEnabled ? "true" : "false");
     };
     const saveEditorFormatSettings = () => {
         try {
@@ -581,7 +598,7 @@ export const initSettingsUi = (context, deps) => {
         const updateAttention = hasUpdateAttention();
         const runtimeAttention = hasRuntimeSetupAttention();
         const attention = updateAttention || runtimeAttention;
-        const hideAlertWhileRuntimeOpen = activeSettingsPage === "runtime";
+        const hideAlertWhileRuntimeOpen = activeSettingsPage === "env" || activeSettingsPage === "account";
         const showTabAlert = attention && !hideAlertWhileRuntimeOpen;
         if (runtimeSettingsNavItem instanceof HTMLElement) {
             runtimeSettingsNavItem.classList.toggle("has-alert", attention);
@@ -1079,10 +1096,24 @@ export const initSettingsUi = (context, deps) => {
         saveEditorAlignEnvState();
         updateEditorAlignEnvUI();
     };
+    const setEditorWordWrapEnabled = (enabled) => {
+        var _a;
+        editorWordWrapEnabled = Boolean(enabled);
+        saveEditorWordWrapState();
+        updateEditorWordWrapUI();
+        (_a = deps.onEditorWordWrapChange) === null || _a === void 0 ? void 0 : _a.call(deps, editorWordWrapEnabled);
+    };
     const toggleEditorAlignEnv = () => {
         editorAlignEnvEnabled = !editorAlignEnvEnabled;
         saveEditorAlignEnvState();
         updateEditorAlignEnvUI();
+    };
+    const toggleEditorWordWrap = () => {
+        var _a;
+        editorWordWrapEnabled = !editorWordWrapEnabled;
+        saveEditorWordWrapState();
+        updateEditorWordWrapUI();
+        (_a = deps.onEditorWordWrapChange) === null || _a === void 0 ? void 0 : _a.call(deps, editorWordWrapEnabled);
     };
     const setEditorFormatSettings = (next) => {
         editorFormatSettings = normalizeEditorFormatSettings({
@@ -1235,6 +1266,7 @@ export const initSettingsUi = (context, deps) => {
         deps.postToNative({ type: "update:check", force: false, source: "background" }, true);
     };
     const loadStartupSettings = () => {
+        loadEditorWordWrapState();
         loadEditorAutoSynctexBuildState();
         loadEditorReverseSynctexState();
         loadEditorGhostCompletionState();
@@ -1263,6 +1295,7 @@ export const initSettingsUi = (context, deps) => {
     };
     const getSettingsSnapshot = () => ({
         compileEngine: localStorage.getItem(compileEngineKey) || "lualatex",
+        wordWrapEnabled: editorWordWrapEnabled,
         autoSynctexOnBuild: autoSynctexOnBuildEnabled,
         reverseSynctexEnabled,
         pdfViewerMode,
@@ -1281,6 +1314,9 @@ export const initSettingsUi = (context, deps) => {
         }
         if (typeof patch.compileEngine === "string") {
             setCompileEngine(patch.compileEngine);
+        }
+        if (typeof patch.wordWrapEnabled === "boolean") {
+            setEditorWordWrapEnabled(patch.wordWrapEnabled);
         }
         if (typeof patch.autoSynctexOnBuild === "boolean") {
             setEditorAutoSynctexBuildEnabled(patch.autoSynctexOnBuild);
@@ -1398,6 +1434,11 @@ export const initSettingsUi = (context, deps) => {
     if (editorAlignEnvToggle instanceof HTMLInputElement) {
         editorAlignEnvToggle.addEventListener("change", () => {
             toggleEditorAlignEnv();
+        });
+    }
+    if (editorWordWrapToggle instanceof HTMLInputElement) {
+        editorWordWrapToggle.addEventListener("change", () => {
+            toggleEditorWordWrap();
         });
     }
     if (editorAutoSynctexBuildToggle instanceof HTMLInputElement) {
@@ -1555,6 +1596,7 @@ export const initSettingsUi = (context, deps) => {
     updatePlatformUpdateUi();
     return {
         getEditorAlignEnvEnabled: () => editorAlignEnvEnabled,
+        getEditorWordWrapEnabled: () => editorWordWrapEnabled,
         getAutoSynctexOnBuildEnabled: () => autoSynctexOnBuildEnabled,
         getReverseSynctexEnabled: () => reverseSynctexEnabled,
         getPdfViewerMode: () => pdfViewerMode,

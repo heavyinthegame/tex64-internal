@@ -1,13 +1,15 @@
 import { createFileTreeRenderer } from "./file-tree-render.js";
 import { canDropOnFolder, clearDropTargets, getDragData, getParentPath, normalizeInputPath, validatePath, } from "./file-tree-utils.js";
 export const initFileTreeUi = (context, deps) => {
-    const { fileTree, createModal, createModalTitle, createModalSubtitle, createModalParent, createModalLabel, createModalInput, createModalHelp, createModalCancel, createModalSubmit, renameModal, renameModalTitle, renameModalTarget, renameModalInput, renameModalHelp, renameModalCancel, renameModalSubmit, contextMenu: contextMenuEl, } = context.dom;
+    const { fileTree, createModal, createModalTitle, createModalSubtitle, createModalParent, createModalLabel, createModalInput, createModalHelp, createModalCancel, createModalSubmit, renameModal, renameModalTitle, renameModalTarget, renameModalInput, renameModalHelp, renameModalCancel, renameModalSubmit, deleteModal, deleteModalTitle, deleteModalTarget, deleteModalHelp, deleteModalCancel, deleteModalSubmit, contextMenu: contextMenuEl, } = context.dom;
     let selectedTreePath = null;
     let selectedTreeType = null;
     let treeHasFocus = false;
     let createModalKind = null;
     let renameTargetPath = null;
     let renameTargetType = null;
+    let deleteTargetPath = null;
+    let deleteTargetType = null;
     let fileClipboard = null;
     let openFolders = new Set();
     let openStateLoaded = false;
@@ -297,6 +299,41 @@ export const initFileTreeUi = (context, deps) => {
     const requestOpenInTerminal = (path) => {
         deps.postToNative({ type: "openInTerminal", path });
     };
+    const setDeleteModalOpen = (open) => {
+        if (!deleteModal) {
+            return;
+        }
+        deleteModal.classList.toggle("is-open", open);
+        deleteModal.setAttribute("aria-hidden", open ? "false" : "true");
+    };
+    const openDeleteModal = (path, kind) => {
+        var _a;
+        deleteTargetPath = path;
+        deleteTargetType = kind;
+        const name = (_a = path.split("/").filter(Boolean).pop()) !== null && _a !== void 0 ? _a : path;
+        setText(deleteModalTitle, kind === "dir" ? "フォルダを削除" : "ファイルを削除");
+        setText(deleteModalTarget, name);
+        if (deleteModalHelp instanceof HTMLElement) {
+            deleteModalHelp.textContent =
+                kind === "dir"
+                    ? "フォルダとその中のすべてのファイルが削除されます。この操作は取り消せません。"
+                    : "この操作は取り消せません。";
+            deleteModalHelp.classList.remove("is-error");
+        }
+        setDeleteModalOpen(true);
+    };
+    const closeDeleteModal = () => {
+        deleteTargetPath = null;
+        deleteTargetType = null;
+        setDeleteModalOpen(false);
+    };
+    const submitDeleteModal = () => {
+        if (!deleteTargetPath) {
+            return;
+        }
+        deps.postToNative({ type: "deleteItem", path: deleteTargetPath });
+        closeDeleteModal();
+    };
     const requestDeleteItem = (path, kind) => {
         const dirtyPaths = deps.getDirtyPaths();
         const hasDirtyAffected = Array.from(dirtyPaths).some((entryPath) => {
@@ -309,6 +346,10 @@ export const initFileTreeUi = (context, deps) => {
             deps.updateIssues(1, "未保存の変更があります。削除前に保存してください。", "error", [
                 { severity: "error", message: "未保存の変更があります。削除前に保存してください。" },
             ]);
+            return;
+        }
+        if (deleteModal instanceof HTMLElement) {
+            openDeleteModal(path, kind);
             return;
         }
         deps.postToNative({ type: "deleteItem", path });
@@ -581,6 +622,29 @@ export const initFileTreeUi = (context, deps) => {
         renameModal.addEventListener("click", (event) => {
             if (event.target === renameModal) {
                 closeRenameModal();
+            }
+        });
+    }
+    if (deleteModalCancel instanceof HTMLButtonElement) {
+        deleteModalCancel.addEventListener("click", () => {
+            closeDeleteModal();
+        });
+    }
+    if (deleteModalSubmit instanceof HTMLButtonElement) {
+        deleteModalSubmit.addEventListener("click", () => {
+            submitDeleteModal();
+        });
+    }
+    if (deleteModal instanceof HTMLElement) {
+        deleteModal.addEventListener("click", (event) => {
+            if (event.target === deleteModal) {
+                closeDeleteModal();
+            }
+        });
+        deleteModal.addEventListener("keydown", (event) => {
+            if (event.key === "Escape") {
+                event.preventDefault();
+                closeDeleteModal();
             }
         });
     }

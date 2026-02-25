@@ -45,6 +45,8 @@ CI:
 - `npm run electron:pack`（unpacked / 起動確認用）
 - `npm run electron:dist:mac`（配布物生成: dmg/zip）
 - `npm run -s release:bundle`（`release/checksums-sha256.txt` と `update/stable.json` を生成）
+- `npm run -s release:upload-downloads -- --version <x.y.z>`（`release/` と `update/stable.json` を R2/S3 へ公開）
+- `npm run -s release:go-no-go -- --version <x.y.z>`（downloads と tex64.com の manifest/redirect 整合を検証）
 - 詳細: `docs/distribution.md`
 
 SyncTeX forward ベンチ:

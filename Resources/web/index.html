@@ -22,17 +22,7 @@
             </div>
             <div class="launcher-title">Tex64</div>
           </div>
-          <div class="launcher-template" role="group" aria-label="テンプレート">
-            <div class="launcher-label">テンプレート</div>
-            <div class="launcher-toggle">
-              <button class="launcher-template-button" data-template="paper" type="button" aria-selected="true">
-                論文
-              </button>
-              <button class="launcher-template-button" data-template="lecture" type="button" aria-selected="false">
-                講義ノート
-              </button>
-            </div>
-          </div>
+
           <div class="launcher-actions">
             <button class="launcher-action primary" id="launcher-open" type="button">
               <span class="launcher-action-title">フォルダを開く</span>
@@ -64,10 +54,7 @@
     </div>
     <div class="app">
       <header class="topbar">
-        <div class="brand" aria-hidden="true">
-          <img src="./assets/icon.jpg" class="brand-icon" alt="" />
-          <span class="brand-name">Tex64</span>
-        </div>
+        <div class="topbar-drag"></div>
         <div class="top-actions">
           <button
             id="editor-split-button"
@@ -78,8 +65,8 @@
             <span class="editor-split-icon" aria-hidden="true">
               <svg
                 viewBox="0 0 24 24"
-                width="18"
-                height="18"
+                width="16"
+                height="16"
                 fill="none"
                 stroke="currentColor"
                 stroke-width="1.6"
@@ -111,7 +98,7 @@
             title="ビルド (Cmd+B)"
           >
             <span class="build-button-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="24" height="24">
+              <svg viewBox="0 0 24 24" width="20" height="20">
                 <path d="M8 5v14l11-7z"></path>
               </svg>
             </span>
@@ -566,28 +553,36 @@
               <div class="settings-nav" id="settings-nav">
                 <button class="settings-nav-item" data-settings-target="editor" type="button">
                   <span class="settings-nav-title">エディタ</span>
-                  <span class="settings-nav-desc">SyncTeX / PDF 表示</span>
+                  <span class="settings-nav-desc">表示 / AI補完</span>
                 </button>
                 <button class="settings-nav-item" data-settings-target="format" type="button">
                   <span class="settings-nav-title">整形</span>
-                  <span class="settings-nav-desc">latexindent の整形ルール</span>
-                </button>
-                <button class="settings-nav-item" data-settings-target="env" type="button">
-                  <span class="settings-nav-title">数式/表 環境</span>
-                  <span class="settings-nav-desc">検出対象の環境を管理</span>
+                  <span class="settings-nav-desc">latexindent / 環境検出</span>
                 </button>
                 <button class="settings-nav-item" data-settings-target="build" type="button">
                   <span class="settings-nav-title">ビルド</span>
-                  <span class="settings-nav-desc">コンパイルエンジン / PDF 表示</span>
+                  <span class="settings-nav-desc">コンパイル / SyncTeX / プロファイル</span>
                 </button>
-                <button class="settings-nav-item" data-settings-target="runtime" type="button">
+                <button class="settings-nav-item" data-settings-target="env" type="button">
                     <span class="settings-nav-title-row">
-                    <span class="settings-nav-title">実行環境</span>
+                    <span class="settings-nav-title">環境</span>
                     <span class="settings-nav-badge is-hidden" id="settings-runtime-attention" aria-hidden="true">
                       要対応
                     </span>
                   </span>
-                  <span class="settings-nav-desc">TeX Distribution / latexmk</span>
+                  <span class="settings-nav-desc">TeX Distribution / ツール確認</span>
+                </button>
+                <button class="settings-nav-item" data-settings-target="account" type="button">
+                  <span class="settings-nav-title">アカウント</span>
+                  <span class="settings-nav-desc">ログイン / アップデート</span>
+                </button>
+                <button class="settings-nav-item" data-settings-target="feedback" type="button">
+                  <span class="settings-nav-title">フィードバック</span>
+                  <span class="settings-nav-desc">不具合・要望を送信</span>
+                </button>
+                <button class="settings-nav-item" data-settings-target="info" type="button">
+                  <span class="settings-nav-title">情報</span>
+                  <span class="settings-nav-desc">法務 / サポート</span>
                 </button>
               </div>
               <div class="settings-pages is-hidden" id="settings-pages" aria-hidden="true">
@@ -597,27 +592,15 @@
                     <div class="settings-page-title">エディタ</div>
                   </div>
                   <div class="settings-group">
-                    <div class="settings-group-title">SyncTeX</div>
+                    <div class="settings-group-title">表示</div>
                     <div class="settings-item">
                       <div class="settings-label">
-                        <span class="settings-title">ビルド時SyncTeX</span>
-                        <span class="settings-desc">ビルド成功時に自動でPDFへジャンプします。</span>
+                        <span class="settings-title">行を折り返して表示</span>
+                        <span class="settings-desc">ON の場合、長い行をエディタ幅で折り返します。</span>
                       </div>
                       <div class="settings-control">
-                        <label class="settings-switch" for="editor-auto-synctex-build">
-                          <input class="settings-switch-input" id="editor-auto-synctex-build" type="checkbox">
-                          <span class="settings-switch-track" aria-hidden="true"></span>
-                        </label>
-                      </div>
-                    </div>
-                    <div class="settings-item">
-                      <div class="settings-label">
-                        <span class="settings-title">逆SyncTeX（PDF→ソース）</span>
-                        <span class="settings-desc">PDF上でCtrl/Cmd+Clickした位置へジャンプします。</span>
-                      </div>
-                      <div class="settings-control">
-                        <label class="settings-switch" for="editor-reverse-synctex">
-                          <input class="settings-switch-input" id="editor-reverse-synctex" type="checkbox">
+                        <label class="settings-switch" for="editor-word-wrap">
+                          <input class="settings-switch-input" id="editor-word-wrap" type="checkbox">
                           <span class="settings-switch-track" aria-hidden="true"></span>
                         </label>
                       </div>
@@ -774,16 +757,8 @@
                     </div>
                     <div class="env-registry-list" id="editor-format-verbatim-list"></div>
                   </div>
-                </div>
-                <div class="settings-page is-hidden" data-settings-page="env" aria-hidden="true">
-                  <div class="settings-page-header">
-                    <button class="settings-back" data-settings-back type="button" aria-label="戻る"></button>
-                    <div class="settings-page-title">数式/表 環境</div>
-                  </div>
                   <div class="settings-group">
-                    <div class="settings-group-title">検出対象の環境</div>
-                    <div class="settings-help-text settings-help-intro">
-                    </div>
+                    <div class="settings-group-title">数式/表 環境</div>
                     <div class="env-registry">
                       <div class="env-registry-add">
                         <input
@@ -822,7 +797,7 @@
                     <div class="settings-page-title">ビルド</div>
                   </div>
                   <div class="settings-group">
-                    <div class="settings-group-title">ビルド</div>
+                    <div class="settings-group-title">コンパイル</div>
                     <div class="settings-item">
                       <div class="settings-label">
                         <span class="settings-title">コンパイルエンジン</span>
@@ -849,6 +824,36 @@
                         </label>
                       </div>
                     </div>
+                  </div>
+                  <div class="settings-group">
+                    <div class="settings-group-title">SyncTeX</div>
+                    <div class="settings-item">
+                      <div class="settings-label">
+                        <span class="settings-title">ビルド時SyncTeX</span>
+                        <span class="settings-desc">ビルド成功時に自動でPDFへジャンプします。</span>
+                      </div>
+                      <div class="settings-control">
+                        <label class="settings-switch" for="editor-auto-synctex-build">
+                          <input class="settings-switch-input" id="editor-auto-synctex-build" type="checkbox">
+                          <span class="settings-switch-track" aria-hidden="true"></span>
+                        </label>
+                      </div>
+                    </div>
+                    <div class="settings-item">
+                      <div class="settings-label">
+                        <span class="settings-title">逆SyncTeX（PDF→ソース）</span>
+                        <span class="settings-desc">PDF上でCtrl/Cmd+Clickした位置へジャンプします。</span>
+                      </div>
+                      <div class="settings-control">
+                        <label class="settings-switch" for="editor-reverse-synctex">
+                          <input class="settings-switch-input" id="editor-reverse-synctex" type="checkbox">
+                          <span class="settings-switch-track" aria-hidden="true"></span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="settings-group">
+                    <div class="settings-group-title">ビルドプロファイル</div>
                     <div class="settings-item">
                       <div class="settings-label">
                         <span class="settings-title">ビルドプロファイル</span>
@@ -894,6 +899,9 @@
                     </div>
                     <div class="settings-help-text" id="settings-build-profile-hint">
                     </div>
+                  </div>
+                  <div class="settings-group">
+                    <div class="settings-group-title">クリーン</div>
                     <div class="settings-item">
                       <div class="settings-label">
                         <span class="settings-title">clean</span>
@@ -913,60 +921,10 @@
                     </div>
                   </div>
                 </div>
-                <div class="settings-page is-hidden" data-settings-page="runtime" aria-hidden="true">
+                <div class="settings-page is-hidden" data-settings-page="env" aria-hidden="true">
                   <div class="settings-page-header">
                     <button class="settings-back" data-settings-back type="button" aria-label="戻る"></button>
-                    <div class="settings-page-title">実行環境</div>
-                  </div>
-                  <div class="settings-group">
-                    <div class="settings-group-title">アカウント</div>
-                    <div class="settings-item">
-                      <div class="settings-label">
-                        <span class="settings-title">Googleログイン</span>
-                        <span class="settings-desc" id="settings-auth-status">未ログイン</span>
-                      </div>
-                      <div class="settings-control settings-inline settings-inline-wrap">
-                        <button class="panel-button ghost is-hidden" id="settings-auth-logout" type="button">
-                          ログアウト
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="settings-group">
-                    <div class="settings-group-title">アップデート</div>
-                    <div class="settings-item">
-                      <div class="settings-label">
-                        <span class="settings-title">現在のバージョン</span>
-                      </div>
-                      <div class="settings-control">
-                        <span class="settings-path" id="settings-update-current">-</span>
-                      </div>
-                    </div>
-                    <div class="settings-item">
-                      <div class="settings-label">
-                        <span class="settings-title">最新バージョン</span>
-                      </div>
-                      <div class="settings-control">
-                        <span class="settings-path" id="settings-update-latest">-</span>
-                      </div>
-                    </div>
-                    <div class="settings-help-text" id="settings-update-status">
-                      更新確認待ちです。
-                    </div>
-                    <div class="settings-update-progress is-hidden" id="settings-update-progress" aria-hidden="true">
-                      <div class="settings-update-progress-fill" id="settings-update-progress-fill"></div>
-                    </div>
-                    <div class="settings-inline settings-inline-wrap">
-                      <button class="panel-button ghost" id="settings-update-check" type="button">
-                        更新を確認
-                      </button>
-                      <button class="panel-button is-hidden" id="settings-update-apply" type="button">
-                        更新を適用
-                      </button>
-                      <button class="panel-button ghost" id="settings-update-open" type="button">
-                        手動ダウンロード
-                      </button>
-                    </div>
+                    <div class="settings-page-title">環境</div>
                   </div>
                   <div class="settings-group">
                     <div class="settings-group-title">実行環境</div>
@@ -1056,6 +1014,68 @@
                       </div>
                     </div>
                   </div>
+                </div>
+                <div class="settings-page is-hidden" data-settings-page="account" aria-hidden="true">
+                  <div class="settings-page-header">
+                    <button class="settings-back" data-settings-back type="button" aria-label="戻る"></button>
+                    <div class="settings-page-title">アカウント</div>
+                  </div>
+                  <div class="settings-group">
+                    <div class="settings-group-title">アカウント</div>
+                    <div class="settings-item">
+                      <div class="settings-label">
+                        <span class="settings-title">Googleログイン</span>
+                        <span class="settings-desc" id="settings-auth-status">未ログイン</span>
+                      </div>
+                      <div class="settings-control settings-inline settings-inline-wrap">
+                        <button class="panel-button ghost is-hidden" id="settings-auth-logout" type="button">
+                          ログアウト
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="settings-group">
+                    <div class="settings-group-title">アップデート</div>
+                    <div class="settings-item">
+                      <div class="settings-label">
+                        <span class="settings-title">現在のバージョン</span>
+                      </div>
+                      <div class="settings-control">
+                        <span class="settings-path" id="settings-update-current">-</span>
+                      </div>
+                    </div>
+                    <div class="settings-item">
+                      <div class="settings-label">
+                        <span class="settings-title">最新バージョン</span>
+                      </div>
+                      <div class="settings-control">
+                        <span class="settings-path" id="settings-update-latest">-</span>
+                      </div>
+                    </div>
+                    <div class="settings-help-text" id="settings-update-status">
+                      更新確認待ちです。
+                    </div>
+                    <div class="settings-update-progress is-hidden" id="settings-update-progress" aria-hidden="true">
+                      <div class="settings-update-progress-fill" id="settings-update-progress-fill"></div>
+                    </div>
+                    <div class="settings-inline settings-inline-wrap">
+                      <button class="panel-button ghost" id="settings-update-check" type="button">
+                        更新を確認
+                      </button>
+                      <button class="panel-button is-hidden" id="settings-update-apply" type="button">
+                        更新を適用
+                      </button>
+                      <button class="panel-button ghost" id="settings-update-open" type="button">
+                        手動ダウンロード
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div class="settings-page is-hidden" data-settings-page="feedback" aria-hidden="true">
+                  <div class="settings-page-header">
+                    <button class="settings-back" data-settings-back type="button" aria-label="戻る"></button>
+                    <div class="settings-page-title">フィードバック</div>
+                  </div>
                   <div class="settings-group">
                     <div class="settings-group-title">フィードバック</div>
                     <div class="settings-item">
@@ -1138,8 +1158,14 @@
                     </div>
                     <div class="settings-help-text is-hidden" id="settings-feedback-status"></div>
                   </div>
+                </div>
+                <div class="settings-page is-hidden" data-settings-page="info" aria-hidden="true">
+                  <div class="settings-page-header">
+                    <button class="settings-back" data-settings-back type="button" aria-label="戻る"></button>
+                    <div class="settings-page-title">情報</div>
+                  </div>
                   <div class="settings-group">
-                    <div class="settings-group-title">法務とサポート</div>
+                    <div class="settings-group-title">法務</div>
                     <div class="settings-item">
                       <div class="settings-label">
                         <span class="settings-title">Legal</span>
@@ -1160,6 +1186,9 @@
                         </button>
                       </div>
                     </div>
+                  </div>
+                  <div class="settings-group">
+                    <div class="settings-group-title">サポート</div>
                     <div class="settings-item">
                       <div class="settings-label">
                         <span class="settings-title">サポート</span>
@@ -1340,6 +1369,30 @@
               キャンセル
             </button>
             <button class="panel-button" id="rename-modal-submit" type="button">変更</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal" id="delete-modal" aria-hidden="true">
+        <div
+          class="modal-card"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="delete-modal-title"
+        >
+          <div class="modal-title" id="delete-modal-title">削除の確認</div>
+          <div class="modal-body">
+            <div class="modal-row">
+              <span class="modal-label">対象</span>
+              <span class="modal-path" id="delete-modal-target">未選択</span>
+            </div>
+            <div class="modal-help" id="delete-modal-help">この操作は取り消せません。</div>
+          </div>
+          <div class="modal-actions">
+            <button class="panel-button ghost" id="delete-modal-cancel" type="button">
+              キャンセル
+            </button>
+            <button class="panel-button danger" id="delete-modal-submit" type="button">削除</button>
           </div>
         </div>
       </div>

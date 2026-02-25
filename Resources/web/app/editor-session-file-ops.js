@@ -192,10 +192,19 @@ export const createEditorSessionFileOps = (ctx) => {
         }
     };
     const requestOpenFile = (path, groupKey, force = false) => {
-        const existingGroupKey = !force ? findGroupKeyByPath(path) : null;
+        const preferredGroupHasPath = !force
+            ? (() => {
+                const preferredGroup = getEditorGroup(groupKey);
+                return (preferredGroup.currentFilePath === path ||
+                    preferredGroup.openTabs.includes(path));
+            })()
+            : false;
+        const existingGroupKey = !force && !preferredGroupHasPath ? findGroupKeyByPath(path) : null;
         const resolvedGroupKey = force
             ? groupKey
-            : existingGroupKey !== null && existingGroupKey !== void 0 ? existingGroupKey : resolveAutoOpenGroupKey(groupKey);
+            : preferredGroupHasPath
+                ? groupKey
+                : existingGroupKey !== null && existingGroupKey !== void 0 ? existingGroupKey : resolveAutoOpenGroupKey(groupKey);
         const group = getEditorGroup(resolvedGroupKey);
         if (group.currentFilePath === path) {
             return false;

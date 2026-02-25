@@ -488,7 +488,17 @@ const createBuildHandlers = (deps) => {
     }
     if (result.kind === "failure") {
       const errorIssues = result.issues.filter((issue) => issue.severity === "error");
-      const displayIssues = errorIssues.length > 0 ? errorIssues : result.issues;
+      const warningIssues = result.issues.filter((issue) => issue.severity === "warning");
+      const shouldIncludeWarnings =
+        errorIssues.length === 1 &&
+        warningIssues.length > 0 &&
+        /警告だけでは原因を特定できません/.test(errorIssues[0]?.message ?? "");
+      const displayIssues =
+        errorIssues.length > 0
+          ? shouldIncludeWarnings
+            ? [errorIssues[0], ...warningIssues].slice(0, 20)
+            : errorIssues
+          : result.issues;
       const count = Math.max(displayIssues.length, 1);
       const summaryText = displayIssues[0]?.message ?? result.summary;
       sendBuildState("failed", result.summary);

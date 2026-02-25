@@ -94,6 +94,8 @@ const createMainWindow = () => {
     show: !e2eHeadless,
     backgroundColor: "#1c2129",
     title: "TeX64",
+    titleBarStyle: "hiddenInset",
+    trafficLightPosition: { x: 12, y: 10 },
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -646,7 +648,7 @@ ipcMain.on("tex64", (_event, message) => {
     return;
   }
   if (type === "createProject") {
-    workspaceHandlers.handleCreateProject(message.template);
+    workspaceHandlers.handleCreateProject();
     return;
   }
   if (type === "synctex:forward") {

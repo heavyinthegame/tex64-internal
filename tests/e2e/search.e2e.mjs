@@ -187,6 +187,42 @@ const waitForSearchEmptyMessage = async (page, expected, timeout = 15000) => {
 const countSearchItems = async (page) =>
   page.locator("#search-results .search-match-item").count();
 
+const assertSearchResultsScrollable = async (page) => {
+  const before = await page.evaluate(() => {
+    const container = document.getElementById("search-results");
+    if (!(container instanceof HTMLElement)) {
+      return null;
+    }
+    return {
+      scrollTop: container.scrollTop,
+      hasOverflow: container.scrollHeight > container.clientHeight,
+      scrollHeight: container.scrollHeight,
+      clientHeight: container.clientHeight,
+    };
+  });
+  assert.ok(before, "search results container not found");
+  assert.equal(before.hasOverflow, true, "search results should overflow vertically");
+
+  const box = await page.locator("#search-results").boundingBox();
+  assert.ok(box, "search results bounding box not found");
+  await page.mouse.move(box.x + box.width / 2, box.y + Math.min(24, box.height / 2));
+  await page.mouse.wheel(0, 900);
+  await pause(120);
+
+  const after = await page.evaluate(() => {
+    const container = document.getElementById("search-results");
+    if (!(container instanceof HTMLElement)) {
+      return null;
+    }
+    return container.scrollTop;
+  });
+  assert.notEqual(after, null, "search results container not found after wheel");
+  assert.ok(
+    after > before.scrollTop,
+    `search results should scroll (before=${before.scrollTop}, after=${after}, height=${before.scrollHeight}/${before.clientHeight})`
+  );
+};
+
 const getSearchGroups = async (page) =>
   page.evaluate(() => {
     const parseLine = (raw) => {
@@ -450,6 +486,7 @@ const run = async () => {
       { timeout: 30000 }
     );
     assert.equal(await countSearchItems(page), 200, "search result count must be capped at 200");
+    await assertSearchResultsScrollable(page);
 
     log("[9/12] rename validation: required from/to");
     await setRenameForm(page, { from: "", to: "", label: true, cite: true });

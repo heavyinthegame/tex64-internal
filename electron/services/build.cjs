@@ -402,6 +402,48 @@ class BuildService {
       return { kind: "failure", summary: issue.message, issues: [issue] };
     }
 
+    if (
+      status !== 0 &&
+      engine === "lualatex" &&
+      this.isXypdfPdftexRequirementError(output)
+    ) {
+      try {
+        const fallback = await this.runLatexmk(rootPath, mainFileName, "pdflatex", {
+          outDir,
+          extraArgs,
+          hasExplicitOutDirArg,
+        });
+        output = [
+          output,
+          "",
+          "[tex64] xypdf エラーを検出したため、pdflatex で再実行しました。",
+          fallback.output,
+        ]
+          .filter(Boolean)
+          .join("\n");
+        status = fallback.status;
+        if (fallback.cancelled === true || this.cancelRequested) {
+          return {
+            kind: "cancelled",
+            summary: "ビルドをキャンセルしました。",
+            issues: [],
+            log: output,
+          };
+        }
+      } catch (error) {
+        const message = error?.message ?? String(error);
+        if (isEnvMissingMessage(message)) {
+          const issue = {
+            severity: "error",
+            message: "latexmk が見つかりません。TeX環境を確認してください。",
+            line: null,
+            action: "open-runtime",
+          };
+          return { kind: "failure", summary: issue.message, issues: [issue] };
+        }
+      }
+    }
+
     const issues = this.parseIssues(output, rootPath);
     if (status === 0) {
       const resolvedPdfPath = this.resolvePdfPathAfterBuild(rootPath, mainFileName, {
@@ -437,15 +479,21 @@ class BuildService {
         log: output,
       };
     }
+    const summaryText = typeof summary === "string" ? summary.trim() : "";
+    const summaryLooksWarning = /\bwarning\b/i.test(summaryText);
+    const fallbackMessage = summaryLooksWarning
+      ? "ビルドに失敗しました。警告だけでは原因を特定できません。ビルドログを確認してください。"
+      : summaryText || "ビルドに失敗しました。ビルドログを確認してください。";
     const fallback = {
       severity: "error",
-      message: summary,
+      message: fallbackMessage,
       line: null,
     };
     const hasError = issues.some((issue) => issue.severity === "error");
+    const summaryForUi = summaryLooksWarning ? fallbackMessage : summary;
     return {
       kind: "failure",
-      summary,
+      summary: summaryForUi,
       issues: hasError ? issues : [fallback, ...issues].slice(0, 20),
       log: output,
     };
@@ -961,6 +1009,9 @@ class BuildService {
     const lower = text.toLowerCase();
     if (
       text.startsWith("!") ||
+      /^\S+\s+error:/i.test(text) ||
+      /^package\s+.+\s+error:/i.test(text) ||
+      /^class\s+.+\s+error:/i.test(text) ||
       lower.includes("latex error") ||
       lower.includes("undefined control sequence") ||
       lower.includes("emergency stop") ||
@@ -978,6 +1029,17 @@ class BuildService {
       return "warning";
     }
     return null;
+  }
+
+  isXypdfPdftexRequirementError(output) {
+    if (typeof output !== "string" || !output.trim()) {
+      return false;
+    }
+    const lower = output.toLowerCase();
+    if (!lower.includes("xypdf error")) {
+      return false;
+    }
+    return lower.includes("pdftex version") || lower.includes("pdf output");
   }
 
   extractLineNumber(line) {

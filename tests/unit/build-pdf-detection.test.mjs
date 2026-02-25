@@ -70,3 +70,27 @@ test("BuildService resolves PDF path from .fdb_latexmk when jobname differs", as
   });
 });
 
+test("BuildService retries with pdflatex when lualatex hits xypdf engine mismatch", async () => {
+  await withTempWorkspace(async (rootPath) => {
+    fs.writeFileSync(path.join(rootPath, "main.tex"), "% dummy", "utf8");
+
+    const engines = [];
+    const service = new StubBuildService(async ({ rootPath: cwd, engine }) => {
+      engines.push(engine);
+      if (engine === "lualatex") {
+        return {
+          output:
+            "Package xypdf Error: pdfTeX version 1.40.0 or higher is needed for the xypdf package with PDF output.",
+          status: 1,
+        };
+      }
+      fs.writeFileSync(path.join(cwd, "main.pdf"), "%PDF-1.4\n", "utf8");
+      return { output: "", status: 0 };
+    });
+
+    const result = await service.runBuild(rootPath, "main.tex", "lualatex", null);
+    assert.equal(result.kind, "success");
+    assert.deepEqual(engines, ["lualatex", "pdflatex"]);
+    assert.ok(fs.existsSync(result.pdfPath));
+  });
+});

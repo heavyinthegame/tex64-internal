@@ -57,8 +57,8 @@
   --radius: 12px;
   
   --sidebar-width: 52px;
-  --sidebar-panel-width: calc((100vw - var(--sidebar-width) - 4px) * 0.4);
-  --topbar-height: 48px;
+  --sidebar-panel-width: calc((100vw - var(--sidebar-width) - 4px) * 0.25);
+  --topbar-height: 38px;
 }
 
 * {
@@ -216,52 +216,7 @@ body.has-launcher .app {
   display: none;
 }
 
-/* Template section */
-.launcher-template {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 12px;
-}
 
-.launcher-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.launcher-toggle {
-  display: flex;
-  padding: 2px;
-  gap: 2px;
-  border-radius: 8px;
-  border: 1px solid var(--panel-border);
-  background: var(--panel);
-}
-
-.launcher-template-button {
-  flex: 1;
-  border: none;
-  background: transparent;
-  color: var(--text-soft);
-  font-size: 12px;
-  padding: 8px 10px;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-
-.launcher-template-button:hover {
-  color: var(--text);
-  background: var(--panel-strong);
-}
-
-.launcher-template-button.is-active {
-  color: var(--text);
-  background: var(--accent-soft);
-}
 
 .launcher-status {
   margin-top: 10px;
@@ -492,45 +447,26 @@ body.has-launcher .app {
 .topbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 0 12px;
+  justify-content: flex-end;
+  gap: 0;
+  padding: 0;
   background: var(--panel);
   border-bottom: 1px solid var(--panel-border);
-  box-shadow: var(--shadow);
+  -webkit-app-region: drag;
 }
 
-.brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  font-size: 14px;
-}
-
-.brand-icon {
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  object-fit: cover;
-  box-shadow: 0 0 10px var(--accent-soft);
-}
-
-.brand-name {
-  font-family: "Menlo", "SF Mono", monospace;
-  background: linear-gradient(to right, #fff, #a5b4fc);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  filter: drop-shadow(0 0 8px rgba(121, 126, 249, 0.3));
+.topbar-drag {
+  flex: 1;
+  min-width: 0;
+  -webkit-app-region: drag;
 }
 
 .top-actions {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 0;
+  gap: 3px;
+  padding: 0 8px;
+  -webkit-app-region: no-drag;
 }
 
 .pill {
@@ -746,6 +682,21 @@ body.has-launcher .app {
 .panel-button.ghost {
   background: transparent;
   color: var(--muted);
+}
+
+.panel-button.danger {
+  background: rgba(248, 81, 73, 0.18);
+  color: #ff6b6b;
+  border-color: rgba(248, 81, 73, 0.3);
+}
+
+.panel-button.danger:hover {
+  background: rgba(248, 81, 73, 0.28);
+  border-color: rgba(248, 81, 73, 0.45);
+}
+
+.panel-button.danger:active {
+  background: rgba(248, 81, 73, 0.35);
 }
 
 .panel-body {
@@ -1100,18 +1051,21 @@ math-field.block-math-field::placeholder {
 
 .block-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
   width: 100%;
-  flex: 1;
+  min-width: 0;
 }
 
 .block-actions-right {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   margin-left: auto;
+  min-width: 0;
 }
 
 .block-settings-button,
@@ -1553,6 +1507,7 @@ math-field.block-math-field::placeholder {
 .search-file-group {
   display: flex;
   flex-direction: column;
+  flex: 0 0 auto;
   border: 1px solid var(--panel-border);
   border-radius: 8px;
   overflow: hidden;
@@ -1675,16 +1630,16 @@ math-field.block-math-field::placeholder {
 .settings-nav {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 12px;
+  gap: 2px;
+  padding: 8px;
 }
 
 .settings-nav-item {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 12px 14px;
-  border-radius: 10px;
+  gap: 1px;
+  padding: 8px 12px;
+  border-radius: 8px;
   border: 1px solid transparent;
   background: transparent;
   text-align: left;
@@ -1759,9 +1714,12 @@ math-field.block-math-field::placeholder {
 }
 
 .settings-nav-desc {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--muted);
   line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Settings Pages Container */
@@ -1902,12 +1860,12 @@ math-field.block-math-field::placeholder {
   display: flex;
   flex-direction: column;
   gap: 0;
-  padding: 18px;
-  margin: 12px;
-  margin-top: 16px;
+  padding: 14px;
+  margin: 8px;
+  margin-top: 12px;
   background: rgba(255, 255, 255, 0.015);
   border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 12px;
+  border-radius: 10px;
   container-type: inline-size;
 }
 
@@ -1937,9 +1895,9 @@ math-field.block-math-field::placeholder {
 .settings-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 20px;
+  gap: 12px;
   align-items: center;
-  padding: 14px 0;
+  padding: 10px 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
   min-height: 0;
 }
@@ -1954,12 +1912,19 @@ math-field.block-math-field::placeholder {
 }
 
 /* Container query for responsive layout */
-@container (max-width: 480px) {
+@container (max-width: 300px) {
   .settings-item {
     grid-template-columns: 1fr;
-    gap: 14px;
+    gap: 8px;
     align-items: start;
-    padding: 16px 4px;
+    padding: 10px 2px;
+  }
+}
+
+@container (max-width: 300px) {
+  .settings-select {
+    min-width: 0;
+    max-width: 100%;
   }
 }
 
@@ -1979,7 +1944,7 @@ math-field.block-math-field::placeholder {
 }
 
 .settings-title {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--text);
   letter-spacing: 0.01em;
@@ -1987,7 +1952,7 @@ math-field.block-math-field::placeholder {
 }
 
 .settings-desc {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-soft);
   line-height: 1.5;
   opacity: 0.85;
@@ -2103,7 +2068,7 @@ math-field.block-math-field::placeholder {
 /* Settings Select */
 .settings-select {
   width: 100%;
-  min-width: 140px;
+  min-width: 0;
   max-width: 240px;
   background: rgba(0, 0, 0, 0.2);
   color: var(--text);
@@ -2135,7 +2100,8 @@ math-field.block-math-field::placeholder {
 /* Settings Inline Layout */
 .settings-inline {
   display: flex;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 8px;
   align-items: center;
   width: 100%;
 }
@@ -2408,18 +2374,31 @@ math-field.block-math-field::placeholder {
 
 .env-registry {
   display: grid;
-  gap: 14px;
-  padding: 16px;
-  border-radius: 12px;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   background: rgba(0, 0, 0, 0.15);
 }
 
 .env-registry-add {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
   align-items: center;
+}
+
+.env-registry-add .env-registry-input {
+  flex: 1 1 120px;
+  min-width: 0;
+}
+
+.env-registry-add .env-registry-select {
+  flex: 0 0 auto;
+}
+
+.env-registry-add .panel-button {
+  flex: 0 0 auto;
 }
 
 .env-registry-input,
@@ -2478,10 +2457,10 @@ math-field.block-math-field::placeholder {
 .env-registry-row {
   display: grid;
   grid-template-columns: auto 1fr auto;
-  gap: 10px;
+  gap: 8px;
   align-items: center;
-  padding: 10px 12px;
-  border-radius: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.04);
   background: rgba(255, 255, 255, 0.02);
   transition: all 0.2s ease;
@@ -2526,7 +2505,7 @@ math-field.block-math-field::placeholder {
 }
 
 .env-registry-spacer {
-  min-width: 40px;
+  min-width: 28px;
 }
 
 .outline-empty {
@@ -2611,11 +2590,7 @@ math-field.block-math-field::placeholder {
 }
 
 .outline-item-meta {
-  margin-left: auto;
-  font-size: 10px;
-  color: var(--muted);
-  opacity: 0.9;
-  white-space: nowrap;
+  display: none;
 }
 
 #outline-mode-current.is-active,
@@ -2961,6 +2936,7 @@ math-field.block-math-field::placeholder {
   grid-template-columns: minmax(0, 1fr);
   min-height: 0;
   height: 100%;
+  position: relative;
 }
 
 .editor-groups[data-split="true"] {
@@ -2969,6 +2945,7 @@ math-field.block-math-field::placeholder {
     var(--split-handle)
     minmax(var(--split-min), var(--split-secondary));
 }
+
 
 .editor-splitter {
   position: relative;
@@ -3025,7 +3002,7 @@ math-field.block-math-field::placeholder {
   align-items: stretch;
   gap: 0;
   padding: 0;
-  min-height: 36px;
+  min-height: 34px;
   background: var(--panel);
   border-bottom: 1px solid var(--panel-border);
   position: relative;
@@ -3038,12 +3015,12 @@ math-field.block-math-field::placeholder {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 32px;
+  height: 24px;
   margin: 0;
-  border-radius: 9px;
+  border-radius: 5px;
   border: 1px solid transparent;
-  padding: 0 13px;
-  font-size: 11px;
+  padding: 0 8px;
+  font-size: 10px;
   font-weight: 600;
   line-height: 1;
   letter-spacing: 0.04em;
@@ -3066,13 +3043,12 @@ math-field.block-math-field::placeholder {
 }
 
 #editor-split-button {
-  width: 38px;
+  width: 28px;
   padding: 0;
 }
 
 #format-button,
 #synctex-button {
-  min-width: 96px;
   color: var(--text);
 }
 
@@ -3135,12 +3111,14 @@ math-field.block-math-field::placeholder {
 
 .editor-tab-actions {
   display: inline-flex;
-  align-items: stretch;
-  gap: 0;
+  align-items: center;
+  gap: 4px;
   margin-left: auto;
+  padding: 0 6px;
   position: relative;
   z-index: 3;
   background: var(--panel);
+  flex-shrink: 0;
 }
 
 .editor-tab {
@@ -3183,7 +3161,7 @@ math-field.block-math-field::placeholder {
 }
 
 #build-button {
-  width: 36px;
+  width: 28px;
   padding: 0;
   margin-left: 2px;
   border-color: rgba(121, 126, 249, 0.45);
@@ -3701,7 +3679,9 @@ body.has-editor .editor-group:not(.is-empty) .editor-placeholder {
 .modal {
   position: fixed;
   inset: 0;
-  background: rgba(8, 11, 16, 0.55);
+  background: rgba(8, 11, 16, 0.6);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3717,16 +3697,18 @@ body.has-editor .editor-group:not(.is-empty) .editor-placeholder {
 }
 
 .modal-card {
-  width: min(420px, 92vw);
-  background: #1c242e;
+  width: min(400px, 90vw);
+  background: var(--panel-strong, #1c242e);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
-  padding: 18px;
-  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.35);
+  border-radius: 14px;
+  padding: 22px 24px;
+  box-shadow:
+    0 24px 48px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset;
   display: grid;
-  gap: 14px;
-  transform: translateY(8px) scale(0.98);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  gap: 18px;
+  transform: translateY(10px) scale(0.97);
+  transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.25s ease;
 }
 
 .modal.is-open .modal-card {
@@ -3743,8 +3725,10 @@ body.has-editor .editor-group:not(.is-empty) .editor-placeholder {
 }
 
 .modal-title {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
+  color: var(--text);
+  letter-spacing: 0.01em;
 }
 
 .modal-header {
@@ -3865,12 +3849,12 @@ body.has-editor .editor-group:not(.is-empty) .editor-placeholder {
 .modal-subtitle {
   font-size: 12px;
   color: var(--muted);
-  margin-top: -8px;
+  margin-top: -12px;
 }
 
 .modal-body {
   display: grid;
-  gap: 12px;
+  gap: 14px;
 }
 
 .diff-modal-body {
@@ -3894,17 +3878,32 @@ body.has-editor .editor-group:not(.is-empty) .editor-placeholder {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+}
+
+.modal-label {
   font-size: 11px;
+  font-weight: 500;
   color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  flex-shrink: 0;
 }
 
 .modal-path {
-  max-width: 65%;
+  max-width: 70%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   text-align: right;
+  font-size: 12px;
+  font-weight: 500;
   color: var(--text);
+  font-family: "SF Mono", Menlo, Monaco, monospace;
 }
 
 .modal-field {
@@ -3914,34 +3913,58 @@ body.has-editor .editor-group:not(.is-empty) .editor-placeholder {
 
 .modal-input {
   width: 100%;
-  background: var(--input-bg-strong);
+  background: rgba(0, 0, 0, 0.2);
   color: var(--text);
-  border: 1px solid var(--input-border-strong);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
-  padding: 10px 12px;
+  padding: 10px 14px;
   font-size: 13px;
+  font-family: inherit;
+  transition: all 0.15s ease;
 }
 
 .modal-input:focus {
   outline: none;
-  border-color: rgba(92, 156, 255, 0.6);
-  box-shadow: 0 0 0 1px rgba(92, 156, 255, 0.25);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
 }
 
 .modal-help {
-  min-height: 14px;
+  min-height: 16px;
   font-size: 11px;
+  line-height: 1.5;
   color: var(--muted);
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.modal-help:empty {
+  display: none;
 }
 
 .modal-help.is-error {
-  color: var(--danger);
+  color: var(--danger-text, #ff6b6b);
+  background: rgba(248, 81, 73, 0.08);
+  border-color: rgba(248, 81, 73, 0.2);
 }
 
 .modal-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.modal-actions .panel-button {
+  padding: 8px 18px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 8px;
+  min-width: 72px;
+  justify-content: center;
+  transition: all 0.15s ease;
 }
 
 .context-menu {
@@ -5255,6 +5278,11 @@ body.has-editor .editor-group:not(.is-empty) .editor-placeholder {
 }
 
 /* Monaco Scrollbar Override */
+.monaco-editor .monaco-scrollable-element > .scrollbar.vertical,
+.monaco-editor .monaco-scrollable-element > .decorationsOverviewRuler {
+  background: transparent !important;
+}
+
 .monaco-editor .monaco-scrollable-element > .scrollbar > .slider {
   background: rgba(255, 255, 255, 0.12);
 }

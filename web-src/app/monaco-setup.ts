@@ -38,6 +38,7 @@ type MonacoSetupDeps = {
   ) => Promise<FileExcerptResult>;
   onCursorPositionChange: (position: { lineNumber: number; column: number }) => void;
   onCursorSelectionChange?: (position: { lineNumber: number; column: number }) => void;
+  getEditorWordWrapEnabled: () => boolean;
   getGhostCompletionEnabled: () => boolean;
   getGhostCompletionConfig: () => { debounceMs: number; maxChars: number };
   requestApiCompletion?: (payload: {
@@ -53,6 +54,7 @@ type MonacoSetupDeps = {
 
 export type MonacoSetupApi = {
   setInlineSuggestEnabled: (enabled: boolean) => void;
+  setWordWrapEnabled: (enabled: boolean) => void;
   setGhostCompletionConfig: (config: { debounceMs: number; maxChars: number }) => void;
 };
 
@@ -87,11 +89,23 @@ export const initMonacoSetup = (
     });
   };
 
+  const setWordWrapEnabled = (enabled: boolean) => {
+    const wordWrap = enabled ? "on" : "off";
+    deps.editorSession.forEachEditorGroup((group) => {
+      const editorAny = group.editor as { updateOptions?: (options: unknown) => void } | null;
+      editorAny?.updateOptions?.({ wordWrap });
+    });
+  };
+
   const setGhostCompletionConfig = (config: { debounceMs: number; maxChars: number }) => {
     inlineController.applyGhostCompletionConfig(config);
   };
 
-  const api: MonacoSetupApi = { setInlineSuggestEnabled, setGhostCompletionConfig };
+  const api: MonacoSetupApi = {
+    setInlineSuggestEnabled,
+    setWordWrapEnabled,
+    setGhostCompletionConfig,
+  };
 
   if (!(editorHost instanceof HTMLElement)) {
     deps.updateFallback("エディタ領域が見つかりません。");
@@ -224,7 +238,7 @@ export const initMonacoSetup = (
         lineHeight: 20,
         lineNumbersMinChars: 3,
         scrollBeyondLastLine: false,
-        wordWrap: "off",
+        wordWrap: deps.getEditorWordWrapEnabled() ? "on" : "off",
         wordBasedSuggestions: "off",
         quickSuggestions: { other: true, comments: false, strings: true },
         quickSuggestionsDelay: 25,

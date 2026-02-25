@@ -83,13 +83,13 @@ export const initIssuesUi = (context: AppContext, deps: IssuesUiDeps): IssuesUiA
       const hasJumpTarget = Boolean(detail.path || detail.line);
       item.disabled = !isRuntimeAction && !hasJumpTarget;
       const resolutionText = getIssueResolution(issue) ?? "";
-      const showResolution = Boolean(resolutionText) && (issue.severity === "error" || isRuntimeAction);
+      const showResolution = Boolean(resolutionText);
       resolution.textContent = resolutionText;
       hint.textContent = isRuntimeAction
         ? "クリックでRuntimeを開く"
         : hasJumpTarget
         ? "クリックで移動"
-        : "移動先なし";
+        : "移動先を特定できません。ビルドログを確認";
 
       if (showResolution) {
         detailBlock.append(resolution);

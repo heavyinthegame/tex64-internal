@@ -136,6 +136,26 @@ npm run -s release:mac
 
 ※このスクリプトは **アップロードはしません**（アップロードは最後に行う想定）。
 
+### GitHub Actions を使わず手動公開する（R2 / S3）
+
+`release:mac` 実行後に、ローカルから `downloads.tex64.com` へ公開します。
+
+```bash
+export TEX64_DOWNLOADS_PUBLIC_BASE_URL=https://downloads.tex64.com
+export TEX64_DOWNLOADS_BUCKET=tex64-downloads
+export TEX64_DOWNLOADS_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
+export TEX64_DOWNLOADS_REGION=auto
+export AWS_PROFILE=tex64-r2
+
+npm run -s release:upload-downloads -- --version 0.1.0
+npm run -s release:go-no-go -- --version 0.1.0
+```
+
+- `TEX64_DOWNLOADS_ENDPOINT` は **バケットを含まない endpoint** を設定する（例: `...r2.cloudflarestorage.com`）。
+- `release:upload-downloads` は `release/` と `update/stable.json` を `tex64/vX.Y.Z/` と `tex64/updates/stable.json` へ配置する。
+- `release:go-no-go` は `downloads.tex64.com` と `tex64.com` の manifest/redirect の整合を検証する。
+- 単一archのみ公開する場合は `release:go-no-go -- --archs arm64`（または `x64`）を指定する。
+
 ## CI（GitHub Actions）
 
 - タグ push（例: `v0.1.0`）で **macOS 向けのみ** ビルドし、`downloads.tex64.com`（S3/R2 等のオブジェクトストレージ + CDN）へ配布物をアップロードします。
@@ -213,6 +233,12 @@ npm run -s release:import-checksums -- --version 0.1.0 --file /path/to/checksums
 - `tex64.com` の update manifest が `artifactUrl` と `artifactSha256` を返す
 - 既存版アプリで「更新確認 -> ダウンロード -> 検証 -> インストーラ起動」が通る
 - 主要導線（起動、ビルド、Google OAuth サインイン）が回帰していない
+
+自動チェック:
+
+```bash
+npm run -s release:go-no-go -- --version 0.1.0 --channel stable
+```
 
 ### ロールバック
 

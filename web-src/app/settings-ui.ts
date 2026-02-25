@@ -36,6 +36,7 @@ type SettingsUiDeps = {
     payload: { type: string; [key: string]: unknown },
     silent?: boolean
   ) => boolean;
+  onEditorWordWrapChange?: (enabled: boolean) => void;
   onGhostCompletionChange?: (enabled: boolean) => void;
   onGhostCompletionConfigChange?: (config: { debounceMs: number; maxChars: number }) => void;
   onUpdateAttentionChange?: (hasAttention: boolean) => void;
@@ -57,6 +58,7 @@ type FeedbackQueueItem = {
 
 export type SettingsUiApi = {
   getEditorAlignEnvEnabled: () => boolean;
+  getEditorWordWrapEnabled: () => boolean;
   getAutoSynctexOnBuildEnabled: () => boolean;
   getReverseSynctexEnabled: () => boolean;
   getPdfViewerMode: () => "window" | "tab";
@@ -122,6 +124,7 @@ export const initSettingsUi = (
     editorFormatVerbatimAdd,
     editorFormatVerbatimHint,
     editorFormatVerbatimList,
+    editorWordWrapToggle,
     editorAutoSynctexBuildToggle,
     editorReverseSynctexToggle,
     editorGhostCompletionToggle,
@@ -164,6 +167,7 @@ export const initSettingsUi = (
 
   let activeSettingsPage: string | null = null;
   let editorAlignEnvEnabled = true;
+  let editorWordWrapEnabled = false;
   let editorFormatSettings: EditorFormatSettings = {
     ...defaultEditorFormatSettings,
   };
@@ -187,6 +191,7 @@ export const initSettingsUi = (
   let errorReportingEnabled = true;
 
   const compileEngineKey = "tex64.compileEngine";
+  const editorWordWrapKey = "tex64.editor.wordWrap";
   const editorAutoSynctexOnBuildKey = "tex64.editor.autoSynctexOnBuild";
   const editorReverseSynctexKey = "tex64.editor.reverseSynctex";
   const editorGhostCompletionKey = "tex64.editor.ghostCompletion";
@@ -230,7 +235,7 @@ export const initSettingsUi = (
   });
   const { checkEnvironmentStatus, updateEnvStatus } = envManager;
   const runtimeSettingsNavItem =
-    settingsNavItems.find((button) => button.dataset.settingsTarget === "runtime") ??
+    settingsNavItems.find((button) => button.dataset.settingsTarget === "env") ??
     null;
 
   const updateEngineUI = () => {
@@ -427,6 +432,12 @@ export const initSettingsUi = (
     }
   };
 
+  const updateEditorWordWrapUI = () => {
+    if (editorWordWrapToggle instanceof HTMLInputElement) {
+      editorWordWrapToggle.checked = editorWordWrapEnabled;
+    }
+  };
+
   const updateEditorAutoSynctexBuildUI = () => {
     if (editorAutoSynctexBuildToggle instanceof HTMLInputElement) {
       editorAutoSynctexBuildToggle.checked = autoSynctexOnBuildEnabled;
@@ -502,9 +513,11 @@ export const initSettingsUi = (
       settingsPanel.scrollTop = 0;
     }
     syncUpdateAttentionUi();
-    if (pageId === "runtime") {
+    if (pageId === "env") {
       updateRuntimeOnboardingUi();
       checkEnvironmentStatus();
+    }
+    if (pageId === "env" || pageId === "account") {
       maybeRequestPlatformUpdateCheck(false);
     }
   };
@@ -532,6 +545,12 @@ export const initSettingsUi = (
     }
     editorAlignEnvEnabled = true;
     updateEditorAlignEnvUI();
+  };
+
+  const loadEditorWordWrapState = () => {
+    const stored = localStorage.getItem(editorWordWrapKey);
+    editorWordWrapEnabled = stored === "true";
+    updateEditorWordWrapUI();
   };
 
   const loadEditorFormatSettings = () => {
@@ -612,6 +631,13 @@ export const initSettingsUi = (
     localStorage.setItem(
       editorAlignEnvKey,
       editorAlignEnvEnabled ? "true" : "false"
+    );
+  };
+
+  const saveEditorWordWrapState = () => {
+    localStorage.setItem(
+      editorWordWrapKey,
+      editorWordWrapEnabled ? "true" : "false"
     );
   };
 
@@ -833,7 +859,7 @@ export const initSettingsUi = (
     const updateAttention = hasUpdateAttention();
     const runtimeAttention = hasRuntimeSetupAttention();
     const attention = updateAttention || runtimeAttention;
-    const hideAlertWhileRuntimeOpen = activeSettingsPage === "runtime";
+    const hideAlertWhileRuntimeOpen = activeSettingsPage === "env" || activeSettingsPage === "account";
     const showTabAlert = attention && !hideAlertWhileRuntimeOpen;
 
     if (runtimeSettingsNavItem instanceof HTMLElement) {
@@ -1412,10 +1438,24 @@ export const initSettingsUi = (
     updateEditorAlignEnvUI();
   };
 
+  const setEditorWordWrapEnabled = (enabled: boolean) => {
+    editorWordWrapEnabled = Boolean(enabled);
+    saveEditorWordWrapState();
+    updateEditorWordWrapUI();
+    deps.onEditorWordWrapChange?.(editorWordWrapEnabled);
+  };
+
   const toggleEditorAlignEnv = () => {
     editorAlignEnvEnabled = !editorAlignEnvEnabled;
     saveEditorAlignEnvState();
     updateEditorAlignEnvUI();
+  };
+
+  const toggleEditorWordWrap = () => {
+    editorWordWrapEnabled = !editorWordWrapEnabled;
+    saveEditorWordWrapState();
+    updateEditorWordWrapUI();
+    deps.onEditorWordWrapChange?.(editorWordWrapEnabled);
   };
 
   const setEditorFormatSettings = (next: Partial<EditorFormatSettings>) => {
@@ -1591,6 +1631,7 @@ export const initSettingsUi = (
   };
 
   const loadStartupSettings = () => {
+    loadEditorWordWrapState();
     loadEditorAutoSynctexBuildState();
     loadEditorReverseSynctexState();
     loadEditorGhostCompletionState();
@@ -1621,6 +1662,7 @@ export const initSettingsUi = (
 
   const getSettingsSnapshot = (): AppSettingsSnapshot => ({
     compileEngine: localStorage.getItem(compileEngineKey) || "lualatex",
+    wordWrapEnabled: editorWordWrapEnabled,
     autoSynctexOnBuild: autoSynctexOnBuildEnabled,
     reverseSynctexEnabled,
     pdfViewerMode,
@@ -1640,6 +1682,9 @@ export const initSettingsUi = (
     }
     if (typeof patch.compileEngine === "string") {
       setCompileEngine(patch.compileEngine);
+    }
+    if (typeof patch.wordWrapEnabled === "boolean") {
+      setEditorWordWrapEnabled(patch.wordWrapEnabled);
     }
     if (typeof patch.autoSynctexOnBuild === "boolean") {
       setEditorAutoSynctexBuildEnabled(patch.autoSynctexOnBuild);
@@ -1770,6 +1815,12 @@ export const initSettingsUi = (
   if (editorAlignEnvToggle instanceof HTMLInputElement) {
     editorAlignEnvToggle.addEventListener("change", () => {
       toggleEditorAlignEnv();
+    });
+  }
+
+  if (editorWordWrapToggle instanceof HTMLInputElement) {
+    editorWordWrapToggle.addEventListener("change", () => {
+      toggleEditorWordWrap();
     });
   }
 
@@ -1953,6 +2004,7 @@ export const initSettingsUi = (
 
   return {
     getEditorAlignEnvEnabled: () => editorAlignEnvEnabled,
+    getEditorWordWrapEnabled: () => editorWordWrapEnabled,
     getAutoSynctexOnBuildEnabled: () => autoSynctexOnBuildEnabled,
     getReverseSynctexEnabled: () => reverseSynctexEnabled,
     getPdfViewerMode: () => pdfViewerMode,

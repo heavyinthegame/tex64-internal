@@ -488,7 +488,7 @@ class WorkspaceManager {
     return null;
   }
 
-  async initializeProject(rootPath, template) {
+  async initializeProject(rootPath) {
     await ensureDirectory(rootPath);
     const ensureUniqueMainPath = async () => {
       let index = 1;
@@ -505,13 +505,13 @@ class WorkspaceManager {
       return candidate;
     };
     const mainTexPath = await ensureUniqueMainPath();
-    const content = this.templateContent(template);
+    const content = this.templateContent();
     await writeUtf8File(mainTexPath, content);
   }
 
-  templateContent(template) {
-    const title = template === "lecture" ? "講義ノート" : "タイトル";
-    const author = template === "lecture" ? "講師名" : "著者名";
+  templateContent() {
+    const title = "タイトル";
+    const author = "著者名";
     return [
       "% !TEX program = lualatex",
       "% !TeX program = lualatex",

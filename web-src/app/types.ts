@@ -64,7 +64,7 @@ export type BuildProfile = {
   outDir?: string | null;
   extraArgs?: string | null;
 };
-export type LauncherTemplate = "paper" | "lecture";
+
 export type AgentStatusState = "idle" | "running" | "error";
 export type AgentSettings = {
   apiKey?: string;
@@ -208,6 +208,7 @@ export type PlatformUpdateStatusSnapshot = {
 };
 export type AppSettingsSnapshot = {
   compileEngine: string;
+  wordWrapEnabled: boolean;
   autoSynctexOnBuild: boolean;
   reverseSynctexEnabled: boolean;
   pdfViewerMode: "window" | "tab";

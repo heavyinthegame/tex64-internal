@@ -117,12 +117,18 @@ function ensureNotarytoolAvailable() {
   }
 }
 
-function parseBuiltArch(appPath) {
+function parseBuiltArch(appPath, fallbackArch = null) {
   const parent = path.basename(path.dirname(appPath));
+  if (parent === "mac" && fallbackArch) {
+    const normalized = normalizeArchToken(fallbackArch);
+    if (normalized) {
+      return normalized;
+    }
+  }
   if (parent.startsWith("mac-")) {
     const token = parent.slice("mac-".length);
     if (token) {
-      return token;
+      return normalizeArchToken(token) || token;
     }
   }
   return process.arch === "arm64" ? "arm64" : "x64";
@@ -135,15 +141,32 @@ function resolveArchFlag(arch) {
   return null;
 }
 
+function normalizeArchToken(value) {
+  const token = String(value || "").trim().toLowerCase();
+  if (!token) return "";
+  if (token === "amd64" || token === "x86_64") return "x64";
+  if (token === "aarch64") return "arm64";
+  if (token === "x64" || token === "arm64") return token;
+  return token;
+}
+
 function findBuiltApps(distDir, archFilter = null) {
   const apps = [];
   if (!fs.existsSync(distDir)) return apps;
 
   const entries = fs.readdirSync(distDir, { withFileTypes: true });
+  const normalizedFilter = archFilter ? normalizeArchToken(archFilter) : "";
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
+    if (entry.name === "mac") {
+      if (normalizedFilter && normalizedFilter !== "x64") continue;
+      const appPath = path.join(distDir, entry.name, "TeX64.app");
+      if (fs.existsSync(appPath)) apps.push(appPath);
+      continue;
+    }
     if (!entry.name.startsWith("mac-")) continue;
-    if (archFilter && entry.name !== `mac-${archFilter}`) continue;
+    const entryArch = normalizeArchToken(entry.name.slice("mac-".length));
+    if (normalizedFilter && entryArch !== normalizedFilter) continue;
     const appPath = path.join(distDir, entry.name, "TeX64.app");
     if (fs.existsSync(appPath)) apps.push(appPath);
   }
@@ -217,7 +240,18 @@ function buildUnpackedApp(arch) {
   if (archFlag) {
     builderArgs.push(archFlag);
   }
-  execInherit("npx", builderArgs);
+  // Prevent electron-builder from performing notarization itself. This script
+  // performs notarization + stapling to keep the flow deterministic.
+  const builderEnv = { ...process.env };
+  delete builderEnv.APPLE_KEYCHAIN_PROFILE;
+  delete builderEnv.APPLE_KEYCHAIN;
+  delete builderEnv.APPLE_ID;
+  delete builderEnv.APPLE_APP_SPECIFIC_PASSWORD;
+  delete builderEnv.APPLE_TEAM_ID;
+  delete builderEnv.APPLE_API_KEY;
+  delete builderEnv.APPLE_API_KEY_ID;
+  delete builderEnv.APPLE_API_ISSUER;
+  execInherit("npx", builderArgs, { env: builderEnv });
 }
 
 function buildArtifactsFromApp(appPath, arch) {
@@ -312,7 +346,7 @@ function main() {
 
   const artifacts = [];
   for (const appPath of apps) {
-    const builtArch = parseBuiltArch(appPath);
+    const builtArch = parseBuiltArch(appPath, arch);
     verifySigned(appPath);
 
     const zipPath = path.join(distDir, `${productName}-${version}-mac-${builtArch}-notary.zip`);
