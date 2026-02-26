@@ -13,6 +13,11 @@ Electron ベースの LaTeX エディタ（開発中）。
 2. `npm run web:build`
 3. `npm run electron:dev`
 
+Math stack maintenance:
+- `npm run -s math:check`（MathLive/WYSIWYG 構造崩れの検査）
+- `npm run -s mathlive:clean`（fork の cache/dist を掃除）
+- `npm run -s mathlive:rebuild`（clean + build）
+
 AI（開発）:
 - デフォルトは `https://tex64.vercel.app/api/ai-chat`。別のプロキシを使う場合だけ `TEX64_AI_PROXY_URL` を指定する。
 
@@ -62,6 +67,10 @@ SyncTeX forward ベンチ:
 - UI の見た目は `Resources/web/index.html` / `Resources/web/theme.css` / `Resources/web/pdf-viewer.*` を編集（ロジックは `web-src` 側）。
 - 整形のベースは `Resources/latexindent.yaml`。実際の上書き設定は `.tex64/.format/` に生成される。
 - `.tex64/` はワークスペースの内部状態（settings/blocks/trash）。手で編集しない。
+- MathLive の配布アセット（`Resources/web/mathlive/**`）は `web-src/math/fork` から `npm run -s mathlive:build` で生成する。
+- MathLive fork のソースは `web-src/math/fork` のみを正とする（`web-src/vendor/mathlive-fork` は再作成しない）。
+- `Resources/web/mathlive/sounds/**` は使わない（音声フィードバックを無効化しているため）。
+- `Resources/web/app/math-wysiwyg*.js` は旧生成物なので残さない（`math:check` で検出）。
 - 実装を変えたら `implementation.md`（ユーザーができること/仕様一覧）を必ず更新する。
 
 ## 安全な変更ガイド（AI/自動化向け）
@@ -75,7 +84,7 @@ SyncTeX forward ベンチ:
 | メイン UI の見た目/レイアウト | `Resources/web/index.html`, `Resources/web/theme.css` | `Resources/web/main.js`, `Resources/web/app/*.js` |
 | PDF ビューアの見た目 | `Resources/web/pdf-viewer.html`, `Resources/web/pdf-viewer.css` | `Resources/web/pdf-viewer.js`（見た目変更のみなら触らない） |
 | UI の挙動/ロジック | `web-src/**/*.ts` | `Resources/web/app/*.js`, `Resources/web/main.js` |
-| ブロック/MathLive の挙動 | `web-src/app/blocks/*.ts` | `Resources/web/app/blocks/*.js`, `Resources/web/mathlive/**` |
+| ブロック/MathLive の挙動 | `web-src/app/blocks/*.ts`, `web-src/math/wysiwyg/*.ts`, `web-src/math/fork/**` | `Resources/web/app/blocks/*.js`, `Resources/web/mathlive/**` |
 | Electron 側の挙動 | `electron/**/*.cjs` | - |
 | Vendor 資産 | `Resources/web/monaco`, `Resources/web/mathlive`, `Resources/web/pdfjs`, `Resources/web/tesseract` | 直接編集しない |
 
@@ -105,7 +114,7 @@ SyncTeX forward ベンチ:
 - Electron メイン: `electron/main.cjs` がウィンドウ/IPC/サービスを統括。
 - Bridge: `electron/preload.cjs` が `window.tex64Bridge` を公開。PDF 窓は `electron/pdf-preload.cjs`。
 - Services: `electron/services/*` (build/formatter/indexer/search/synctex/pdf/env/workspace/blocks)。
-- Web UI ソース: `web-src/main.ts`（エントリ） + `web-src/app/**`。
+- Web UI ソース: `web-src/main.ts`（エントリ） + `web-src/app/**` + `web-src/math/wysiwyg/**`。
 - Web UI 生成物: `Resources/web/main.js` + `Resources/web/app/*.js`。
 - Web UI 手書き: `Resources/web/index.html` / `Resources/web/theme.css` / `Resources/web/pdf-viewer.*`。
 - Vendor assets: `Resources/web/monaco` / `Resources/web/mathlive` / `Resources/web/pdfjs` / `Resources/web/tesseract`。

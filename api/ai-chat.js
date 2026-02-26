@@ -1,5 +1,16 @@
 const GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models";
 
+const normalizeModelName = (value) => {
+  if (typeof value !== "string") {
+    return "";
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+  return trimmed.replace(/^models\//i, "");
+};
+
 const readJsonBody = async (req) => {
   if (req.body && typeof req.body === "object") {
     return req.body;
@@ -74,7 +85,7 @@ const handler = async (req, res) => {
   const modelFromEnv = typeof process.env.GEMINI_MODEL === "string"
     ? process.env.GEMINI_MODEL.trim()
     : "";
-  const model = modelFromRequest || modelFromEnv || "gemini-3-flash-preview";
+  const model = normalizeModelName(modelFromRequest) || normalizeModelName(modelFromEnv) || "gemini-3-flash-preview";
 
   const acceptHeader = typeof req.headers?.accept === "string" ? req.headers.accept : "";
   const wantsStream = Boolean(stream) || acceptHeader.includes("text/event-stream");

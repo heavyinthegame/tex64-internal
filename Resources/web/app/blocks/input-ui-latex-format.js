@@ -1,5 +1,20 @@
 const ALIGNED_ENV_BEGIN = "\\begin{aligned}";
 const ALIGNED_ENV_END = "\\end{aligned}";
+const LEGACY_AUX_COMMAND_MAP = {
+    txlbl: "label",
+    txtag: "tag",
+    txtgs: "tag*",
+    txntg: "notag",
+    txnnum: "nonumber",
+    txeqr: "eqref",
+    txref: "ref",
+    txpgrf: "pageref",
+    txatrf: "autoref",
+    txintr: "intertext",
+    txshintr: "shortintertext",
+};
+const LEGACY_AUX_COMMAND_RE = /\\(txlbl|txtag|txtgs|txntg|txnnum|txeqr|txref|txpgrf|txatrf|txintr|txshintr)\b/g;
+const AUX_COMMAND_LBRACE_ARG_RE = /\\(label|tag\*?|eqref|ref|pageref|autoref|intertext|shortintertext)\{\s*\\lbrace([\s\S]*?)\\rbrace\s*\}/g;
 const isEscapedAt = (text, index) => {
     let count = 0;
     for (let i = index - 1; i >= 0 && text[i] === "\\"; i -= 1) {
@@ -181,7 +196,7 @@ export const normalizeMatrixSyntax = (value) => {
         return `\\begin{${env}}${rows.join("\\\\")}\\end{${env}}`;
     });
 };
-const restoreAlignedMarkerEnvs = (value) => value.replace(/\\begin\{aligned\}([\s\S]*?)\\end\{aligned\}/g, (match, body) => {
+const restoreLegacyAlignedProxyEnvs = (value) => value.replace(/\\begin\{aligned\}([\s\S]*?)\\end\{aligned\}/g, (match, body) => {
     if (body.includes("\\txalnat")) {
         const cleaned = body.replace(/\\txalnat/g, "").trim();
         return `\\begin{alignat*}{2}${cleaned}\\end{alignat*}`;
@@ -265,58 +280,31 @@ const replaceCommandWithBraceArgs = (value, command, argCount, mapper) => {
     }
     return output;
 };
-const restoreArrayMarkerEnvs = (value) => replaceCommandWithBraceArgs(value, "txarrayc", 2, (args) => {
+const restoreLegacyArrayProxyEnvs = (value) => replaceCommandWithBraceArgs(value, "txarrayc", 2, (args) => {
     var _a, _b;
     const colspec = (_a = args[0]) !== null && _a !== void 0 ? _a : "";
     const body = (_b = args[1]) !== null && _b !== void 0 ? _b : "";
     return `\\begin{array}{${colspec}}${body}\\end{array}`;
 });
-const restoreAlignatBegin = (value) => {
+const normalizeLegacyAuxCommands = (value) => value.replace(LEGACY_AUX_COMMAND_RE, (_full, command) => {
     var _a;
-    const endMatches = [...value.matchAll(/\\end\{(alignat\*?)\}/g)];
-    if (endMatches.length === 0) {
-        return value;
-    }
-    const endMatch = endMatches[endMatches.length - 1];
-    const env = endMatch[1];
-    const endToken = endMatch[0];
-    const endIndex = (_a = endMatch.index) !== null && _a !== void 0 ? _a : value.length;
-    const beforeEnd = value.slice(0, endIndex);
-    if (new RegExp(`\\\\begin\\{${env.replace("*", "\\*")}\\}`).test(beforeEnd)) {
-        return value;
-    }
-    let body = beforeEnd.trim();
-    let colspec = "{2}";
-    const colspecMatch = body.match(/^\{(\d+)\}/);
-    if (colspecMatch) {
-        colspec = `{${colspecMatch[1]}}`;
-        body = body.slice(colspecMatch[0].length).trim();
-    }
-    const trailing = value.slice(endIndex + endToken.length);
-    return `\\begin{${env}}${colspec}${body}\\end{${env}}${trailing}`;
-};
-const restoreFlalignBegin = (value) => {
-    var _a;
-    const endMatches = [...value.matchAll(/\\end\{(flalign\*?)\}/g)];
-    if (endMatches.length === 0) {
-        return value;
-    }
-    const endMatch = endMatches[endMatches.length - 1];
-    const env = endMatch[1];
-    const endToken = endMatch[0];
-    const endIndex = (_a = endMatch.index) !== null && _a !== void 0 ? _a : value.length;
-    const beforeEnd = value.slice(0, endIndex);
-    if (new RegExp(`\\\\begin\\{${env.replace("*", "\\*")}\\}`).test(beforeEnd)) {
-        return value;
-    }
-    const body = beforeEnd.trim();
-    const trailing = value.slice(endIndex + endToken.length);
-    return `\\begin{${env}}${body}\\end{${env}}${trailing}`;
-};
-export const restoreUnsupportedEnvBegins = (value) => {
+    const mapped = (_a = LEGACY_AUX_COMMAND_MAP[command]) !== null && _a !== void 0 ? _a : command;
+    return `\\${mapped}`;
+});
+const normalizeAuxCommandLbraceArguments = (value) => value.replace(AUX_COMMAND_LBRACE_ARG_RE, (_full, command, argument) => {
+    const normalizedArgument = String(argument !== null && argument !== void 0 ? argument : "").trim();
+    return `\\${command}{${normalizedArgument}}`;
+});
+export const normalizeLegacyEnvMarkers = (value) => {
     if (!value) {
         return value;
     }
-    const restoredProxy = restoreAlignedMarkerEnvs(restoreArrayMarkerEnvs(value));
-    return restoreFlalignBegin(restoreAlignatBegin(restoredProxy));
+    let normalized = value;
+    if (normalized.includes("\\tx")) {
+        normalized = normalizeLegacyAuxCommands(restoreLegacyAlignedProxyEnvs(restoreLegacyArrayProxyEnvs(normalized)));
+    }
+    if (normalized.includes("\\lbrace") && normalized.includes("\\rbrace")) {
+        normalized = normalizeAuxCommandLbraceArguments(normalized);
+    }
+    return normalized;
 };

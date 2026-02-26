@@ -9,10 +9,20 @@ tex64 は Electron アプリとして配布します（インストーラ/アプ
 - `npm ci`
 - TeX Distribution は **同梱しない**（ユーザー側で TeX Live / MacTeX / BasicTeX などが必要）
 - `npm run -s dist:bootstrap`（macOS の場合。アイコン/entitlements を生成）
+- 初回DL→課金→利用開始の運用E2Eは `docs/operations-e2e-checklist.md` を使用
 
 ## ローカルで配布物を作る
 
 まず配布に必要なファイル（アイコン/NOTICE 等）を用意してからパッケージします。
+
+### DMG の見た目（背景）
+
+TeX64 の DMG は、Finder の背景を `assets/dmg/background.png`（+ `assets/dmg/background@2x.png`）でカスタマイズしています。
+
+- ソース: `assets/dmg/background.html`
+- 再生成: `npm run -s dmg:background`
+
+また、`/Applications` へのショートカットは electron-builder の `type: "link"` で作成します（CI でも安定）。
 
 ```bash
 npm run electron:pack
@@ -173,7 +183,7 @@ npm run -s release:go-no-go -- --version 0.1.0
 - `TEX64_DOWNLOADS_SECRET_ACCESS_KEY`
 - `TEX64_DOWNLOADS_ENDPOINT`（任意。R2 等の S3 互換 endpoint。AWS S3 の場合は空で OK）
 - `TEX64_DOWNLOADS_REGION`（任意。R2 の場合は `auto`、AWS の場合は `us-east-1` など）
-- `TEX64_PUBLISH_GITHUB_RELEASE`（任意。`true` にすると GitHub Releases にも assets を添付）
+- （補足）タグリリース時は GitHub Releases に `release/*`（`dmg/zip` + `checksums-sha256.txt`）も自動添付される（追加 secret 不要）
 
 ### downloads.tex64.com の疎通（R2 / S3）
 
@@ -206,6 +216,8 @@ git push origin v0.1.0
 4. GitHub Actions（`Build Distributables`）が完走し、`downloads.tex64.com` で配布物 + `checksums-sha256.txt` + `tex64/updates/stable.json` が見えることを確認
 5. `tex64.com` 側の env を設定:
    - `NEXT_PUBLIC_TEX64_DOWNLOADS_PUBLIC_BASE_URL=https://downloads.tex64.com`
+   - `TEX64_GITHUB_RELEASE_REPO=<owner>/<repo>`（任意: GitHub Releases を参照する場合）
+   - `TEX64_UPDATE_SOURCE_PRIORITY=remote-first`
    - `TEX64_UPDATE_REMOTE_BASE_URL=https://downloads.tex64.com/tex64/updates`
 6. `checksums-sha256.txt` を `tex64.com` に取り込む:
 
@@ -250,6 +262,7 @@ npm run -s release:go-no-go -- --version 0.1.0 --channel stable
 
 - `GET /updates/manifest` には `artifactUrl` に加えて `artifactSha256`（推奨）を含める。
 - アプリはダウンロード後に `sha256` を検証し、一致しない場合は適用しない。
+- macOS のアプリ内アップデートは `.zip` を使用（初回導入は `.dmg`）。`stable.json` には `dmg/zip` の両方を載せ、manifest 側で `kind` を選択します。
 
 配布物から `sha256` を作る（単体）:
 
@@ -269,11 +282,14 @@ npm run -s release:checksums -- --dir dist --version 0.1.0 --out dist/checksums-
 
 ## tex64.com 側の update manifest 連携（推奨）
 
-`tex64.com` の `GET /api/v2/updates/manifest` は、`TEX64_UPDATE_REMOTE_BASE_URL` が設定されている場合、
-`downloads.tex64.com` 側の update feed（`${base}/{channel}.json`）を参照して、配布物 URL と sha256 を自動解決できます。
+`tex64.com` の `GET /api/v2/updates/manifest` は、`TEX64_UPDATE_SOURCE_PRIORITY=remote-first` の場合、
+`TEX64_UPDATE_REMOTE_BASE_URL`（`${base}/{channel}.json`）を優先して配布物 URL / sha256 を解決し、
+不足時は GitHub Releases（`TEX64_GITHUB_RELEASE_REPO`）をフォールバックで参照します。
 
+- `TEX64_GITHUB_RELEASE_REPO=<owner>/<repo>`
+- `TEX64_UPDATE_SOURCE_PRIORITY=remote-first`
 - `TEX64_UPDATE_REMOTE_BASE_URL=https://downloads.tex64.com/tex64/updates`
-- CI が `tex64/updates/stable.json` を更新するため、通常は `TEX64_UPDATE_*` を毎回変更しなくて良い
+- CI が `tex64/updates/stable.json` を更新するため、GitHub障害時も `downloads` 経由で継続可能
 
 ## 配布後にユーザーが使い始めるまでの完全監査（2026-02-21）
 

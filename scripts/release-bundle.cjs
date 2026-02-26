@@ -63,8 +63,24 @@ const resolveReleaseVersion = () => {
 const resolveArtifacts = async (distDir, version) => {
   const entries = await fsp.readdir(distDir, { withFileTypes: true }).catch(() => []);
   const artifacts = [];
-  const include = (name) =>
-    (name.endsWith(".dmg") || name.endsWith(".zip")) && name.includes(`-${version}-`);
+  const include = (name) => {
+    if (typeof name !== "string" || !name) {
+      return false;
+    }
+    if (!name.includes(`-${version}-`)) {
+      return false;
+    }
+    const lower = name.toLowerCase();
+    if (lower.endsWith(".dmg")) {
+      return true;
+    }
+    if (lower.endsWith(".zip")) {
+      // Notary submission zips are artifacts for Apple notarization, not for end users.
+      // Keep them in dist/ but exclude from the public release bundle.
+      return !lower.endsWith("-notary.zip");
+    }
+    return false;
+  };
   for (const entry of entries) {
     if (!entry.isFile()) continue;
     if (!include(entry.name)) continue;
@@ -139,4 +155,3 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
-

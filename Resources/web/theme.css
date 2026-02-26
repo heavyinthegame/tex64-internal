@@ -469,6 +469,39 @@ body.has-launcher .app {
   -webkit-app-region: no-drag;
 }
 
+.topbar-layout-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+  -webkit-app-region: no-drag;
+}
+
+.topbar-layout-toggle:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-soft);
+}
+
+.topbar-layout-toggle.is-active {
+  color: var(--text);
+}
+
+.topbar-layout-toggle.is-active .topbar-layout-fill {
+  opacity: 0.45;
+}
+
+.topbar-layout-toggle svg {
+  flex-shrink: 0;
+}
+
 .pill {
   border: 1px solid var(--control-border);
   background: var(--control-bg);
@@ -499,6 +532,26 @@ body.has-launcher .app {
   grid-template-columns: var(--sidebar-width) var(--sidebar-panel-width) 4px 1fr;
   min-height: 0;
   overflow: hidden;
+}
+
+.main.sidebar-collapsed {
+  grid-template-columns: var(--sidebar-width) 0 0 1fr;
+}
+
+.main.sidebar-collapsed .sidebar-panel {
+  overflow: hidden;
+  width: 0;
+  min-width: 0;
+  border: none;
+  padding: 0;
+  visibility: hidden;
+}
+
+.main.sidebar-collapsed .resizer {
+  width: 0;
+  min-width: 0;
+  overflow: hidden;
+  visibility: hidden;
 }
 
 .resizer {
@@ -1860,7 +1913,7 @@ math-field.block-math-field::placeholder {
   display: flex;
   flex-direction: column;
   gap: 0;
-  padding: 14px;
+  padding: 16px;
   margin: 8px;
   margin-top: 12px;
   background: rgba(255, 255, 255, 0.015);
@@ -1966,7 +2019,7 @@ math-field.block-math-field::placeholder {
   padding: 12px 14px;
   background: rgba(255, 255, 255, 0.02);
   border-radius: 8px;
-  margin-top: 12px;
+  margin-top: 14px;
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
@@ -2101,9 +2154,14 @@ math-field.block-math-field::placeholder {
 .settings-inline {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
   align-items: center;
   width: 100%;
+}
+
+/* Add breathing room when inline buttons are direct children of a group card */
+.settings-group > .settings-inline {
+  margin-top: 14px;
 }
 
 .settings-inline-wrap {
@@ -2114,20 +2172,46 @@ math-field.block-math-field::placeholder {
   justify-content: flex-end;
 }
 
+/* Update progress bar */
 .settings-update-progress {
   width: 100%;
-  height: 8px;
+  height: 6px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.06);
   overflow: hidden;
-  margin-top: 10px;
+  margin-top: 14px;
 }
 
 .settings-update-progress-fill {
   width: 0%;
   height: 100%;
   background: linear-gradient(90deg, var(--accent), #7aa2ff);
-  transition: width 0.2s ease;
+  border-radius: 999px;
+  transition: width 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Version badge (used in update section) */
+.settings-version-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-family: "SF Mono", Menlo, monospace;
+  font-weight: 600;
+  color: var(--text-soft);
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 6px 14px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.settings-version-badge.is-new {
+  color: var(--accent-strong);
+  border-color: var(--accent-soft-strong);
+  background: var(--accent-soft);
 }
 
 /* Settings Input */
@@ -2921,10 +3005,14 @@ math-field.block-math-field::placeholder {
 
 .editor {
   display: grid;
-  grid-template-rows: 1fr;
+  grid-template-rows: 1fr auto auto;
   min-height: 0;
   background: linear-gradient(180deg, var(--bg-accent) 0%, var(--bg) 35%);
   position: relative;
+}
+
+.editor.has-bottom-panel {
+  grid-template-rows: minmax(120px, var(--editor-main-height, 1fr)) auto minmax(120px, var(--bottom-panel-height, 220px));
 }
 
 .editor-groups {
@@ -3008,7 +3096,6 @@ math-field.block-math-field::placeholder {
   position: relative;
 }
 
-#editor-split-button,
 #format-button,
 #synctex-button,
 #build-button {
@@ -3034,17 +3121,11 @@ math-field.block-math-field::placeholder {
     transform 0.12s ease;
 }
 
-#editor-split-button,
 #format-button,
 #synctex-button {
   border-color: var(--panel-border);
   background: rgba(255, 255, 255, 0.02);
   color: var(--text-soft);
-}
-
-#editor-split-button {
-  width: 28px;
-  padding: 0;
 }
 
 #format-button,
@@ -3060,7 +3141,6 @@ math-field.block-math-field::placeholder {
   letter-spacing: 0.06em;
 }
 
-#editor-split-button:hover,
 #format-button:hover,
 #synctex-button:hover {
   color: var(--text);
@@ -3068,20 +3148,15 @@ math-field.block-math-field::placeholder {
   background: rgba(255, 255, 255, 0.08);
 }
 
-#editor-split-button:active,
 #format-button:active,
 #synctex-button:active {
   transform: translateY(1px);
 }
 
 #editor-split-button.is-active {
-  color: var(--accent-strong);
-  border-color: rgba(121, 126, 249, 0.55);
-  background: rgba(121, 126, 249, 0.18);
-  box-shadow: inset 0 0 0 1px rgba(121, 126, 249, 0.32);
+  color: var(--text);
 }
 
-#editor-split-button:focus-visible,
 #format-button:focus-visible,
 #synctex-button:focus-visible,
 #build-button:focus-visible {
@@ -5853,3 +5928,164 @@ body.has-editor .editor-group:not(.is-empty) .editor-placeholder {
 }
 
 /* Math preview panel sizing and contrast are defined in the hover block above. */
+
+/* =============================================================================
+   Bottom Panel (VS Code-style terminal / math wide view)
+   ============================================================================= */
+
+.bottom-panel-resizer {
+  display: none;
+  height: 4px;
+  cursor: row-resize;
+  background: var(--panel-border);
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.editor.has-bottom-panel .bottom-panel-resizer {
+  display: block;
+}
+
+.bottom-panel-resizer:hover,
+.bottom-panel-resizer.is-resizing {
+  background: var(--accent);
+}
+
+.bottom-panel {
+  display: none;
+  grid-template-rows: 32px minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+  background: var(--panel);
+  border-top: 1px solid var(--panel-border);
+}
+
+.editor.has-bottom-panel .bottom-panel {
+  display: grid;
+}
+
+.bottom-panel[aria-hidden="true"] {
+  display: none;
+}
+
+.editor.has-bottom-panel .bottom-panel[aria-hidden="true"] {
+  display: none;
+}
+
+.bottom-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px 0 12px;
+  border-bottom: 1px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.02);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.bottom-panel-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  height: 100%;
+}
+
+.bottom-panel-tab {
+  position: relative;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  padding: 0 12px;
+  height: 100%;
+  cursor: pointer;
+  transition: color 0.15s ease;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+
+.bottom-panel-tab:hover {
+  color: var(--text-soft);
+}
+
+.bottom-panel-tab.is-active {
+  color: var(--text);
+}
+
+.bottom-panel-tab.is-active::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 8px;
+  right: 8px;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 1px 1px 0 0;
+}
+
+.bottom-panel-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+  flex-shrink: 0;
+}
+
+.bottom-panel-close:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+.bottom-panel-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+/* --- Bottom Panel overrides for block-compose (horizontal layout) --- */
+
+.bottom-panel-body .block-compose {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.bottom-panel-body .block-row {
+  padding: 4px 8px;
+  margin-bottom: 0;
+}
+
+.bottom-panel-body .block-form[data-form="math"] {
+  flex: 1;
+  overflow: hidden;
+  padding: 0;
+}
+
+.bottom-panel-body .block-math-input-container {
+  flex: 1;
+  min-height: 0;
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  border-bottom: none;
+}
+
+.bottom-panel-body .block-math-scroll {
+  max-height: none;
+  flex: 1;
+  min-height: 0;
+  padding: 8px 12px;
+}
+
+.bottom-panel-body .math-keyboard-dock {
+  flex-shrink: 0;
+}

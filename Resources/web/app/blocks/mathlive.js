@@ -1,4 +1,4 @@
-import { AUXILIARY_MATH_MACROS } from "./math-aux-command-escape.js";
+import { closeMathfieldInternalMenu } from "../../math/mathfield-private-adapter.js";
 export const initMathLive = (context, deps) => {
     const { blockMathInputContainer } = context.dom;
     let setupInFlight = false;
@@ -184,18 +184,8 @@ export const initMathLive = (context, deps) => {
             blockMathInputContainer.appendChild(scrollHost);
             blockMathInputContainer.appendChild(menuToggle);
             const closeMathFieldMenu = () => {
-                var _a;
-                const internalMenu = (_a = mathfield._mathfield) === null || _a === void 0 ? void 0 : _a.menu;
-                if (internalMenu && typeof internalMenu.hide === "function") {
-                    if (internalMenu.state && internalMenu.state !== "closed") {
-                        internalMenu.hide();
-                        return;
-                    }
-                    const element = internalMenu.element;
-                    if (element === null || element === void 0 ? void 0 : element.isConnected) {
-                        internalMenu.hide();
-                        return;
-                    }
+                if (closeMathfieldInternalMenu(mathfield)) {
+                    return;
                 }
                 const executeCommand = mathfield
                     .executeCommand;
@@ -287,13 +277,12 @@ export const initMathLive = (context, deps) => {
             }
             configureMathLiveAudio();
             // MathLive doesn't support some LaTeX font commands natively (e.g. \mathds),
-            // but macros let us render them while preserving the original command in `getValue("latex")`.
+            // so we map only those minimal render aliases here.
             try {
                 if ("macros" in mathfield) {
                     mathfield.macros = {
                         ...((_b = mathfield.macros) !== null && _b !== void 0 ? _b : {}),
                         mathds: { def: "\\mathbb{#1}", args: 1 },
-                        ...AUXILIARY_MATH_MACROS,
                     };
                 }
             }

@@ -1,3 +1,6 @@
+import { indexToOffset as indexToMathFieldOffset } from "./math-input-utils.js";
+import { getMathfieldInternalModel } from "../../math/mathfield-private-adapter.js";
+
 export type MathFieldPlaceholderApi = {
   executeCommand?: (selector: string, ...args: unknown[]) => boolean;
   getPrompts?: () => string[];
@@ -40,7 +43,7 @@ const setSelectionCollapsed = (mathfieldApi: MathFieldPlaceholderApi, position: 
     mathfieldApi.position = position;
     return;
   }
-  const internalModel = (mathfieldApi as { _mathfield?: any })._mathfield?.model;
+  const internalModel = getMathfieldInternalModel(mathfieldApi);
   if (internalModel && typeof internalModel.setSelection === "function") {
     internalModel.setSelection(position, position);
   }
@@ -59,7 +62,7 @@ export const setSelectionRange = (
     mathfieldApi.selection = [start, end];
     return;
   }
-  const internalModel = (mathfieldApi as { _mathfield?: any })._mathfield?.model;
+  const internalModel = getMathfieldInternalModel(mathfieldApi);
   if (internalModel && typeof internalModel.setSelection === "function") {
     internalModel.setSelection(start, end);
     return;
@@ -70,8 +73,7 @@ export const setSelectionRange = (
 };
 
 const getInternalPlaceholderRanges = (mathfieldApi: MathFieldPlaceholderApi) => {
-  const internal = (mathfieldApi as { _mathfield?: any })._mathfield;
-  const model = internal?.model;
+  const model = getMathfieldInternalModel(mathfieldApi);
   if (!model || !Array.isArray(model.atoms) || typeof model.offsetOf !== "function") {
     return [] as Array<{ start: number; end: number }>;
   }
@@ -126,55 +128,6 @@ const getInternalPlaceholderRanges = (mathfieldApi: MathFieldPlaceholderApi) => 
 
 const PLACEHOLDER_TOKEN_REGEX = /\\placeholder(?:\[[^\]]*\])?\{(?:[^{}]|\\.)*\}/g;
 
-const offsetToLatexIndex = (mathfieldApi: MathFieldPlaceholderApi, offset: number) => {
-  const reader = mathfieldApi as {
-    getValue?: (start?: number, end?: number, format?: string) => unknown;
-  };
-  if (typeof reader.getValue !== "function") {
-    return offset;
-  }
-  try {
-    const value = reader.getValue(0, offset, "latex");
-    return typeof value === "string" ? value.length : Math.max(0, offset);
-  } catch {
-    return Math.max(0, offset);
-  }
-};
-
-const indexToOffset = (mathfieldApi: MathFieldPlaceholderApi, lastOffset: number, index: number) => {
-  const reader = mathfieldApi as {
-    getValue?: (start?: number, end?: number, format?: string) => unknown;
-  };
-  if (typeof reader.getValue !== "function") {
-    return Math.max(0, Math.min(lastOffset, index));
-  }
-  let rangeText = "";
-  try {
-    const value = reader.getValue(0, lastOffset, "latex");
-    rangeText = typeof value === "string" ? value : "";
-  } catch {
-    return Math.max(0, Math.min(lastOffset, index));
-  }
-  if (index <= 0) {
-    return 0;
-  }
-  if (index >= rangeText.length) {
-    return lastOffset;
-  }
-  let low = 0;
-  let high = lastOffset;
-  while (low < high) {
-    const mid = Math.floor((low + high) / 2);
-    const length = offsetToLatexIndex(mathfieldApi, mid);
-    if (length < index) {
-      low = mid + 1;
-    } else {
-      high = mid;
-    }
-  }
-  return Math.max(0, Math.min(lastOffset, low));
-};
-
 const getLiteralPlaceholderRanges = (mathfieldApi: MathFieldPlaceholderApi) => {
   const reader = mathfieldApi as {
     getValue?: (start?: number, end?: number, format?: string) => unknown;
@@ -207,8 +160,8 @@ const getLiteralPlaceholderRanges = (mathfieldApi: MathFieldPlaceholderApi) => {
   while (match) {
     const startIndex = match.index;
     const endIndex = startIndex + match[0].length;
-    const start = indexToOffset(mathfieldApi, lastOffset, startIndex);
-    const end = indexToOffset(mathfieldApi, lastOffset, endIndex);
+    const start = indexToMathFieldOffset(mathfieldApi as any, startIndex);
+    const end = indexToMathFieldOffset(mathfieldApi as any, endIndex);
     if (
       Number.isFinite(start) &&
       Number.isFinite(end) &&

@@ -707,6 +707,8 @@ Desktop app と Web の account 画面が共通で利用する API です。
 - 選択範囲（上限あり）
 - open files snapshot
 - recent issues（最大 5）
+- root main tex（auto/manual の判定結果）
+- ユーザーがメッセージ内で言及したファイルは、可能な範囲で事前読取してスナップショットを注入（最大 3 件 / 上限あり）
 
 ### 13.3 画像添付
 

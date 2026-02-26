@@ -272,7 +272,7 @@ const createMiscHandlers = (deps) => {
         ? latestVersion.trim()
         : "latest";
     if (appPlatform === "darwin") {
-      return `tex64-${version}.dmg`;
+      return `tex64-${version}.zip`;
     }
     if (appPlatform === "win32") {
       return `tex64-${version}.exe`;

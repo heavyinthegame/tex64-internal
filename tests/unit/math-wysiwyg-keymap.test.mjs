@@ -5,7 +5,7 @@ import {
   extractCommand,
   getKeyByLatex,
   normalizeLatexKey,
-} from "../../Resources/web/app/math-wysiwyg-keymap.js";
+} from "../../Resources/web/math/wysiwyg/math-wysiwyg-keymap.js";
 
 test("normalizeLatexKey trims whitespace", () => {
   assert.equal(normalizeLatexKey("  \\sqrt{#?}  "), "\\sqrt{#?}");

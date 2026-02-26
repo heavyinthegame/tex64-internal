@@ -196,6 +196,7 @@ Request（Gemini互換）例:
   "systemInstruction": {
     "parts": [{ "text": "..." }]
   },
+  "model": "gemini-2.5-flash-lite",
   "tools": [
     {
       "functionDeclarations": [
@@ -211,6 +212,10 @@ Request（Gemini互換）例:
   "generationConfig": { "temperature": 0.2 }
 }
 ```
+
+補足:
+
+- `model` は `"gemini-..."` / `"models/gemini-..."` のどちらでも受理し、内部で正規化する（`models/` は取り除く）
 
 Response（function call あり）例:
 

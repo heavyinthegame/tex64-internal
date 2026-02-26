@@ -1,0 +1,236 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      :root {
+        --bg0: #0b0b10;
+        --bg1: #141322;
+        --text: rgba(255, 255, 255, 0.92);
+        --muted: rgba(255, 255, 255, 0.62);
+        --border: rgba(255, 255, 255, 0.12);
+        --accent0: #8b5cf6;
+        --accent1: #ec4899;
+      }
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+      }
+      body {
+        font-family:
+          -apple-system,
+          BlinkMacSystemFont,
+          "SF Pro Display",
+          "SF Pro Text",
+          system-ui,
+          sans-serif;
+        background:
+          radial-gradient(
+            1100px 620px at 22% 78%,
+            rgba(139, 92, 246, 0.22),
+            transparent 58%
+          ),
+          radial-gradient(
+            900px 620px at 78% 74%,
+            rgba(236, 72, 153, 0.16),
+            transparent 60%
+          ),
+          linear-gradient(180deg, var(--bg1), var(--bg0));
+      }
+
+      .frame {
+        width: 640px;
+        height: 420px;
+        position: relative;
+        overflow: hidden;
+        border-radius: 24px;
+        background: rgba(255, 255, 255, 0.02);
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+      }
+
+      .grain {
+        position: absolute;
+        inset: 0;
+        background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="220" height="220"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch"/></filter><rect width="220" height="220" filter="url(%23n)" opacity="0.14"/></svg>');
+        mix-blend-mode: overlay;
+        opacity: 0.35;
+      }
+
+      .label {
+        position: absolute;
+        left: 44px;
+        top: 42px;
+        font-weight: 950;
+        letter-spacing: -0.03em;
+        font-size: 18px;
+        color: rgba(255, 255, 255, 0.88);
+      }
+      .label span {
+        background: linear-gradient(90deg, var(--accent0), var(--accent1));
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+
+      .hint {
+        position: absolute;
+        left: 50%;
+        top: 110px;
+        transform: translateX(-50%);
+        width: 420px;
+        height: 78px;
+        border-radius: 20px;
+        background: rgba(0, 0, 0, 0.26);
+        border: 1px solid var(--border);
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+        display: grid;
+        place-items: center;
+        backdrop-filter: blur(10px);
+      }
+      .hint .title {
+        font-size: 12px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.62);
+        margin-bottom: 3px;
+      }
+      .hint .sub {
+        font-size: 15px;
+        color: rgba(255, 255, 255, 0.92);
+        font-weight: 800;
+      }
+
+      .slot {
+        position: absolute;
+        width: 232px;
+        height: 200px;
+        top: 190px;
+        border-radius: 28px;
+        background: rgba(255, 255, 255, 0.28);
+        box-shadow:
+          inset 0 0 0 1px rgba(255, 255, 255, 0.2),
+          0 22px 60px rgba(0, 0, 0, 0.22);
+        backdrop-filter: blur(14px);
+      }
+
+      .slot::after {
+        content: "";
+        position: absolute;
+        inset: 14px;
+        border-radius: 20px;
+        border: 1.5px dashed rgba(255, 255, 255, 0.28);
+        opacity: 0.85;
+      }
+
+      .slot.left {
+        left: 64px;
+      }
+
+      .slot.right {
+        left: 344px;
+        background: rgba(255, 255, 255, 0.36);
+        box-shadow:
+          inset 0 0 0 1px rgba(255, 255, 255, 0.26),
+          0 22px 60px rgba(0, 0, 0, 0.22),
+          0 0 0 1px rgba(236, 72, 153, 0.12);
+      }
+
+      .arrow {
+        position: absolute;
+        left: 50%;
+        top: 275px;
+        transform: translate(-50%, -50%);
+        width: 420px;
+        height: 140px;
+        opacity: 0.9;
+      }
+
+      .footer {
+        position: absolute;
+        left: 44px;
+        bottom: 36px;
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.44);
+        letter-spacing: 0.02em;
+      }
+
+      .cornerGlow {
+        position: absolute;
+        width: 360px;
+        height: 360px;
+        border-radius: 999px;
+        filter: blur(28px);
+        opacity: 0.28;
+      }
+      .cornerGlow.left {
+        left: -180px;
+        bottom: -220px;
+        background: rgba(139, 92, 246, 0.9);
+      }
+      .cornerGlow.right {
+        right: -200px;
+        bottom: -240px;
+        background: rgba(236, 72, 153, 0.8);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="frame">
+      <div class="cornerGlow left"></div>
+      <div class="cornerGlow right"></div>
+      <div class="grain"></div>
+
+      <div class="label"><span>TeX64</span> Installer</div>
+
+      <div class="hint">
+        <div style="text-align: center">
+          <div class="title">Install</div>
+          <div class="sub">Drag TeX64 to Applications</div>
+        </div>
+      </div>
+
+      <div class="slot left"></div>
+      <div class="slot right"></div>
+
+      <svg class="arrow" viewBox="0 0 420 140" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="g" x1="10" y1="0" x2="410" y2="0" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#8b5cf6" stop-opacity="0.95" />
+            <stop offset="1" stop-color="#ec4899" stop-opacity="0.9" />
+          </linearGradient>
+          <filter id="shadow" x="-40" y="-40" width="500" height="220" filterUnits="userSpaceOnUse">
+            <feGaussianBlur stdDeviation="3" />
+          </filter>
+        </defs>
+
+        <path
+          d="M40 76 C 120 26, 180 26, 210 64 S 300 112, 380 64"
+          stroke="url(#g)"
+          stroke-width="12"
+          stroke-linecap="round"
+          opacity="0.22"
+          filter="url(#shadow)"
+        />
+
+        <path
+          d="M40 76 C 120 26, 180 26, 210 64 S 300 112, 380 64"
+          stroke="url(#g)"
+          stroke-width="4.5"
+          stroke-linecap="round"
+        />
+
+        <path
+          d="M370 56 L 384 64 L 370 72"
+          stroke="url(#g)"
+          stroke-width="4.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+      </svg>
+
+      <div class="footer">Tip: If macOS blocks the app, open System Settings → Privacy & Security.</div>
+    </div>
+  </body>
+</html>

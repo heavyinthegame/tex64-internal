@@ -37,6 +37,7 @@ import { initTabController } from "./app/tab-controller.js";
 import { initUiEvents } from "./app/ui-events.js";
 import { initSearchUi } from "./app/search-ui.js";
 import { initSidebarVisibility } from "./app/sidebar-ui.js";
+import { initBottomPanelUi } from "./app/bottom-panel-ui.js";
 import { initSettingsUi } from "./app/settings-ui.js";
 import { initWorkspaceController } from "./app/workspace-controller.js";
 const MAX_ERROR_REPORT_MESSAGE = 2000;
@@ -681,6 +682,7 @@ export const initMain = () => {
             setActiveTab,
             normalizeTabKey: tabController.normalizeTabKey,
         });
+        const bottomPanelUi = initBottomPanelUi(appContext);
         editorTabsUi = initEditorTabsUi(appContext, {
             getGroups: () => editorSession.getEditorGroups(),
             getGroup: editorSession.getEditorGroup,

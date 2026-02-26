@@ -16,6 +16,17 @@ const parseNumber = (value, fallback = 0) => {
 const asObject = (value) =>
   value && typeof value === "object" && !Array.isArray(value) ? value : null;
 
+const normalizeModelName = (value) => {
+  if (typeof value !== "string") {
+    return "";
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+  return trimmed.replace(/^models\//i, "");
+};
+
 const buildUsageMetadata = (payload) => {
   const usage = asObject(
     payload?.usageMetadata ?? payload?.usage ?? payload?.usage_metadata ?? payload?.token_usage
@@ -85,11 +96,9 @@ export const invokeGemini = async (requestPayload, options = {}) => {
       ? options.geminiEndpoint.trim().replace(/\/+$/, "")
       : "https://generativelanguage.googleapis.com/v1beta/models";
   const model =
-    typeof options.model === "string" && options.model.trim()
-      ? options.model.trim()
-      : typeof options.geminiDefaultModel === "string" && options.geminiDefaultModel.trim()
-      ? options.geminiDefaultModel.trim()
-      : "gemini-3-flash-preview";
+    normalizeModelName(options.model) ||
+    normalizeModelName(options.geminiDefaultModel) ||
+    "gemini-3-flash-preview";
   const upstreamUrl = `${endpointBase}/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(
     apiKey
   )}`;

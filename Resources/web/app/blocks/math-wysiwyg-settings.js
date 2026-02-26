@@ -1,4 +1,4 @@
-import { DEFAULT_WYSIWYG_PACKS, WYSIWYG_PACKS } from "../math-wysiwyg-packs.js";
+import { DEFAULT_WYSIWYG_PACKS, WYSIWYG_PACKS, } from "../../math/wysiwyg/math-wysiwyg-packs.js";
 const MATH_WYSIWYG_AUTO_KEY = "tex64.math-wysiwyg.autoSuggest";
 const MATH_WYSIWYG_PACKS_KEY = "tex64.math-wysiwyg.packs";
 const normalizePacks = (value) => {

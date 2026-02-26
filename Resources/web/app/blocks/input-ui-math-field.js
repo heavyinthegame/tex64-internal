@@ -1,3 +1,5 @@
+import { indexToOffset as indexToMathFieldOffset } from "./math-input-utils.js";
+import { getMathfieldInternalModel } from "../../math/mathfield-private-adapter.js";
 export const readSelectionRange = (mathfieldApi) => {
     const selection = mathfieldApi.selection;
     if (Array.isArray(selection) && selection.length >= 2) {
@@ -10,7 +12,6 @@ export const readSelectionRange = (mathfieldApi) => {
     return null;
 };
 const setSelectionCollapsed = (mathfieldApi, position) => {
-    var _a;
     if (typeof mathfieldApi.setSelection === "function") {
         mathfieldApi.setSelection(position, position);
         return;
@@ -23,13 +24,12 @@ const setSelectionCollapsed = (mathfieldApi, position) => {
         mathfieldApi.position = position;
         return;
     }
-    const internalModel = (_a = mathfieldApi._mathfield) === null || _a === void 0 ? void 0 : _a.model;
+    const internalModel = getMathfieldInternalModel(mathfieldApi);
     if (internalModel && typeof internalModel.setSelection === "function") {
         internalModel.setSelection(position, position);
     }
 };
 export const setSelectionRange = (mathfieldApi, start, end) => {
-    var _a;
     if (typeof mathfieldApi.setSelection === "function") {
         mathfieldApi.setSelection(start, end);
         return;
@@ -38,7 +38,7 @@ export const setSelectionRange = (mathfieldApi, start, end) => {
         mathfieldApi.selection = [start, end];
         return;
     }
-    const internalModel = (_a = mathfieldApi._mathfield) === null || _a === void 0 ? void 0 : _a.model;
+    const internalModel = getMathfieldInternalModel(mathfieldApi);
     if (internalModel && typeof internalModel.setSelection === "function") {
         internalModel.setSelection(start, end);
         return;
@@ -48,8 +48,7 @@ export const setSelectionRange = (mathfieldApi, start, end) => {
     }
 };
 const getInternalPlaceholderRanges = (mathfieldApi) => {
-    const internal = mathfieldApi._mathfield;
-    const model = internal === null || internal === void 0 ? void 0 : internal.model;
+    const model = getMathfieldInternalModel(mathfieldApi);
     if (!model || !Array.isArray(model.atoms) || typeof model.offsetOf !== "function") {
         return [];
     }
@@ -110,52 +109,6 @@ const getInternalPlaceholderRanges = (mathfieldApi) => {
     return ranges;
 };
 const PLACEHOLDER_TOKEN_REGEX = /\\placeholder(?:\[[^\]]*\])?\{(?:[^{}]|\\.)*\}/g;
-const offsetToLatexIndex = (mathfieldApi, offset) => {
-    const reader = mathfieldApi;
-    if (typeof reader.getValue !== "function") {
-        return offset;
-    }
-    try {
-        const value = reader.getValue(0, offset, "latex");
-        return typeof value === "string" ? value.length : Math.max(0, offset);
-    }
-    catch {
-        return Math.max(0, offset);
-    }
-};
-const indexToOffset = (mathfieldApi, lastOffset, index) => {
-    const reader = mathfieldApi;
-    if (typeof reader.getValue !== "function") {
-        return Math.max(0, Math.min(lastOffset, index));
-    }
-    let rangeText = "";
-    try {
-        const value = reader.getValue(0, lastOffset, "latex");
-        rangeText = typeof value === "string" ? value : "";
-    }
-    catch {
-        return Math.max(0, Math.min(lastOffset, index));
-    }
-    if (index <= 0) {
-        return 0;
-    }
-    if (index >= rangeText.length) {
-        return lastOffset;
-    }
-    let low = 0;
-    let high = lastOffset;
-    while (low < high) {
-        const mid = Math.floor((low + high) / 2);
-        const length = offsetToLatexIndex(mathfieldApi, mid);
-        if (length < index) {
-            low = mid + 1;
-        }
-        else {
-            high = mid;
-        }
-    }
-    return Math.max(0, Math.min(lastOffset, low));
-};
 const getLiteralPlaceholderRanges = (mathfieldApi) => {
     const reader = mathfieldApi;
     if (typeof reader.getValue !== "function") {
@@ -186,8 +139,8 @@ const getLiteralPlaceholderRanges = (mathfieldApi) => {
     while (match) {
         const startIndex = match.index;
         const endIndex = startIndex + match[0].length;
-        const start = indexToOffset(mathfieldApi, lastOffset, startIndex);
-        const end = indexToOffset(mathfieldApi, lastOffset, endIndex);
+        const start = indexToMathFieldOffset(mathfieldApi, startIndex);
+        const end = indexToMathFieldOffset(mathfieldApi, endIndex);
         if (Number.isFinite(start) &&
             Number.isFinite(end) &&
             start >= 0 &&

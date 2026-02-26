@@ -10,7 +10,11 @@ const normalizeModelName = (value) => {
   if (typeof value !== "string") {
     return "";
   }
-  return value.trim();
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+  return trimmed.replace(/^models\//i, "");
 };
 
 const requestGemini = async ({

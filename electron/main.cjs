@@ -105,6 +105,7 @@ const createMainWindow = () => {
 
   state.mainWindow.loadFile(indexPath);
   state.mainWindow.on("closed", () => {
+    clearWorkspaceSession({ closePdfWindow: true });
     if (state.captureShortcut) {
       globalShortcut.unregister(state.captureShortcut);
       state.captureShortcut = null;
@@ -224,6 +225,16 @@ const buildHandlers = createBuildHandlers({
   state,
   delay,
 });
+
+const clearWorkspaceSession = ({ closePdfWindow = false } = {}) => {
+  buildHandlers.handleBuildCancel();
+  workspace.setRootPath(null);
+  state.currentWorkspacePath = null;
+  state.lastBuildPdfPath = null;
+  if (closePdfWindow && typeof pdfWindowManager.close === "function") {
+    pdfWindowManager.close();
+  }
+};
 
 
 
@@ -439,6 +450,35 @@ const looksLikeOAuthCallbackUrl = (value) => {
 
 const pendingOAuthCallbackUrls = [];
 
+const allowMultiInstance =
+  process.env.TEX64_ALLOW_MULTI_INSTANCE === "1";
+
+const launchDetachedInstance = () => {
+  try {
+    const env = {
+      ...process.env,
+      TEX64_ALLOW_MULTI_INSTANCE: "1",
+    };
+    const args = [];
+    if (process.defaultApp) {
+      const appEntry =
+        typeof process.argv[1] === "string" && process.argv[1]
+          ? path.resolve(process.argv[1])
+          : app.getAppPath();
+      args.push(appEntry);
+    }
+    const child = spawn(process.execPath, args, {
+      detached: true,
+      stdio: "ignore",
+      env,
+    });
+    child.unref();
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 const queueOAuthCallbackUrl = (value) => {
   const url = normalizeOAuthCallbackUrlInput(value);
   if (!looksLikeOAuthCallbackUrl(url)) {
@@ -451,16 +491,30 @@ const queueOAuthCallbackUrl = (value) => {
   pendingOAuthCallbackUrls.push(url);
 };
 
-const hasSingleInstanceLock = app.requestSingleInstanceLock();
+const hasSingleInstanceLock = allowMultiInstance
+  ? true
+  : app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) {
   app.quit();
 } else {
-  app.on("second-instance", (_event, argv = []) => {
-    focusMainWindow();
-    argv.forEach((arg) => {
-      queueOAuthCallbackUrl(arg);
+  if (!allowMultiInstance) {
+    app.on("second-instance", (_event, argv = []) => {
+      const oauthArgs = Array.isArray(argv)
+        ? argv.filter((arg) => looksLikeOAuthCallbackUrl(arg))
+        : [];
+      if (oauthArgs.length > 0) {
+        focusMainWindow();
+        oauthArgs.forEach((arg) => {
+          queueOAuthCallbackUrl(arg);
+        });
+        return;
+      }
+      const launched = launchDetachedInstance();
+      if (!launched) {
+        focusMainWindow();
+      }
     });
-  });
+  }
 }
 
 app.on("open-url", (event, url) => {
@@ -506,6 +560,7 @@ app.whenReady().then(() => {
 });
 
 app.on("window-all-closed", () => {
+  clearWorkspaceSession({ closePdfWindow: true });
   if (process.platform !== "darwin") {
     app.quit();
   }

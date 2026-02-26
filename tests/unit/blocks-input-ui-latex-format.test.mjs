@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  normalizeLegacyEnvMarkers,
   normalizeMatrixSyntax,
-  restoreUnsupportedEnvBegins,
   shouldWrapAligned,
   stripEmptyAlignedRows,
   unwrapAligned,
@@ -67,37 +67,37 @@ test("normalizeMatrixSyntax skips mixed/non-cell matrix bodies to avoid structur
   assert.equal(normalizeMatrixSyntax(unbraced), unbraced);
 });
 
-test("restoreUnsupportedEnvBegins reconstructs stripped alignat/flalign begin tokens", () => {
+test("normalizeLegacyEnvMarkers migrates legacy tx proxy env markers", () => {
   assert.equal(
-    restoreUnsupportedEnvBegins("{2}a&=b\\quad c&=d\\end{alignat*}"),
+    normalizeLegacyEnvMarkers("\\begin{aligned}\\txalnat a&=b\\quad c&=d\\end{aligned}"),
     "\\begin{alignat*}{2}a&=b\\quad c&=d\\end{alignat*}"
   );
   assert.equal(
-    restoreUnsupportedEnvBegins("a&=b\\end{flalign*}"),
+    normalizeLegacyEnvMarkers("\\begin{aligned}\\txflaln a&=b\\end{aligned}"),
     "\\begin{flalign*}a&=b\\end{flalign*}"
   );
   assert.equal(
-    restoreUnsupportedEnvBegins("{2}a&=b\\quad c&=d\\end{alignat*}\\label{eq:a1}"),
-    "\\begin{alignat*}{2}a&=b\\quad c&=d\\end{alignat*}\\label{eq:a1}"
-  );
-  assert.equal(
-    restoreUnsupportedEnvBegins("a&=b\\end{flalign*}\\tag{A1}"),
-    "\\begin{flalign*}a&=b\\end{flalign*}\\tag{A1}"
-  );
-  assert.equal(
-    restoreUnsupportedEnvBegins("\\begin{aligned}\\txalnat a&=b\\quad c&=d\\end{aligned}"),
-    "\\begin{alignat*}{2}a&=b\\quad c&=d\\end{alignat*}"
-  );
-  assert.equal(
-    restoreUnsupportedEnvBegins("\\begin{aligned}\\txflaln a&=b\\end{aligned}"),
-    "\\begin{flalign*}a&=b\\end{flalign*}"
-  );
-  assert.equal(
-    restoreUnsupportedEnvBegins("\\begin{aligned}\\txarrcf a&b&c\\\\d&e&f\\end{aligned}"),
+    normalizeLegacyEnvMarkers("\\begin{aligned}\\txarrcf a&b&c\\\\d&e&f\\end{aligned}"),
     "\\begin{array}{@{}>r<{}c@{|}l<{}@{}}a&b&c\\\\d&e&f\\end{array}"
   );
   assert.equal(
-    restoreUnsupportedEnvBegins("\\txarrayc{@{}>r<{}c@{|}l<{}@{}}{a&b&c\\\\d&e&f}"),
+    normalizeLegacyEnvMarkers("\\txarrayc{@{}>r<{}c@{|}l<{}@{}}{a&b&c\\\\d&e&f}"),
     "\\begin{array}{@{}>r<{}c@{|}l<{}@{}}a&b&c\\\\d&e&f\\end{array}"
+  );
+  assert.equal(
+    normalizeLegacyEnvMarkers("{2}a&=b\\quad c&=d\\end{alignat*}"),
+    "{2}a&=b\\quad c&=d\\end{alignat*}"
+  );
+  assert.equal(
+    normalizeLegacyEnvMarkers("a&=b\\end{flalign*}\\tag{A1}"),
+    "a&=b\\end{flalign*}\\tag{A1}"
+  );
+  assert.equal(
+    normalizeLegacyEnvMarkers("\\txlbl{eq:newton}+\\txtgs{A-1}+\\txintr{text}"),
+    "\\label{eq:newton}+\\tag*{A-1}+\\intertext{text}"
+  );
+  assert.equal(
+    normalizeLegacyEnvMarkers("\\label{\\lbrace sec/intro+alpha@v1\\rbrace}"),
+    "\\label{sec/intro+alpha@v1}"
   );
 });

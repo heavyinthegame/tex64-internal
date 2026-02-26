@@ -1451,6 +1451,13 @@ class PlatformAccessService {
       typeof options.channel === "string" && options.channel.trim()
         ? options.channel.trim()
         : "stable";
+    const kindRaw =
+      typeof options.kind === "string" && options.kind.trim()
+        ? options.kind.trim()
+        : platform === "darwin"
+          ? "zip"
+          : "";
+    const kind = String(kindRaw).trim().toLowerCase();
     const currentVersion =
       typeof options.currentVersion === "string" && options.currentVersion.trim()
         ? options.currentVersion.trim()
@@ -1459,6 +1466,9 @@ class PlatformAccessService {
     params.set("platform", platform);
     params.set("arch", arch);
     params.set("channel", channel);
+    if (kind) {
+      params.set("kind", kind);
+    }
     const response = await this.requestJson(
       `${this.apiBaseUrl}/updates/manifest?${params.toString()}`
     );

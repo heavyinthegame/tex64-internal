@@ -61,6 +61,9 @@ const DEFAULT_MAX_OUTPUT_TOKENS = 1024;
 const REQUEST_HISTORY_MAX_MESSAGES = 24;
 const REQUEST_HISTORY_MAX_CHARS = 64_000;
 const BASE64_DATA_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+const DEFAULT_PREFETCH_FILES_LIMIT = 3;
+const PREFETCH_FILE_MENTION_PATTERN =
+  /(?:^|[^A-Za-z0-9_./-])([A-Za-z0-9_./-]+\.(?:tex|bib|sty|cls|ltx|dtx|md|txt|json|ya?ml|toml|js|ts|cjs|mjs|css|html))(?![A-Za-z0-9_./-])/gi;
 const parseNumber = (value, fallback = 0) => {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
@@ -74,6 +77,43 @@ const parseNumber = (value, fallback = 0) => {
   return fallback;
 };
 const parseInteger = (value, fallback = 0) => Math.round(parseNumber(value, fallback));
+
+const resolvePrefetchMaxChars = (settings) => {
+  const raw = settings?.openFileMaxChars;
+  if (typeof raw !== "number" || !Number.isFinite(raw)) {
+    return 12_000;
+  }
+  if (raw <= 0) {
+    return 50_000;
+  }
+  return Math.min(50_000, Math.max(2_000, Math.round(raw)));
+};
+
+const extractMentionedPaths = (text) => {
+  if (typeof text !== "string" || !text.trim()) {
+    return [];
+  }
+  PREFETCH_FILE_MENTION_PATTERN.lastIndex = 0;
+  const seen = new Set();
+  let match = null;
+  while ((match = PREFETCH_FILE_MENTION_PATTERN.exec(text)) !== null) {
+    const candidate = normalizePath(match[1]);
+    if (candidate) {
+      seen.add(candidate);
+    }
+  }
+  return Array.from(seen);
+};
+
+const extractTextFromParts = (parts) => {
+  if (!Array.isArray(parts)) {
+    return "";
+  }
+  return parts
+    .map((part) => (typeof part?.text === "string" ? part.text : ""))
+    .filter(Boolean)
+    .join("\n");
+};
 
 const resolveResponseModel = (response) => {
   if (!response || typeof response !== "object") {
@@ -95,8 +135,9 @@ const resolveResponseModel = (response) => {
   return "";
 };
 
-const buildSystemPrompt = (context, rootPath, policy, options) => {
+const buildSystemPrompt = (context, rootPath, policy, options, extras = {}) => {
   const activeFilePath = context?.activeFilePath ?? "";
+  const activeFileContentProvided = typeof context?.activeFileContent === "string";
   const activeFileContent =
     typeof context?.activeFileContent === "string" ? context.activeFileContent : "";
   const activeFileIsDirty = Boolean(context?.activeFileIsDirty);
@@ -139,6 +180,14 @@ const buildSystemPrompt = (context, rootPath, policy, options) => {
   const explicitContextPaths = Array.isArray(context?.explicitContextPaths)
     ? context.explicitContextPaths.filter((entry) => typeof entry === "string" && entry.trim())
     : [];
+  const rootFileInfo =
+    extras?.rootFileInfo && typeof extras.rootFileInfo === "object" ? extras.rootFileInfo : null;
+  const referencedFileSnapshots = Array.isArray(extras?.referencedFileSnapshots)
+    ? extras.referencedFileSnapshots
+    : [];
+  const referencedFileErrors = Array.isArray(extras?.referencedFileErrors)
+    ? extras.referencedFileErrors
+    : [];
 
   const lines = [
     "あなたは TeX64 に統合されたAIアシスタントです。",
@@ -164,6 +213,11 @@ const buildSystemPrompt = (context, rootPath, policy, options) => {
     "",
     "## 必須ルール",
     "- 目的は、ユーザーの論文執筆を自律的に前進させること。各ターンで完成に近づく提案を行う",
+    "- ユーザーにファイル内容の貼り付けや手動確認を求めない。必要な情報はツールで取得する（例外: ツール制約/ブロック/サイズ超過）",
+    "- ファイル指定が曖昧な場合は、Active file → ルートのメイン .tex（分かるなら）→ main.tex の順で推測し、必要なら list_files/search_files で特定する",
+    "- 既にユーザーがファイル名を指定したら、同じ質問を繰り返さず read_file/read_files で確認して編集提案へ進む",
+    "- 質問は必要最小限（原則1ターン最大1問）。質問だけで終わらず、仮定を置いた暫定案や次の最小提案も同時に示す",
+    "- プレースホルダ（[...], TODO, XXX など）は原則使わず、一般的でも完成した文章/差分を出す（断定できない固有情報は避ける）",
     "- 変更は重要度で判断し、重大な不整合・ビルド失敗・論旨破綻に直結しない軽微な気になる点は無理に直さない",
     "- 闇雲に変更せず、ユーザーとの対話・明示指示・現在の文脈から必要性を見極めてツール呼び出しと変更提案を行う",
     "- 検証が必要なタスクでは run_build を使って確認する（ユーザー依頼がある場合は必ず実行）",
@@ -189,8 +243,16 @@ const buildSystemPrompt = (context, rootPath, policy, options) => {
     "",
     "## 出力ルール",
     "- 最終応答には方針と次の提案を必ず含める",
+    "- 編集/追記/修正の依頼では、質問だけで終わらず propose_patch / propose_write で具体的な差分提案を出す（不可能なら理由と次の最小手）",
     "## ワークスペース",
     `- Root: ${rootPath}`,
+    rootFileInfo?.path
+      ? `- Root main tex: ${rootFileInfo.path}${
+          typeof rootFileInfo.source === "string" && rootFileInfo.source
+            ? ` (${rootFileInfo.source})`
+            : ""
+        }`
+      : "- Root main tex: (unknown)",
     `- Active file: ${activeFilePath || "(none)"}`,
     `- Context controls: selection=${includeSelection ? "on" : "off"}, openFiles=${
       includeOpenFiles ? "on" : "off"
@@ -208,7 +270,7 @@ const buildSystemPrompt = (context, rootPath, policy, options) => {
     }
   }
 
-  if (activeFileContent) {
+  if (activeFileContentProvided) {
     lines.push(`- Active file status: ${activeFileIsDirty ? "未保存の変更あり" : "保存済み"}`);
     if (activeFileContentTruncated) {
       const fullLength = activeFileContentLength ?? activeFileContent.length;
@@ -283,6 +345,38 @@ const buildSystemPrompt = (context, rootPath, policy, options) => {
         lines.push("```", snapshot.content, "```");
       });
     }
+  }
+
+  if (referencedFileErrors.length > 0) {
+    lines.push("", "## Referenced files (unavailable)");
+    referencedFileErrors.forEach((entry) => {
+      if (!entry || typeof entry.path !== "string" || typeof entry.error !== "string") {
+        return;
+      }
+      lines.push(`- ${entry.path}: ${entry.error}`);
+    });
+  }
+
+  if (referencedFileSnapshots.length > 0) {
+    lines.push("", "## Referenced file snapshots");
+    referencedFileSnapshots.forEach((entry) => {
+      if (!entry || typeof entry.path !== "string" || typeof entry.content !== "string") {
+        return;
+      }
+      const sourceLabel =
+        typeof entry.source === "string" && entry.source ? ` / source: ${entry.source}` : "";
+      const partialLabel = entry.partial ? " / partial" : "";
+      const lengthLabel =
+        typeof entry.contentLength === "number" && Number.isFinite(entry.contentLength)
+          ? ` / length: ${entry.contentLength}`
+          : "";
+      lines.push(
+        `### ${entry.path}${sourceLabel}${partialLabel}${lengthLabel}`,
+        "```",
+        entry.content,
+        "```"
+      );
+    });
   }
 
   const recentIssues = Array.isArray(context?.recentIssues) ? context.recentIssues : [];
@@ -1783,7 +1877,98 @@ class AgentService {
     const conversation = this.buildConversation(targetConversationId);
     conversation.push({ role: "user", parts: userParts });
 
-    const systemPrompt = buildSystemPrompt(context, rootPath, policy, options);
+    const rootFileInfo = await this.workspace.rootInfo().catch(() => null);
+    const userText = extractTextFromParts(userParts);
+    const explicitPaths = Array.isArray(context?.explicitContextPaths)
+      ? context.explicitContextPaths.map((entry) => normalizePath(entry)).filter(Boolean)
+      : [];
+    const mentionedPaths = extractMentionedPaths(userText);
+    const existingSnapshots = new Set();
+    if (typeof context?.activeFilePath === "string" && typeof context?.activeFileContent === "string") {
+      existingSnapshots.add(context.activeFilePath);
+    }
+    const openSnapshots = Array.isArray(context?.openFileSnapshots) ? context.openFileSnapshots : [];
+    openSnapshots.forEach((snapshot) => {
+      if (snapshot && typeof snapshot.path === "string" && typeof snapshot.content === "string") {
+        existingSnapshots.add(snapshot.path);
+      }
+    });
+    const prefetchCandidates = [];
+    const pushPrefetchPath = (value) => {
+      const normalized = normalizePath(value);
+      if (!normalized) {
+        return;
+      }
+      if (existingSnapshots.has(normalized)) {
+        return;
+      }
+      if (prefetchCandidates.includes(normalized)) {
+        return;
+      }
+      prefetchCandidates.push(normalized);
+    };
+    explicitPaths.forEach(pushPrefetchPath);
+    mentionedPaths.forEach(pushPrefetchPath);
+    if (prefetchCandidates.length === 0) {
+      if (typeof context?.activeFilePath === "string") {
+        pushPrefetchPath(context.activeFilePath);
+      }
+      if (prefetchCandidates.length === 0 && rootFileInfo?.path) {
+        pushPrefetchPath(rootFileInfo.path);
+      }
+      if (prefetchCandidates.length === 0) {
+        pushPrefetchPath("main.tex");
+      }
+    }
+    const maxPrefetchFiles = Number.isFinite(policy?.maxReadFiles)
+      ? Math.max(0, Math.min(DEFAULT_PREFETCH_FILES_LIMIT, policy.maxReadFiles))
+      : DEFAULT_PREFETCH_FILES_LIMIT;
+    const prefetchPaths =
+      maxPrefetchFiles > 0 ? prefetchCandidates.slice(0, maxPrefetchFiles) : [];
+    const referencedFileSnapshots = [];
+    const referencedFileErrors = [];
+    if (prefetchPaths.length > 0) {
+      const maxChars = resolvePrefetchMaxChars(settings);
+      const prefetchResult = await handleReadFiles(
+        this,
+        { paths: prefetchPaths },
+        policy,
+        targetConversationId
+      );
+      const files = prefetchResult?.files && typeof prefetchResult.files === "object" ? prefetchResult.files : {};
+      prefetchPaths.forEach((targetPath) => {
+        const entry = files[targetPath] ?? files[targetPath.replace(/^\.\//, "")] ?? null;
+        if (!entry || typeof entry !== "object") {
+          referencedFileErrors.push({ path: targetPath, error: "読み取り失敗" });
+          return;
+        }
+        if (typeof entry.error === "string" && entry.error) {
+          referencedFileErrors.push({ path: targetPath, error: entry.error });
+          return;
+        }
+        const rawContent = typeof entry.content === "string" ? entry.content : "";
+        const fullLength = rawContent.length;
+        let content = rawContent;
+        let partial = Boolean(entry.partial);
+        if (Number.isFinite(maxChars) && fullLength > maxChars) {
+          content = rawContent.slice(0, maxChars);
+          partial = true;
+        }
+        referencedFileSnapshots.push({
+          path: targetPath,
+          content,
+          partial,
+          contentLength: fullLength,
+          source: typeof entry.source === "string" ? entry.source : "disk",
+        });
+      });
+    }
+
+    const systemPrompt = buildSystemPrompt(context, rootPath, policy, options, {
+      rootFileInfo,
+      referencedFileSnapshots,
+      referencedFileErrors,
+    });
     const functionDeclarations =
       options.allowRunCommand === true
         ? AGENT_TOOL_DECLARATIONS
@@ -1973,4 +2158,8 @@ class AgentService {
 
 module.exports = {
   AgentService,
+  buildSystemPrompt,
+  extractMentionedPaths,
+  extractTextFromParts,
+  resolvePrefetchMaxChars,
 };

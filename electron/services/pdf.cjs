@@ -18,6 +18,18 @@ class PDFWindowManager {
     this.pendingSync = null;
   }
 
+  close() {
+    if (this.window && !this.window.isDestroyed()) {
+      this.window.close();
+      return;
+    }
+    this.window = null;
+    this.currentPath = null;
+    this.isReady = false;
+    this.pendingOpen = null;
+    this.pendingSync = null;
+  }
+
   show(pdfPath, options = {}) {
     this.ensureWindow();
     const reload = options?.reload !== false;

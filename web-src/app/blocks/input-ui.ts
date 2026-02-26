@@ -10,18 +10,21 @@ import {
   indexToOffset,
   offsetToIndex,
 } from "./math-input-utils.js";
-import { initMathWysiwyg, type MathWysiwygApi } from "../math-wysiwyg.js";
-import { DEFAULT_WYSIWYG_PACKS } from "../math-wysiwyg-packs.js";
 import {
-  createPlaceholderNavigator,
+  initMathWysiwyg,
+  type MathWysiwygApi,
+} from "../../math/wysiwyg/math-wysiwyg.js";
+import { DEFAULT_WYSIWYG_PACKS } from "../../math/wysiwyg/math-wysiwyg-packs.js";
+import { closeMathfieldInternalMenu } from "../../math/mathfield-private-adapter.js";
+import {
   readMathFieldValue,
   setSelectionRange,
   type MathFieldPlaceholderApi,
   writeMathFieldValue,
 } from "./input-ui-math-field.js";
 import {
+  normalizeLegacyEnvMarkers,
   normalizeMatrixSyntax,
-  restoreUnsupportedEnvBegins,
   shouldWrapAligned,
   stripEmptyAlignedRows,
   unwrapAligned,
@@ -44,11 +47,6 @@ import {
   saveMathWysiwygAutoSuggest,
   saveMathWysiwygPacks,
 } from "./math-wysiwyg-settings.js";
-import {
-  decodeMathAuxCommands,
-  encodeMathAuxCommands,
-  encodeMathAuxCommandsWithCursor,
-} from "./math-aux-command-escape.js";
 
 export type BlockInputApi = {
   getActiveBlockType: () => BlockType;
@@ -97,23 +95,19 @@ export const initBlockInputUi = (
 
   type BlockSettingsPage = "menu" | "insert-format" | "suggestions";
 
-  const { moveMathFieldPlaceholder } = createPlaceholderNavigator();
-  const normalizeAuxCommandsForOutput = (value: string) =>
-    decodeMathAuxCommands(encodeMathAuxCommands(value));
-
   const normalizeMathValueForOutput = (value: string) => {
-    const decoded = normalizeAuxCommandsForOutput(value);
-    const resolved = mathFieldWrapped ? unwrapAligned(decoded).value : decoded;
-    const restored = restoreUnsupportedEnvBegins(resolved);
-    return normalizeMatrixSyntax(restored);
+    const resolved = mathFieldWrapped ? unwrapAligned(value).value : value;
+    return normalizeMatrixSyntax(normalizeLegacyEnvMarkers(resolved));
   };
 
   const prepareMathValueForField = (value: string) => {
     if (!value) {
-      return value;
+      return { value, wrapped: false };
     }
-    const wrapped = shouldWrapAligned(value) ? wrapAligned(value) : value;
-    return encodeMathAuxCommands(wrapped);
+    const normalizedLegacy = normalizeLegacyEnvMarkers(value);
+    const wrapped = shouldWrapAligned(normalizedLegacy);
+    const withAlignedWrapper = wrapped ? wrapAligned(normalizedLegacy) : normalizedLegacy;
+    return { value: withAlignedWrapper, wrapped };
   };
 
   let activeBlockType: BlockType = "math";
@@ -452,17 +446,17 @@ export const initBlockInputUi = (
     }
     const resolvedValue =
       mathInput instanceof HTMLTextAreaElement
-        ? currentMathValue
+        ? { value: currentMathValue, wrapped: false }
         : prepareMathValueForField(currentMathValue);
     if (mathInput instanceof HTMLTextAreaElement) {
-      mathInput.value = resolvedValue;
+      mathInput.value = resolvedValue.value;
       attachMathInputListener();
       return;
     }
-    mathFieldWrapped = resolvedValue !== currentMathValue;
+    mathFieldWrapped = resolvedValue.wrapped;
     writeMathFieldValue(
       mathInput as { setValue?: (value: string) => void; value?: string },
-      resolvedValue
+      resolvedValue.value
     );
   };
 
@@ -483,27 +477,27 @@ export const initBlockInputUi = (
       const rawValue = readMathFieldValue(
         mathInput as { getValue?: (format?: string) => unknown; value?: unknown }
       );
-      const decodedValue = normalizeAuxCommandsForOutput(rawValue);
+      const normalizedValue = normalizeLegacyEnvMarkers(rawValue);
       if (mathFieldWrapped) {
-        const { value: unwrapped, didUnwrap } = unwrapAligned(decodedValue);
+        const { value: unwrapped, didUnwrap } = unwrapAligned(normalizedValue);
         if (didUnwrap) {
           currentMathValue = unwrapped;
           return unwrapped;
         }
         mathFieldWrapped = false;
       }
-      currentMathValue = decodedValue;
-      return decodedValue;
+      currentMathValue = normalizedValue;
+      return normalizedValue;
     }
 
     if (mathInput instanceof HTMLTextAreaElement) {
       mathFieldWrapped = false;
-      currentMathValue = normalizeAuxCommandsForOutput(mathInput.value);
+      currentMathValue = normalizeLegacyEnvMarkers(mathInput.value);
       return currentMathValue;
     }
     mathFieldWrapped = false;
     const value = (mathInput as { value?: string }).value;
-    return typeof value === "string" ? normalizeAuxCommandsForOutput(value) : "";
+    return typeof value === "string" ? normalizeLegacyEnvMarkers(value) : "";
   };
 
   const setMathInputValue = (value: string) => {
@@ -519,11 +513,11 @@ export const initBlockInputUi = (
       return;
     }
     const preparedValue = prepareMathValueForField(value);
-    mathFieldWrapped = preparedValue !== value;
+    mathFieldWrapped = preparedValue.wrapped;
     currentMathValue = value;
     writeMathFieldValue(
       mathInput as { setValue?: (value: string) => void; value?: string },
-      preparedValue
+      preparedValue.value
     );
   };
 
@@ -611,17 +605,8 @@ export const initBlockInputUi = (
 
   const attachMathFieldEvents = (mathfield: HTMLElement) => {
     const closeMathFieldMenu = () => {
-      const internalMenu = (mathfield as { _mathfield?: { menu?: any } })._mathfield?.menu;
-      if (internalMenu && typeof internalMenu.hide === "function") {
-        if (internalMenu.state && internalMenu.state !== "closed") {
-          internalMenu.hide();
-          return;
-        }
-        const element = internalMenu.element as HTMLElement | undefined;
-        if (element?.isConnected) {
-          internalMenu.hide();
-          return;
-        }
+      if (closeMathfieldInternalMenu(mathfield)) {
+        return;
       }
       const executeCommand = (mathfield as { executeCommand?: (command: string) => void })
         .executeCommand;
@@ -652,90 +637,26 @@ export const initBlockInputUi = (
       }
     };
 
-    let mathFieldNormalizing = false;
-
-    const syncMathFieldValue = (event?: Event) => {
-      if (mathFieldNormalizing) {
-        return;
-      }
-      let rawValue = readMathFieldValue(
-        mathfield as { getValue?: (format?: string) => unknown; value?: unknown }
+    const syncMathFieldValue = () => {
+      const rawValue = normalizeLegacyEnvMarkers(
+        readMathFieldValue(
+          mathfield as { getValue?: (format?: string) => unknown; value?: unknown }
+        )
       );
-      const finalizeBare = event?.type === "change";
-      if (finalizeBare) {
-        const escapedValue = encodeMathAuxCommands(rawValue);
-        if (escapedValue !== rawValue) {
-          mathFieldNormalizing = true;
-          writeMathFieldValue(
-            mathfield as { setValue?: (value: string) => void; value?: string },
-            escapedValue
-          );
-          rawValue = escapedValue;
-          mathFieldNormalizing = false;
-        }
-      } else {
-        const mathfieldApi = mathfield as MathFieldPlaceholderApi;
-        const selection = getMathFieldSelectionRange(mathfieldApi);
-        const cursorIndex = offsetToIndex(mathfieldApi, selection.end);
-        const roundtripOffset = indexToOffset(mathfieldApi, cursorIndex);
-        const cursorMappingReliable = Math.abs(roundtripOffset - selection.end) <= 1;
-        const escaped = encodeMathAuxCommandsWithCursor(rawValue, cursorIndex, {
-          deferBare: !cursorMappingReliable,
-          deferCommandArgs: !cursorMappingReliable,
-        });
-        if (escaped.changed) {
-          mathFieldNormalizing = true;
-          writeMathFieldValue(
-            mathfield as { setValue?: (value: string) => void; value?: string },
-            escaped.value
-          );
-          const nextOffset = cursorMappingReliable
-            ? indexToOffset(mathfieldApi, escaped.cursorIndex)
-            : selection.end;
-          setSelectionRange(mathfieldApi, nextOffset, nextOffset);
-          rawValue = escaped.value;
-          mathFieldNormalizing = false;
-        }
-      }
       if (mathFieldWrapped) {
         const { value: unwrapped, didUnwrap } = unwrapAligned(rawValue);
         if (didUnwrap) {
           const trimmed = stripEmptyAlignedRows(unwrapped);
+          currentMathValue = normalizeLegacyEnvMarkers(unwrapped);
           if (trimmed !== unwrapped) {
-            mathFieldNormalizing = true;
-            writeMathFieldValue(
-              mathfield as { setValue?: (value: string) => void; value?: string },
-              wrapAligned(trimmed)
-            );
-            currentMathValue = normalizeAuxCommandsForOutput(trimmed);
-            mathFieldWrapped = true;
-            mathFieldNormalizing = false;
-            return;
+            currentMathValue = normalizeLegacyEnvMarkers(trimmed);
           }
-          currentMathValue = normalizeAuxCommandsForOutput(unwrapped);
           return;
         }
         mathFieldWrapped = false;
       }
-      if (shouldWrapAligned(rawValue)) {
-        const preparedValue = wrapAligned(rawValue);
-        mathFieldNormalizing = true;
-        writeMathFieldValue(
-          mathfield as { setValue?: (value: string) => void; value?: string },
-          preparedValue
-        );
-        const mathfieldApi = mathfield as { lastOffset?: number; position?: number };
-        if (typeof mathfieldApi.lastOffset === "number") {
-          mathfieldApi.position = Math.max(0, mathfieldApi.lastOffset - 1);
-        } else {
-          mathfieldApi.position = 0;
-        }
-        currentMathValue = normalizeAuxCommandsForOutput(rawValue);
-        mathFieldWrapped = true;
-        mathFieldNormalizing = false;
-        return;
-      }
-      currentMathValue = normalizeAuxCommandsForOutput(rawValue);
+      mathFieldWrapped = shouldWrapAligned(rawValue);
+      currentMathValue = normalizeLegacyEnvMarkers(rawValue);
     };
     mathfield.addEventListener("input", syncMathFieldValue);
     mathfield.addEventListener("change", syncMathFieldValue);
@@ -747,6 +668,7 @@ export const initBlockInputUi = (
       const mathfieldApi = mathfield as {
         insert?: (value: string, options?: Record<string, unknown>) => boolean;
         executeCommand?: (selector: string, ...args: unknown[]) => boolean;
+        getValue?: (...args: unknown[]) => unknown;
         focus?: () => void;
       };
 
@@ -756,6 +678,7 @@ export const initBlockInputUi = (
         selectionMode: "placeholder",
         focus: true,
         feedback: false,
+        format: "latex" as const,
       };
 
       try {
@@ -773,8 +696,14 @@ export const initBlockInputUi = (
           return true;
         }
         if (typeof mathfieldApi.executeCommand === "function") {
+          const beforeValue = readMathFieldLatex(mathfieldApi, "latex");
           const ok = mathfieldApi.executeCommand("insert", insertValue, insertOptions);
-          if (ok) {
+          const afterValue = readMathFieldLatex(mathfieldApi, "latex");
+          const changed =
+            typeof beforeValue === "string" &&
+            typeof afterValue === "string" &&
+            afterValue !== beforeValue;
+          if (ok !== false || changed) {
             mathfield.dispatchEvent(new Event("input", { bubbles: true }));
             return true;
           }
@@ -811,14 +740,31 @@ export const initBlockInputUi = (
       const insertLatex = `\\frac{${selectedLatex}}{${PLACEHOLDER_LATEX}}`;
       let inserted = false;
       if (typeof mathfieldApi.executeCommand === "function") {
+        const beforeValue = readMathFieldLatex(mathfieldApi, "latex");
         try {
-          inserted = Boolean(mathfieldApi.executeCommand("insert", insertLatex));
+          const ok = mathfieldApi.executeCommand("insert", insertLatex, {
+              selectionMode: "placeholder",
+              focus: true,
+              feedback: false,
+              format: "latex",
+            });
+          const afterValue = readMathFieldLatex(mathfieldApi, "latex");
+          const changed =
+            typeof beforeValue === "string" &&
+            typeof afterValue === "string" &&
+            afterValue !== beforeValue;
+          inserted = ok !== false || changed;
         } catch {
           inserted = false;
         }
       }
       if (!inserted && typeof mathfieldApi.insert === "function") {
-        mathfieldApi.insert(insertLatex, { focus: true, feedback: false });
+        mathfieldApi.insert(insertLatex, {
+          selectionMode: "placeholder",
+          focus: true,
+          feedback: false,
+          format: "latex",
+        });
         inserted = true;
       }
       if (!inserted) {
@@ -1188,14 +1134,31 @@ export const initBlockInputUi = (
       mathfieldApi.focus?.();
       let replaced = false;
       if (typeof mathfieldApi.executeCommand === "function") {
+        const beforeValue = readMathFieldLatex(mathfieldApi, "latex");
         try {
-          replaced = mathfieldApi.executeCommand("insert", nextLatex);
+          const ok = mathfieldApi.executeCommand("insert", nextLatex, {
+            selectionMode: "after",
+            focus: true,
+            feedback: false,
+            format: "latex",
+          });
+          const afterValue = readMathFieldLatex(mathfieldApi, "latex");
+          const changed =
+            typeof beforeValue === "string" &&
+            typeof afterValue === "string" &&
+            afterValue !== beforeValue;
+          replaced = ok !== false || changed;
         } catch {
           replaced = false;
         }
       }
       if (!replaced && typeof mathfieldApi.insert === "function") {
-        mathfieldApi.insert(nextLatex, { focus: true, feedback: false });
+        mathfieldApi.insert(nextLatex, {
+          selectionMode: "after",
+          focus: true,
+          feedback: false,
+          format: "latex",
+        });
         replaced = true;
       }
       if (!replaced) {
@@ -1304,25 +1267,28 @@ export const initBlockInputUi = (
         const mathfieldApi = mathfield as {
           executeCommand?: (command: string, ...args: unknown[]) => boolean;
           getValue?: (format?: string) => unknown;
-          setValue?: (value: string, options?: Record<string, unknown>) => void;
+          insert?: (value: string, options?: Record<string, unknown>) => void;
         };
         if (!event.metaKey && !event.ctrlKey) {
           let handled = tryInsertMatrixRow();
           if (!handled && typeof mathfieldApi.executeCommand === "function") {
             const before = readMathFieldLatex(mathfieldApi, "latex");
             try {
-              const ok = Boolean(mathfieldApi.executeCommand("addRowAfter"));
-              if (ok) {
-                const after = readMathFieldLatex(mathfieldApi, "latex");
-                handled =
-                  typeof before === "string" && typeof after === "string"
-                    ? before !== after && isRowInsertionStable(before, after)
-                    : ok;
-                if (!handled && typeof mathfieldApi.setValue === "function" && typeof before === "string") {
+              const ok = mathfieldApi.executeCommand("addRowAfter");
+              const after = readMathFieldLatex(mathfieldApi, "latex");
+              const changed =
+                typeof before === "string" &&
+                typeof after === "string" &&
+                after !== before;
+              if (ok !== false || changed) {
+                handled = changed
+                  ? isRowInsertionStable(before ?? "", after ?? "")
+                  : Boolean(ok);
+                if (!handled) {
                   try {
-                    mathfieldApi.setValue(before, { focus: true, feedback: false });
+                    mathfieldApi.executeCommand("undo");
                   } catch {
-                    // ignore restore failure
+                    // ignore undo failure
                   }
                 }
               }
@@ -1330,14 +1296,39 @@ export const initBlockInputUi = (
               handled = false;
             }
           }
-          if (!handled && typeof mathfieldApi.setValue === "function") {
+          if (!handled) {
             const rawValue = readMathFieldLatex(mathfieldApi, "latex");
             if (typeof rawValue === "string" && shouldWrapAligned(rawValue)) {
-              try {
-                mathfieldApi.setValue(wrapAligned(rawValue), { focus: true, feedback: false });
-                handled = tryInsertMatrixRow();
-              } catch {
-                handled = false;
+              if (typeof mathfieldApi.executeCommand === "function") {
+                try {
+                  const ok = mathfieldApi.executeCommand("insert", "\\\\", {
+                    selectionMode: "after",
+                    focus: true,
+                    feedback: false,
+                    format: "latex",
+                  });
+                  handled = ok !== false;
+                } catch {
+                  handled = false;
+                }
+              }
+              if (!handled && typeof mathfieldApi.insert === "function") {
+                const before = readMathFieldLatex(mathfieldApi, "latex");
+                try {
+                  mathfieldApi.insert("\\\\", {
+                    selectionMode: "after",
+                    focus: true,
+                    feedback: false,
+                    format: "latex",
+                  });
+                  const after = readMathFieldLatex(mathfieldApi, "latex");
+                  handled =
+                    typeof before === "string" && typeof after === "string"
+                      ? after !== before
+                      : true;
+                } catch {
+                  handled = false;
+                }
               }
             }
           }
@@ -1353,13 +1344,14 @@ export const initBlockInputUi = (
           if (typeof mathfieldApi.executeCommand === "function") {
             const before = readMathFieldLatex(mathfieldApi, "latex");
             try {
-              const ok = Boolean(mathfieldApi.executeCommand("addColumnAfter"));
-              if (ok) {
-                const after = readMathFieldLatex(mathfieldApi, "latex");
-                handled =
-                  typeof before === "string" && typeof after === "string"
-                    ? before !== after
-                    : ok;
+              const ok = mathfieldApi.executeCommand("addColumnAfter");
+              const after = readMathFieldLatex(mathfieldApi, "latex");
+              const changed =
+                typeof before === "string" &&
+                typeof after === "string" &&
+                after !== before;
+              if (ok !== false || changed) {
+                handled = changed ? true : Boolean(ok);
               }
             } catch {
               handled = false;
@@ -1382,36 +1374,6 @@ export const initBlockInputUi = (
           deps.onMathFieldSubmit?.();
           return;
         }
-      }
-      if (event.key === "Tab" && !event.metaKey && !event.ctrlKey && !event.altKey) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        const mathfieldApi = mathfield as {
-          executeCommand?: (command: string, ...args: unknown[]) => boolean;
-        };
-        let handled = false;
-        const beforeSelection = getMathFieldSelectionRange(mathfield as any);
-        if (typeof mathfieldApi.executeCommand === "function") {
-          try {
-            const movedByCommand = Boolean(
-              mathfieldApi.executeCommand(
-                event.shiftKey ? "moveToPreviousPlaceholder" : "moveToNextPlaceholder"
-              )
-            );
-            const afterSelection = getMathFieldSelectionRange(mathfield as any);
-            handled =
-              movedByCommand &&
-              (afterSelection.start !== afterSelection.end ||
-                afterSelection.start !== beforeSelection.start ||
-                afterSelection.end !== beforeSelection.end);
-          } catch {
-            handled = false;
-          }
-        }
-        if (!handled) {
-          moveMathFieldPlaceholder(mathfield, event.shiftKey ? "backward" : "forward");
-        }
-        return;
       }
       if (event.defaultPrevented) {
         return;
@@ -1562,8 +1524,15 @@ export const initBlockInputUi = (
     return { snippet, content: { formula: normalizedFormula.trim() } };
   };
 
-  const resolveInsertValue = (key: MathKey, isTextArea: boolean) => {
+  const resolveInsertValue = (
+    key: MathKey,
+    isTextArea: boolean,
+    options?: { preserveTemplateMarkers?: boolean }
+  ) => {
     const source = isTextArea && key.fallback ? key.fallback : key.latex;
+    if (!isTextArea && options?.preserveTemplateMarkers) {
+      return source;
+    }
     const placeholder = isTextArea ? "" : PLACEHOLDER_LATEX;
     return source.replace(/#\?/g, placeholder);
   };
@@ -1753,31 +1722,71 @@ export const initBlockInputUi = (
       }
     }
 
-    const insertValue = resolveInsertValue(key, false);
-    if (!insertValue) {
+    const insertValue = resolveInsertValue(key, false, {
+      preserveTemplateMarkers: true,
+    });
+    const fallbackInsertValue = resolveInsertValue(key, false);
+    if (!insertValue && !fallbackInsertValue) {
       return;
     }
 
+    const hasTemplateMarkers =
+      typeof key.latex === "string" && key.latex.includes("#?");
+    const insertOptions = {
+      selectionMode: hasTemplateMarkers ? "placeholder" : "after",
+      focus: true,
+      feedback: false,
+      format: "latex" as const,
+    };
+
     if (typeof mathField.executeCommand === "function") {
+      const beforeValue =
+        typeof mathField.getValue === "function" ? readMathFieldValue(mathField) : null;
       try {
-        mathField.executeCommand("insert", insertValue);
-        updateMathPreview();
-        return;
+        const ok = mathField.executeCommand("insert", insertValue, insertOptions);
+        const afterValue =
+          typeof mathField.getValue === "function" ? readMathFieldValue(mathField) : null;
+        const changed =
+          typeof beforeValue === "string" &&
+          typeof afterValue === "string" &&
+          afterValue !== beforeValue;
+        if (ok !== false || changed) {
+          mathInput.dispatchEvent(new Event("input", { bubbles: true }));
+          updateMathPreview();
+          return;
+        }
       } catch (e) {
         console.warn("executeCommand failed:", e);
       }
     }
 
     if (typeof mathField.insert === "function") {
-      mathField.insert(insertValue, { focus: true, feedback: false });
-      updateMathPreview();
-      return;
+      const beforeValue =
+        typeof mathField.getValue === "function" ? readMathFieldValue(mathField) : null;
+      try {
+        mathField.insert(insertValue, insertOptions);
+        const afterValue =
+          typeof mathField.getValue === "function" ? readMathFieldValue(mathField) : null;
+        if (
+          typeof beforeValue === "string" &&
+          typeof afterValue === "string" &&
+          afterValue === beforeValue
+        ) {
+          throw new Error("insert() completed without content change");
+        }
+        mathInput.dispatchEvent(new Event("input", { bubbles: true }));
+        updateMathPreview();
+        return;
+      } catch {
+        // ignore and continue fallback
+      }
     }
 
-    if (typeof mathField.value === "string") {
-      mathField.value += insertValue;
-    }
-    mathInput.dispatchEvent(new Event("input", { bubbles: true }));
+    console.warn(
+      "mathfield insertion failed; skipping unsafe fallback append",
+      key.latex,
+      fallbackInsertValue
+    );
   };
 
   mathWysiwygApi = initMathWysiwyg({

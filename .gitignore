@@ -40,3 +40,8 @@ yarn-error.log*
 /.vercel
 test-results/
 playwright-report/
+/web-src/math/fork/node_modules/
+/web-src/math/fork/dist/
+/web-src/math/fork/build/
+/web-src/math/fork/declarations/
+/web-src/math/fork/coverage/

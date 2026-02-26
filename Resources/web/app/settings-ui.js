@@ -4,8 +4,8 @@ import { createEnvStatusManager, } from "./settings-env.js";
 import { initBuildProfilesUi } from "./settings-build-profiles.js";
 import { TEX64_LINKS } from "./platform-links.js";
 export const initSettingsUi = (context, deps) => {
-    var _a;
-    const { settingsPanel, settingsNav, settingsNavItems, settingsPages, settingsPageItems, settingsBackButtons, settingsCompileEngineSelect, settingsEnvRefresh, editorAlignEnvToggle, editorFormatIndentSelect, editorFormatBeginEndToggle, editorFormatDocumentNoIndentToggle, editorFormatAlignMathToggle, editorFormatAlignTableToggle, editorFormatBlankLinesSelect, editorFormatVerbatimInput, editorFormatVerbatimAdd, editorFormatVerbatimHint, editorFormatVerbatimList, editorWordWrapToggle, editorAutoSynctexBuildToggle, editorReverseSynctexToggle, editorGhostCompletionToggle, editorGhostCompletionDebounce, editorGhostCompletionMaxChars, editorPdfWindowToggle, settingsUpdateCurrent, settingsUpdateLatest, settingsUpdateStatus, settingsUpdateProgress, settingsUpdateProgressFill, settingsUpdateCheck, settingsUpdateApply, settingsUpdateOpen, settingsAuthStatus, settingsAuthLogout, settingsRuntimeAttention, settingsRuntimeInstallStatus, settingsRuntimeSetupStatus, settingsRuntimeOnboardingStatus, settingsRuntimeRunFirstBuild, settingsRuntimeOpenGettingStarted, settingsRuntimeOpenInstallDocs, settingsRuntimeOpenTexDocs, settingsFeedbackCategory, settingsFeedbackMessage, settingsFeedbackEmail, settingsFeedbackIncludeDiagnostics, settingsFeedbackSend, settingsFeedbackStatus, settingsErrorReportingEnabled, settingsLinkTerms, settingsLinkPrivacy, settingsLinkCommercial, settingsLinkRefund, settingsLinkSupport, settingsLinkContact, settingsLinkReleases, } = context.dom;
+    var _a, _b;
+    const { settingsPanel, settingsNav, settingsNavItems, settingsPages, settingsPageItems, settingsBackButtons, settingsCompileEngineSelect, settingsEnvRefresh, editorAlignEnvToggle, editorFormatIndentSelect, editorFormatBeginEndToggle, editorFormatDocumentNoIndentToggle, editorFormatAlignMathToggle, editorFormatAlignTableToggle, editorFormatBlankLinesSelect, editorFormatVerbatimInput, editorFormatVerbatimAdd, editorFormatVerbatimHint, editorFormatVerbatimList, editorWordWrapToggle, editorAutoSynctexBuildToggle, editorReverseSynctexToggle, editorGhostCompletionToggle, editorGhostCompletionDebounce, editorGhostCompletionMaxChars, editorPdfWindowToggle, settingsUpdateCurrent, settingsUpdateLatest, settingsUpdateStatus, settingsUpdateProgress, settingsUpdateProgressFill, settingsUpdateCheck, settingsUpdateApply, settingsUpdateOpen, settingsAuthStatus, settingsAuthLogin, settingsAuthLogout, settingsRuntimeAttention, settingsAccountAttention, settingsRuntimeInstallStatus, settingsRuntimeSetupStatus, settingsRuntimeOnboardingStatus, settingsRuntimeRunFirstBuild, settingsRuntimeOpenGettingStarted, settingsRuntimeOpenInstallDocs, settingsRuntimeOpenTexDocs, settingsFeedbackCategory, settingsFeedbackMessage, settingsFeedbackEmail, settingsFeedbackIncludeDiagnostics, settingsFeedbackSend, settingsFeedbackStatus, settingsErrorReportingEnabled, settingsLinkTerms, settingsLinkPrivacy, settingsLinkCommercial, settingsLinkRefund, settingsLinkSupport, settingsLinkContact, settingsLinkReleases, } = context.dom;
     let activeSettingsPage = null;
     let editorAlignEnvEnabled = true;
     let editorWordWrapEnabled = false;
@@ -22,6 +22,7 @@ export const initSettingsUi = (context, deps) => {
     let platformUpdate = null;
     let platformUpdateStatus = null;
     let updateAutoCheckStarted = false;
+    let updateAutoCheckTimer = null;
     let runtimeStatusSummary = null;
     let runtimeSetupPromptInFlight = false;
     let feedbackPending = false;
@@ -75,6 +76,7 @@ export const initSettingsUi = (context, deps) => {
     });
     const { checkEnvironmentStatus, updateEnvStatus } = envManager;
     const runtimeSettingsNavItem = (_a = settingsNavItems.find((button) => button.dataset.settingsTarget === "env")) !== null && _a !== void 0 ? _a : null;
+    const accountSettingsNavItem = (_b = settingsNavItems.find((button) => button.dataset.settingsTarget === "account")) !== null && _b !== void 0 ? _b : null;
     const updateEngineUI = () => {
         if (!(settingsCompileEngineSelect instanceof HTMLSelectElement)) {
             return;
@@ -597,16 +599,24 @@ export const initSettingsUi = (context, deps) => {
         var _a;
         const updateAttention = hasUpdateAttention();
         const runtimeAttention = hasRuntimeSetupAttention();
-        const attention = updateAttention || runtimeAttention;
+        const anyAttention = updateAttention || runtimeAttention;
         const hideAlertWhileRuntimeOpen = activeSettingsPage === "env" || activeSettingsPage === "account";
-        const showTabAlert = attention && !hideAlertWhileRuntimeOpen;
+        const showTabAlert = anyAttention && !hideAlertWhileRuntimeOpen;
         if (runtimeSettingsNavItem instanceof HTMLElement) {
-            runtimeSettingsNavItem.classList.toggle("has-alert", attention);
+            runtimeSettingsNavItem.classList.toggle("has-alert", runtimeAttention);
+        }
+        if (accountSettingsNavItem instanceof HTMLElement) {
+            accountSettingsNavItem.classList.toggle("has-alert", updateAttention);
         }
         if (settingsRuntimeAttention instanceof HTMLElement) {
-            settingsRuntimeAttention.textContent = runtimeAttention ? "要設定" : "更新あり";
-            settingsRuntimeAttention.classList.toggle("is-hidden", !attention);
-            settingsRuntimeAttention.setAttribute("aria-hidden", attention ? "false" : "true");
+            settingsRuntimeAttention.textContent = "要設定";
+            settingsRuntimeAttention.classList.toggle("is-hidden", !runtimeAttention);
+            settingsRuntimeAttention.setAttribute("aria-hidden", runtimeAttention ? "false" : "true");
+        }
+        if (settingsAccountAttention instanceof HTMLElement) {
+            settingsAccountAttention.textContent = "更新あり";
+            settingsAccountAttention.classList.toggle("is-hidden", !updateAttention);
+            settingsAccountAttention.setAttribute("aria-hidden", updateAttention ? "false" : "true");
         }
         (_a = deps.onUpdateAttentionChange) === null || _a === void 0 ? void 0 : _a.call(deps, showTabAlert);
     };
@@ -714,6 +724,13 @@ export const initSettingsUi = (context, deps) => {
             else {
                 settingsAuthStatus.textContent = "未ログイン";
             }
+        }
+        if (settingsAuthLogin instanceof HTMLButtonElement) {
+            const showLogin = !authenticated;
+            settingsAuthLogin.classList.toggle("is-hidden", !showLogin);
+            settingsAuthLogin.setAttribute("aria-hidden", showLogin ? "false" : "true");
+            settingsAuthLogin.disabled = pending;
+            settingsAuthLogin.textContent = pending ? "ログイン処理中..." : "ログイン";
         }
         if (settingsAuthLogout instanceof HTMLButtonElement) {
             settingsAuthLogout.classList.toggle("is-hidden", !authenticated);
@@ -1243,27 +1260,49 @@ export const initSettingsUi = (context, deps) => {
             // ignore storage failures
         }
     };
+    const scheduleUpdateAutoCheck = () => {
+        if (updateAutoCheckTimer !== null) {
+            window.clearTimeout(updateAutoCheckTimer);
+            updateAutoCheckTimer = null;
+        }
+        const now = Date.now();
+        const last = readUpdateLastAutoCheckAt();
+        const elapsed = Math.max(0, now - last);
+        const remaining = Math.max(30000, updateAutoCheckIntervalMs - elapsed);
+        updateAutoCheckTimer = window.setTimeout(() => {
+            updateAutoCheckTimer = null;
+            maybeRequestPlatformUpdateCheck(false);
+            scheduleUpdateAutoCheck();
+        }, remaining);
+    };
     const maybeRequestPlatformUpdateCheck = (force = false) => {
         deps.postToNative({ type: "update:status:get" }, true);
+        let dispatched = false;
         if (force) {
             markUpdateAutoCheckAt(Date.now());
             updateAutoCheckStarted = true;
             deps.postToNative({ type: "update:check", force: true }, true);
-            return;
+            dispatched = true;
+            scheduleUpdateAutoCheck();
+            return dispatched;
         }
         if (!updateAutoCheckStarted) {
             updateAutoCheckStarted = true;
             markUpdateAutoCheckAt(Date.now());
             deps.postToNative({ type: "update:check", force: false, source: "background" }, true);
-            return;
+            dispatched = true;
+            scheduleUpdateAutoCheck();
+            return dispatched;
         }
         const now = Date.now();
         const last = readUpdateLastAutoCheckAt();
-        if (now - last < updateAutoCheckIntervalMs) {
-            return;
+        if (now - last >= updateAutoCheckIntervalMs) {
+            markUpdateAutoCheckAt(now);
+            deps.postToNative({ type: "update:check", force: false, source: "background" }, true);
+            dispatched = true;
         }
-        markUpdateAutoCheckAt(now);
-        deps.postToNative({ type: "update:check", force: false, source: "background" }, true);
+        scheduleUpdateAutoCheck();
+        return dispatched;
     };
     const loadStartupSettings = () => {
         loadEditorWordWrapState();
@@ -1512,6 +1551,14 @@ export const initSettingsUi = (context, deps) => {
     if (settingsAuthLogout instanceof HTMLButtonElement) {
         settingsAuthLogout.addEventListener("click", () => {
             deps.postToNative({ type: "auth:signout" });
+        });
+    }
+    if (settingsAuthLogin instanceof HTMLButtonElement) {
+        settingsAuthLogin.addEventListener("click", () => {
+            if (settingsAuthLogin.disabled) {
+                return;
+            }
+            deps.postToNative({ type: "auth:google:start" });
         });
     }
     if (settingsRuntimeOpenInstallDocs instanceof HTMLButtonElement) {

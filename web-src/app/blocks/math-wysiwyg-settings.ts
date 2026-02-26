@@ -1,4 +1,7 @@
-import { DEFAULT_WYSIWYG_PACKS, WYSIWYG_PACKS } from "../math-wysiwyg-packs.js";
+import {
+  DEFAULT_WYSIWYG_PACKS,
+  WYSIWYG_PACKS,
+} from "../../math/wysiwyg/math-wysiwyg-packs.js";
 
 export type MathWysiwygSettings = {
   autoSuggest: boolean;

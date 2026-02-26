@@ -1,5 +1,5 @@
 import type { AppContext } from "../context.js";
-import { AUXILIARY_MATH_MACROS } from "./math-aux-command-escape.js";
+import { closeMathfieldInternalMenu } from "../../math/mathfield-private-adapter.js";
 
 type MathLiveDeps = {
   onMathFieldCreated: (mathfield: HTMLElement) => void;
@@ -250,26 +250,17 @@ export const initMathLive = (context: AppContext, deps: MathLiveDeps): MathLiveA
       blockMathInputContainer.appendChild(scrollHost);
       blockMathInputContainer.appendChild(menuToggle);
       const closeMathFieldMenu = () => {
-      const internalMenu = (mathfield as { _mathfield?: { menu?: any } })._mathfield?.menu;
-      if (internalMenu && typeof internalMenu.hide === "function") {
-        if (internalMenu.state && internalMenu.state !== "closed") {
-          internalMenu.hide();
+        if (closeMathfieldInternalMenu(mathfield)) {
           return;
         }
-        const element = internalMenu.element as HTMLElement | undefined;
-        if (element?.isConnected) {
-          internalMenu.hide();
-          return;
+        const executeCommand = (mathfield as { executeCommand?: (command: string) => void })
+          .executeCommand;
+        if (typeof executeCommand === "function") {
+          const menuElement = document.querySelector("menu.ui-menu-container");
+          if (menuElement) {
+            executeCommand.call(mathfield, "toggleContextMenu");
+          }
         }
-      }
-      const executeCommand = (mathfield as { executeCommand?: (command: string) => void })
-        .executeCommand;
-      if (typeof executeCommand === "function") {
-        const menuElement = document.querySelector("menu.ui-menu-container");
-        if (menuElement) {
-          executeCommand.call(mathfield, "toggleContextMenu");
-        }
-      }
       };
       const toggleMathFieldMenu = () => {
         const executeCommand = (mathfield as { executeCommand?: (command: string) => void })
@@ -344,19 +335,18 @@ export const initMathLive = (context: AppContext, deps: MathLiveDeps): MathLiveA
       }
       configureMathLiveAudio();
 
-    // MathLive doesn't support some LaTeX font commands natively (e.g. \mathds),
-    // but macros let us render them while preserving the original command in `getValue("latex")`.
-    try {
-      if ("macros" in mathfield) {
-        mathfield.macros = {
-          ...(mathfield.macros ?? {}),
-          mathds: { def: "\\mathbb{#1}", args: 1 },
-          ...AUXILIARY_MATH_MACROS,
-        };
+      // MathLive doesn't support some LaTeX font commands natively (e.g. \mathds),
+      // so we map only those minimal render aliases here.
+      try {
+        if ("macros" in mathfield) {
+          mathfield.macros = {
+            ...(mathfield.macros ?? {}),
+            mathds: { def: "\\mathbb{#1}", args: 1 },
+          };
+        }
+      } catch {
+        // ignore macro configuration failures
       }
-    } catch {
-      // ignore macro configuration failures
-    }
 
     try {
       if ("menuItems" in mathfield) {

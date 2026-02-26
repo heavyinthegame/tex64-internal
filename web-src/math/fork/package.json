@@ -1,0 +1,175 @@
+{
+  "name": "mathlive",
+  "version": "0.108.2",
+  "description": "A web component for math input",
+  "license": "MIT",
+  "funding": {
+    "type": "individual",
+    "url": "https://paypal.me/arnogourdol"
+  },
+  "private": true,
+  "files": [
+    "/dist"
+  ],
+  "types": "./types/mathlive.d.ts",
+  "module": "./mathlive.min.mjs",
+  "main": "./mathlive.min.js",
+  "exports": {
+    "./vue": "./vue-mathlive.mjs",
+    "./fonts.css": "./mathlive-fonts.css",
+    "./static.css": "./mathlive-static.css",
+    ".": {
+      "browser": {
+        "production": {
+          "types": "./types/mathlive.d.ts",
+          "import": "./mathlive.min.mjs",
+          "require": "./mathlive.min.js"
+        },
+        "development": {
+          "types": "./types/mathlive.d.ts",
+          "import": "./mathlive.mjs",
+          "require": "./mathlive.js"
+        }
+      },
+      "node": {
+        "types": "./types/mathlive-ssr.d.ts",
+        "import": "./mathlive-ssr.min.mjs"
+      },
+      "default": {
+        "types": "./types/mathlive.d.ts",
+        "import": "./mathlive.min.mjs",
+        "require": "./mathlive.min.js"
+      }
+    },
+    "./ssr": {
+      "types": "./types/mathlive-ssr.d.ts",
+      "import": "./mathlive-ssr.min.mjs"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/arnog/mathlive.git"
+  },
+  "bugs": "https://github.com/arnog/mathlive/issues/",
+  "scripts": {
+    "doc": "bash ./scripts/update-docs.sh",
+    "build": "bash ./scripts/build.sh",
+    "clean": "bash ./scripts/clean.sh",
+    "dist": "bash ./scripts/build.sh production; bash ./scripts/test.sh",
+    "lint": "eslint --fix src/; prettier -w src/",
+    "prepare": "bash ./scripts/build.sh production",
+    "start": "bash ./scripts/start.sh",
+    "test": "bash ./scripts/test.sh",
+    "version": "bash ./scripts/version.sh"
+  },
+  "author": "Arno Gourdol <arno@arno.org>",
+  "contributors": [
+    "Louis Larpin (lilfaf.github.io)",
+    "Neil Soiffer (https://github.com/NSoiffer)",
+    "Jason Boxman (https://github.com/jboxman)",
+    "Synergy Codes (https://www.synergycodes.com/)",
+    "Rafał Piekarski (https://github.com/rpdiss)",
+    "Kajetan Champlewski <kchamplewski@gmail.com>",
+    "Fabian Grewing <Fabian.Heimbuerger@gmail.com>",
+    "Paul Masson <paulmasson@comcast.net>",
+    "Soroush Javadi <soroush.javadi@gmail.com>",
+    "Thomas Schell <thom.schell@gmail.com>",
+    "leerobert <lee.robert.138@gmail.com>",
+    "spirobel (https://github.com/spirobel) <spirobel@protonmail.com>",
+    "Artur Fijał <afijal@soldevelo.com>",
+    "David Le Jolly <david.lejolly@gmail.com>",
+    "Johannes Wilm <johanneswilm@gmail.com>",
+    "Nick Gravelyn <nick@gravelyn.com>",
+    "paosder <denjaraos@gmail.com>",
+    "Orkhan Alikhanov (https://github.com/OrkhanAlikhanov)",
+    "Ben Eater (https://github.com/beneater)",
+    "Dominik Janković (https://github.com/djankovic)",
+    "Edin Adilagić (https://github.com/physedo)",
+    "Gunnar Mein (https://github.com/gunnarmein-ts)",
+    "Zeyad Ahmad Aql (https://github.com/zeyad-ahmad-aql)",
+    "Sergiy Bondaryev (https://github.com/sbondaryev)",
+    "Damian Jóźwiak (https://github.com/kvas-damian)",
+    "https://github.com/EaswarRaju",
+    "https://github.com/wenyufei2018",
+    "https://github.com/xing38",
+    "https://github.com/Neverland",
+    "https://github.com/AceGentile",
+    "https://github.com/eds007",
+    "https://github.com/harrisnl",
+    "https://github.com/rkeulemans",
+    "https://github.com/classicneupane",
+    "Zoran Popovic (https://github.com/zoranpopovic)",
+    "Magzhan (https://github.com/Kydyralin)",
+    "Christian (https://github.com/ChrBrkmn)",
+    "Riccardo Magliocchetti (https://github.com/xrmx)",
+    "Alexey Yakovlev (https://github.com/yakovlev-alexey)",
+    "David Le Jolly (https://github.com/Zahara-Nour)",
+    "Alexey (https://github.com/alexprey)",
+    "Pontus Granström (https://github.com/pontusgranstrom)",
+    "Ben Goldsmith (https://github.com/bengolds)",
+    "Max (https://github.com/manstie)",
+    "https://github.com/stefnotch",
+    "Caleb Flores (https://github.com/caleb-flores)",
+    "Danny Greg (https://github.com/dannygreg)",
+    "Luis Mesa (https://github.com/LuisMesa)",
+    "Pablo Androetto (https://github.com/androettop)",
+    "James Mullen (https://github.com/wildyellowfin)",
+    "Michael Greminger (https://github.com/mgreminger)",
+    "Oscar Hermoso (https://github.com/oscarhermoso)"
+  ],
+  "browserslist": [
+    "> 1%",
+    "maintained node versions",
+    "not dead"
+  ],
+  "engines": {
+    "npm": ">=10.5.0",
+    "node": ">=21.0.0"
+  },
+  "prettier": "@cortex-js/prettier-config",
+  "dependencies": {
+    "@cortex-js/compute-engine": "0.30.2"
+  },
+  "devDependencies": {
+    "@arnog/esbuild-plugin-less": "^1.1.0",
+    "@cortex-js/prettier-config": "^1.2.0",
+    "@playwright/test": "^1.43.0",
+    "@types/jest": "^30.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.46.3",
+    "@typescript-eslint/parser": "^8.26.1",
+    "autoprefixer": "^10.4.17",
+    "concat-md": "^0.5.1",
+    "cssnano": "^6.0.3",
+    "esbuild": "^0.25.12",
+    "eslint": "^9.22.0",
+    "eslint-config-prettier": "^10.1.1",
+    "eslint-plugin-import": "^2.31.0",
+    "eslint-plugin-no-unsanitized": "^4.1.2",
+    "eslint-plugin-prettier": "^5.2.5",
+    "jest": "^30.2.0",
+    "jest-silent-reporter": "^0.5.0",
+    "less": "^4.2.2",
+    "postcss": "^8.4.35",
+    "postcss-cli": "^11.0.0",
+    "prettier": "^3.5.3",
+    "ts-jest": "^29.3.0",
+    "typedoc": "^0.28.2",
+    "typedoc-plugin-markdown": "^4.4.2",
+    "typescript": "^5.8.3"
+  },
+  "keywords": [
+    "math",
+    "editor",
+    "javascript",
+    "math-editing",
+    "cortex",
+    "compute engine",
+    "virtual keyboard",
+    "math keyboard",
+    "latex",
+    "tex",
+    "mathjax",
+    "katex",
+    "mathquill"
+  ]
+}
