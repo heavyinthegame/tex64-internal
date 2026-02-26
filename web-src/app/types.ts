@@ -230,10 +230,26 @@ export type AgentProposal = {
   summary?: string;
   isNewFile?: boolean;
   conversationId?: string;
+  workspaceRootPath?: string;
   baseContentHash?: string;
   baseExists?: boolean;
   baseSource?: "disk" | "snapshot";
   createdAt?: number;
+};
+
+export type AgentUiSession = {
+  conversationId: string;
+  title: string;
+  workspaceRootPath?: string | null;
+  createdAt?: number | null;
+  updatedAt?: number | null;
+  status?: { state: AgentStatusState; message?: string };
+  messages: Array<{ role: "user" | "assistant"; text: string }>;
+  proposals: AgentProposal[];
+};
+
+export type AgentUiState = {
+  sessions: AgentUiSession[];
 };
 
 export type EditorFormatIndentStyle = "spaces-2" | "spaces-4" | "tab";

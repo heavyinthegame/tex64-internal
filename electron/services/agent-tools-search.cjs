@@ -69,11 +69,18 @@ const handleSearchFiles = async (service, args, policy, conversationId) => {
         typeof snapshot?.content === "string" &&
         results.length < MAX_SEARCH_RESULTS
       ) {
-        seenPaths.add(snapshot.path);
+        const snapshotPath = normalizePath(snapshot.path);
+        if (!snapshotPath) {
+          return;
+        }
+        if (!isPathAllowed(snapshotPath, policy) || !isTextExtension(snapshotPath, policy)) {
+          return;
+        }
+        seenPaths.add(snapshotPath);
         buildSearchResults(
           snapshot.content,
           lowerQuery,
-          snapshot.path,
+          snapshotPath,
           results,
           MAX_SEARCH_RESULTS
         );

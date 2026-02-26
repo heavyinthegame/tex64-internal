@@ -990,6 +990,7 @@ export const initMain = () => {
             },
             agent: {
                 handleSettings: (settings) => aiChatUi === null || aiChatUi === void 0 ? void 0 : aiChatUi.handleSettings(settings),
+                handleState: (state) => aiChatUi === null || aiChatUi === void 0 ? void 0 : aiChatUi.handleState(state),
                 handleStatus: (state, message, conversationId) => aiChatUi === null || aiChatUi === void 0 ? void 0 : aiChatUi.handleStatus(state, message, conversationId),
                 handleMessage: (text, conversationId) => aiChatUi === null || aiChatUi === void 0 ? void 0 : aiChatUi.handleMessage(text, conversationId),
                 handleMessageDelta: (text, conversationId) => aiChatUi === null || aiChatUi === void 0 ? void 0 : aiChatUi.handleMessageDelta(text, conversationId),
@@ -1032,6 +1033,7 @@ export const initMain = () => {
             },
         });
         postToNative({ type: "agent:settings:get" }, true);
+        postToNative({ type: "agent:state:get" }, true);
         postToNative({ type: "api:usage:get" }, true);
         const monacoSetup = initMonacoSetup(appContext, {
             editorSession,

@@ -3,6 +3,7 @@ import type {
   AgentProposal,
   AgentSettings,
   AgentStatusState,
+  AgentUiState,
   IssueItem,
   IssuesStatus,
   PlatformAiAccessSnapshot,
@@ -49,6 +50,7 @@ type AiChatDeps = {
 
 export type AiChatApi = {
   handleSettings: (settings: AgentSettings) => void;
+  handleState: (state: AgentUiState) => void;
   handleStatus: (state: AgentStatusState, message?: string, conversationId?: string) => void;
   handleMessage: (text: string, conversationId?: string) => void;
   handleMessageDelta: (text: string, conversationId?: string) => void;
@@ -115,6 +117,7 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
   const proposalIndex = new Map<string, string>();
   let activeChatId: string | null = null;
   const runningConversations = new Set<string>();
+  const resumableConversations = new Set<string>();
   let agentSettings: AgentSettings | null = null;
   const continueAfterApply = new Set<string>();
   const streamingMessages = new Map<string, { message: ChatMessage; element: HTMLElement | null }>();
@@ -654,6 +657,7 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
   const updateSendState = () => {
     const active = getChat(activeChatId);
     const isRunning = Boolean(active && runningConversations.has(active.id));
+    const canResume = Boolean(active && !isRunning && resumableConversations.has(active.id));
     if (aiSend instanceof HTMLButtonElement) {
       aiSend.disabled = isRunning;
       aiSend.classList.remove("is-loading");
@@ -663,8 +667,9 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
     if (aiAttach instanceof HTMLButtonElement) aiAttach.disabled = isRunning;
     if (aiAttachInput instanceof HTMLInputElement) aiAttachInput.disabled = isRunning;
     if (aiStop instanceof HTMLButtonElement) {
-      aiStop.disabled = !isRunning;
-      aiStop.style.display = isRunning ? "flex" : "none";
+      aiStop.disabled = false;
+      aiStop.textContent = isRunning ? "停止" : "再開";
+      aiStop.style.display = isRunning || canResume ? "flex" : "none";
     }
   };
 
@@ -1211,15 +1216,49 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
     aiStop.addEventListener("click", () => {
       const chat = getChat(activeChatId);
       if (!chat) return;
-      disableAutonomous(chat.id);
-      deps.postToNative({ type: "agent:abort", conversationId: chat.id }, true);
-      pendingAgentRequests.delete(chat.id);
-      chat.statusMessage = "";
-      runningConversations.delete(chat.id);
-      clearThinkingMessage(chat.id);
+      if (runningConversations.has(chat.id)) {
+        disableAutonomous(chat.id);
+        deps.postToNative({ type: "agent:abort", conversationId: chat.id }, true);
+        resumableConversations.delete(chat.id);
+        pendingAgentRequests.delete(chat.id);
+        chat.statusMessage = "";
+        runningConversations.delete(chat.id);
+        clearThinkingMessage(chat.id);
+        renderHistoryList();
+        updateSendState();
+        updateStatusDisplay();
+        return;
+      }
+      if (!resumableConversations.has(chat.id)) {
+        return;
+      }
+      if (isAiBlocked() || needsLogin()) {
+        requestAiAccessCheck(true);
+        requestPlatformUsage(true);
+        updateStatusDisplay();
+        return;
+      }
+      const contextToSend = buildContextPayload();
+      chat.statusMessage = "思考中...";
+      runningConversations.add(chat.id);
+      resumableConversations.delete(chat.id);
+      upsertThinkingMessage(chat.id, chat.statusMessage);
       renderHistoryList();
       updateSendState();
       updateStatusDisplay();
+      const posted = deps.postToNative(
+        { type: "agent:resume", conversationId: chat.id, context: contextToSend },
+        true
+      );
+      if (!posted) {
+        runningConversations.delete(chat.id);
+        resumableConversations.add(chat.id);
+        chat.statusMessage = "";
+        clearThinkingMessage(chat.id);
+        renderHistoryList();
+        updateSendState();
+        updateStatusDisplay();
+      }
     });
   }
   if (aiChatNew instanceof HTMLButtonElement) {
@@ -1233,6 +1272,97 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
   }
 
   // ── Handler API ───────────────────────────────────────
+  const handleState = (state: AgentUiState) => {
+    const sessions = Array.isArray(state?.sessions) ? state.sessions : [];
+    if (sessions.length === 0) {
+      return;
+    }
+    sessions.sort((a, b) => {
+      const aUpdated = typeof a?.updatedAt === "number" ? a.updatedAt : 0;
+      const bUpdated = typeof b?.updatedAt === "number" ? b.updatedAt : 0;
+      return aUpdated - bUpdated;
+    });
+
+    chats.splice(0, chats.length);
+    chatIndex.clear();
+    proposalIndex.clear();
+    runningConversations.clear();
+    resumableConversations.clear();
+    streamingMessages.clear();
+    thinkingMessages.clear();
+
+    activeChatId = null;
+    clearPendingAttachments();
+
+    sessions.forEach((session) => {
+      if (!session || typeof session !== "object") {
+        return;
+      }
+      const conversationId =
+        typeof session.conversationId === "string" && session.conversationId.trim()
+          ? session.conversationId.trim()
+          : "";
+      if (!conversationId) {
+        return;
+      }
+      const chat = ensureChat(conversationId);
+      if (!chat) {
+        return;
+      }
+      if (typeof session.title === "string" && session.title.trim()) {
+        chat.title = session.title.trim();
+      }
+      const restoredMessages = Array.isArray(session.messages) ? session.messages : [];
+      chat.messages = restoredMessages
+        .filter((msg) => msg && typeof msg === "object")
+        .map((msg): ChatMessage => ({
+          role: msg.role === "assistant" ? "assistant" : "user",
+          text: typeof msg.text === "string" ? msg.text : "",
+        }))
+        .filter((msg) => msg.text.trim().length > 0);
+
+      chat.proposals.clear();
+      const restoredProposals = Array.isArray(session.proposals) ? session.proposals : [];
+      restoredProposals.forEach((proposal) => {
+        if (!proposal || typeof proposal !== "object") {
+          return;
+        }
+        if (typeof proposal.id !== "string" || !proposal.id) {
+          return;
+        }
+        chat.proposals.set(proposal.id, proposal as AgentProposal);
+        proposalIndex.set(proposal.id, chat.id);
+      });
+
+      const statusState = session.status?.state;
+      const statusMessage =
+        typeof session.status?.message === "string" ? session.status.message : "";
+      if (statusState === "running") {
+        runningConversations.add(chat.id);
+        chat.statusMessage = statusMessage || "思考中...";
+        upsertThinkingMessage(chat.id, chat.statusMessage);
+      } else if (statusState === "error") {
+        resumableConversations.add(chat.id);
+        chat.statusMessage = "";
+      } else {
+        chat.statusMessage = "";
+      }
+    });
+
+    const latest = sessions[sessions.length - 1];
+    if (latest && typeof latest.conversationId === "string") {
+      const chat = getChat(latest.conversationId);
+      if (chat) {
+        activeChatId = chat.id;
+        setChatTitle(chat);
+        renderChatContent();
+      }
+    }
+    renderHistoryList();
+    updateSendState();
+    updateStatusDisplay();
+  };
+
   const handleSettings = (s: AgentSettings) => { agentSettings = s; updateSendState(); };
 
   const handleStatus = (state: AgentStatusState, message?: string, conversationId?: string) => {
@@ -1240,12 +1370,18 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
     if (!chat) return;
     if (state === "running") {
       runningConversations.add(chat.id);
+      resumableConversations.delete(chat.id);
       chat.statusMessage = message || "思考中...";
       upsertThinkingMessage(chat.id, chat.statusMessage);
     } else {
       runningConversations.delete(chat.id);
       chat.statusMessage = "";
       clearThinkingMessage(chat.id);
+      if (state === "error") {
+        resumableConversations.add(chat.id);
+      } else {
+        resumableConversations.delete(chat.id);
+      }
       scheduleUsageRefresh(true);
     }
     renderHistoryList();
@@ -1355,6 +1491,7 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
     if (chat) {
       chat.statusMessage = "";
       disableAutonomous(chat.id);
+      resumableConversations.add(chat.id);
       clearThinkingMessage(chat.id);
     }
     if (conversationId) streamingMessages.delete(conversationId);
@@ -1461,7 +1598,7 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
   requestPlatformState();
 
   return {
-    handleSettings, handleStatus, handleMessage, handleMessageDelta, handleTool,
+    handleSettings, handleState, handleStatus, handleMessage, handleMessageDelta, handleTool,
     handleProposal, handleApplyResult, handleUndoResult, handleError,
     handlePlatformAuth, handlePlatformAiAccess, handlePlatformUsage,
     handlePlatformUpdate,

@@ -7,6 +7,7 @@ import type {
   AgentProposal,
   AgentSettings,
   AgentStatusState,
+  AgentUiState,
   AppSettingsSnapshot,
   RootSource,
   SearchResult,
@@ -119,6 +120,7 @@ type BridgeHandlersDeps = {
   };
   agent?: {
     handleSettings: (settings: AgentSettings) => void;
+    handleState?: (state: AgentUiState) => void;
     handleStatus: (
       state: AgentStatusState,
       message?: string,
@@ -426,6 +428,9 @@ export const initBridgeHandlers = (deps: BridgeHandlersDeps) => {
         deps.agent?.handleSettings(
           (message.payload as { settings: AgentSettings }).settings
         );
+        break;
+      case "agent:state":
+        deps.agent?.handleState?.(message.payload as AgentUiState);
         break;
       case "settings:request": {
         const payload = message.payload as {

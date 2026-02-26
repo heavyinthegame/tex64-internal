@@ -1111,6 +1111,7 @@ export const initMain = () => {
     },
     agent: {
       handleSettings: (settings) => aiChatUi?.handleSettings(settings),
+      handleState: (state) => aiChatUi?.handleState(state),
       handleStatus: (state, message, conversationId) =>
         aiChatUi?.handleStatus(state, message, conversationId),
       handleMessage: (text, conversationId) => aiChatUi?.handleMessage(text, conversationId),
@@ -1159,6 +1160,7 @@ export const initMain = () => {
   });
 
   postToNative({ type: "agent:settings:get" }, true);
+  postToNative({ type: "agent:state:get" }, true);
   postToNative({ type: "api:usage:get" }, true);
 
   const monacoSetup = initMonacoSetup(appContext, {

@@ -143,6 +143,35 @@ const createAgentHandlers = (deps) => {
     });
   };
 
+  const handleAgentStateGet = async () => {
+    const state = (await agentService.getUiState?.()) ?? { sessions: [] };
+    sendToRenderer("agent:state", state);
+  };
+
+  const handleAgentProposalDismiss = (proposalId) => {
+    if (!proposalId || typeof proposalId !== "string") {
+      return;
+    }
+    agentService.dismissProposal(proposalId);
+  };
+
+  const handleAgentResume = async (conversationId, context) => {
+    const normalizedConversationId =
+      typeof conversationId === "string" && conversationId.trim()
+        ? conversationId.trim()
+        : "default";
+    const allowed = await guardAiAccess(normalizedConversationId, "chat");
+    if (!allowed) {
+      return;
+    }
+    await agentService.run({
+      message:
+        "直前のユーザー指示と会話の目的を最優先して、途中から継続してください。必要なら run_build で検証してから次の提案をしてください。",
+      context,
+      conversationId: normalizedConversationId,
+    });
+  };
+
   const handleSearchRename = async (payload) => {
     if (!payload || typeof payload !== "object") {
       return;
@@ -218,6 +247,9 @@ const createAgentHandlers = (deps) => {
     handleAgentApply,
     handleAgentUndoLastApply,
     handleAgentClear,
+    handleAgentStateGet,
+    handleAgentResume,
+    handleAgentProposalDismiss,
     handleSearchRename,
     handleSettingsResponse,
   };

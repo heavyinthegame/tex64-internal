@@ -25,6 +25,8 @@ const { BlocksStore } = require("./services/blocks.cjs");
 const { UserSettingsService } = require("./services/user-settings.cjs");
 const { MathOcrService } = require("./services/math-ocr.cjs");
 const { AgentService } = require("./services/agent.cjs");
+const { AgentAuditService } = require("./services/agent-audit.cjs");
+const { AgentSessionsService } = require("./services/agent-sessions.cjs");
 const { ApiUsageService } = require("./services/api-usage.cjs");
 const { PlatformAccessService } = require("./services/platform-access.cjs");
 const { createWorkspaceHandlers } = require("./handlers/workspace.cjs");
@@ -69,6 +71,8 @@ const envService = new EnvService();
 let mathOcrService = null;
 let apiUsageService = null;
 let platformAccessService = null;
+let agentAuditService = null;
+let agentSessionsService = null;
 
 const getMathOcrService = () => {
   if (!mathOcrService) {
@@ -105,20 +109,40 @@ const createMainWindow = () => {
 
   state.mainWindow.loadFile(indexPath);
   state.mainWindow.on("closed", () => {
+    // Ensure any teardown work doesn't try to message a destroyed window.
+    state.mainWindow = null;
     clearWorkspaceSession({ closePdfWindow: true });
     if (state.captureShortcut) {
       globalShortcut.unregister(state.captureShortcut);
       state.captureShortcut = null;
     }
-    state.mainWindow = null;
   });
 };
 
 const sendToRenderer = (type, payload) => {
-  if (!state.mainWindow) {
+  const mainWindow = state.mainWindow;
+  if (!mainWindow) {
     return;
   }
-  state.mainWindow.webContents.send("tex64:message", { type, payload });
+  if (typeof mainWindow.isDestroyed === "function" && mainWindow.isDestroyed()) {
+    return;
+  }
+  const webContents = mainWindow.webContents;
+  if (!webContents) {
+    return;
+  }
+  if (typeof webContents.isDestroyed === "function" && webContents.isDestroyed()) {
+    return;
+  }
+  try {
+    webContents.send("tex64:message", { type, payload });
+  } catch (error) {
+    const message = error && typeof error.message === "string" ? error.message : "";
+    if (message.includes("Object has been destroyed")) {
+      return;
+    }
+    console.warn("[main] sendToRenderer failed", error);
+  }
 };
 
 const sendBuildState = (state, message) => {
@@ -152,6 +176,24 @@ const getApiUsageService = () => {
     });
   }
   return apiUsageService;
+};
+
+const getAgentAuditService = () => {
+  if (!agentAuditService) {
+    agentAuditService = new AgentAuditService({
+      userDataPath: app.getPath("userData"),
+    });
+  }
+  return agentAuditService;
+};
+
+const getAgentSessionsService = () => {
+  if (!agentSessionsService) {
+    agentSessionsService = new AgentSessionsService({
+      userDataPath: app.getPath("userData"),
+    });
+  }
+  return agentSessionsService;
 };
 
 const getPlatformAccessService = () => {
@@ -202,6 +244,8 @@ const agentService = new AgentService({
   sendIssues,
   indexerService,
   apiUsageService: getApiUsageService(),
+  auditService: getAgentAuditService(),
+  sessionsService: getAgentSessionsService(),
   requestAiChat: (payload, options) =>
     getPlatformAccessService().requestAiChat(payload, options),
 });
@@ -919,6 +963,10 @@ ipcMain.on("tex64", (_event, message) => {
     agentHandlers.handleAgentSettingsSet(message.settings);
     return;
   }
+  if (type === "agent:state:get") {
+    agentHandlers.handleAgentStateGet();
+    return;
+  }
   if (type === "agent:run") {
     agentHandlers.handleAgentRun(
       message.message,
@@ -928,12 +976,20 @@ ipcMain.on("tex64", (_event, message) => {
     );
     return;
   }
+  if (type === "agent:resume") {
+    agentHandlers.handleAgentResume(message.conversationId, message.context);
+    return;
+  }
   if (type === "agent:abort") {
     agentHandlers.handleAgentAbort(message.conversationId);
     return;
   }
   if (type === "agent:apply") {
     agentHandlers.handleAgentApply(message.proposalId);
+    return;
+  }
+  if (type === "agent:proposal:dismiss") {
+    agentHandlers.handleAgentProposalDismiss(message.proposalId);
     return;
   }
   if (type === "agent:undoLastApply") {

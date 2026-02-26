@@ -22,6 +22,7 @@ export const initAiChatUi = (context, deps) => {
     const proposalIndex = new Map();
     let activeChatId = null;
     const runningConversations = new Set();
+    const resumableConversations = new Set();
     let agentSettings = null;
     const continueAfterApply = new Set();
     const streamingMessages = new Map();
@@ -533,6 +534,7 @@ export const initAiChatUi = (context, deps) => {
     const updateSendState = () => {
         const active = getChat(activeChatId);
         const isRunning = Boolean(active && runningConversations.has(active.id));
+        const canResume = Boolean(active && !isRunning && resumableConversations.has(active.id));
         if (aiSend instanceof HTMLButtonElement) {
             aiSend.disabled = isRunning;
             aiSend.classList.remove("is-loading");
@@ -545,8 +547,9 @@ export const initAiChatUi = (context, deps) => {
         if (aiAttachInput instanceof HTMLInputElement)
             aiAttachInput.disabled = isRunning;
         if (aiStop instanceof HTMLButtonElement) {
-            aiStop.disabled = !isRunning;
-            aiStop.style.display = isRunning ? "flex" : "none";
+            aiStop.disabled = false;
+            aiStop.textContent = isRunning ? "停止" : "再開";
+            aiStop.style.display = isRunning || canResume ? "flex" : "none";
         }
     };
     const updateStatusDisplay = () => {
@@ -1092,15 +1095,46 @@ export const initAiChatUi = (context, deps) => {
             const chat = getChat(activeChatId);
             if (!chat)
                 return;
-            disableAutonomous(chat.id);
-            deps.postToNative({ type: "agent:abort", conversationId: chat.id }, true);
-            pendingAgentRequests.delete(chat.id);
-            chat.statusMessage = "";
-            runningConversations.delete(chat.id);
-            clearThinkingMessage(chat.id);
+            if (runningConversations.has(chat.id)) {
+                disableAutonomous(chat.id);
+                deps.postToNative({ type: "agent:abort", conversationId: chat.id }, true);
+                resumableConversations.delete(chat.id);
+                pendingAgentRequests.delete(chat.id);
+                chat.statusMessage = "";
+                runningConversations.delete(chat.id);
+                clearThinkingMessage(chat.id);
+                renderHistoryList();
+                updateSendState();
+                updateStatusDisplay();
+                return;
+            }
+            if (!resumableConversations.has(chat.id)) {
+                return;
+            }
+            if (isAiBlocked() || needsLogin()) {
+                requestAiAccessCheck(true);
+                requestPlatformUsage(true);
+                updateStatusDisplay();
+                return;
+            }
+            const contextToSend = buildContextPayload();
+            chat.statusMessage = "思考中...";
+            runningConversations.add(chat.id);
+            resumableConversations.delete(chat.id);
+            upsertThinkingMessage(chat.id, chat.statusMessage);
             renderHistoryList();
             updateSendState();
             updateStatusDisplay();
+            const posted = deps.postToNative({ type: "agent:resume", conversationId: chat.id, context: contextToSend }, true);
+            if (!posted) {
+                runningConversations.delete(chat.id);
+                resumableConversations.add(chat.id);
+                chat.statusMessage = "";
+                clearThinkingMessage(chat.id);
+                renderHistoryList();
+                updateSendState();
+                updateStatusDisplay();
+            }
         });
     }
     if (aiChatNew instanceof HTMLButtonElement) {
@@ -1114,6 +1148,91 @@ export const initAiChatUi = (context, deps) => {
         aiInput.placeholder = "執筆内容を指示してください...";
     }
     // ── Handler API ───────────────────────────────────────
+    const handleState = (state) => {
+        const sessions = Array.isArray(state === null || state === void 0 ? void 0 : state.sessions) ? state.sessions : [];
+        if (sessions.length === 0) {
+            return;
+        }
+        sessions.sort((a, b) => {
+            const aUpdated = typeof (a === null || a === void 0 ? void 0 : a.updatedAt) === "number" ? a.updatedAt : 0;
+            const bUpdated = typeof (b === null || b === void 0 ? void 0 : b.updatedAt) === "number" ? b.updatedAt : 0;
+            return aUpdated - bUpdated;
+        });
+        chats.splice(0, chats.length);
+        chatIndex.clear();
+        proposalIndex.clear();
+        runningConversations.clear();
+        resumableConversations.clear();
+        streamingMessages.clear();
+        thinkingMessages.clear();
+        activeChatId = null;
+        clearPendingAttachments();
+        sessions.forEach((session) => {
+            var _a, _b;
+            if (!session || typeof session !== "object") {
+                return;
+            }
+            const conversationId = typeof session.conversationId === "string" && session.conversationId.trim()
+                ? session.conversationId.trim()
+                : "";
+            if (!conversationId) {
+                return;
+            }
+            const chat = ensureChat(conversationId);
+            if (!chat) {
+                return;
+            }
+            if (typeof session.title === "string" && session.title.trim()) {
+                chat.title = session.title.trim();
+            }
+            const restoredMessages = Array.isArray(session.messages) ? session.messages : [];
+            chat.messages = restoredMessages
+                .filter((msg) => msg && typeof msg === "object")
+                .map((msg) => ({
+                role: msg.role === "assistant" ? "assistant" : "user",
+                text: typeof msg.text === "string" ? msg.text : "",
+            }))
+                .filter((msg) => msg.text.trim().length > 0);
+            chat.proposals.clear();
+            const restoredProposals = Array.isArray(session.proposals) ? session.proposals : [];
+            restoredProposals.forEach((proposal) => {
+                if (!proposal || typeof proposal !== "object") {
+                    return;
+                }
+                if (typeof proposal.id !== "string" || !proposal.id) {
+                    return;
+                }
+                chat.proposals.set(proposal.id, proposal);
+                proposalIndex.set(proposal.id, chat.id);
+            });
+            const statusState = (_a = session.status) === null || _a === void 0 ? void 0 : _a.state;
+            const statusMessage = typeof ((_b = session.status) === null || _b === void 0 ? void 0 : _b.message) === "string" ? session.status.message : "";
+            if (statusState === "running") {
+                runningConversations.add(chat.id);
+                chat.statusMessage = statusMessage || "思考中...";
+                upsertThinkingMessage(chat.id, chat.statusMessage);
+            }
+            else if (statusState === "error") {
+                resumableConversations.add(chat.id);
+                chat.statusMessage = "";
+            }
+            else {
+                chat.statusMessage = "";
+            }
+        });
+        const latest = sessions[sessions.length - 1];
+        if (latest && typeof latest.conversationId === "string") {
+            const chat = getChat(latest.conversationId);
+            if (chat) {
+                activeChatId = chat.id;
+                setChatTitle(chat);
+                renderChatContent();
+            }
+        }
+        renderHistoryList();
+        updateSendState();
+        updateStatusDisplay();
+    };
     const handleSettings = (s) => { agentSettings = s; updateSendState(); };
     const handleStatus = (state, message, conversationId) => {
         const chat = ensureChat(conversationId);
@@ -1121,6 +1240,7 @@ export const initAiChatUi = (context, deps) => {
             return;
         if (state === "running") {
             runningConversations.add(chat.id);
+            resumableConversations.delete(chat.id);
             chat.statusMessage = message || "思考中...";
             upsertThinkingMessage(chat.id, chat.statusMessage);
         }
@@ -1128,6 +1248,12 @@ export const initAiChatUi = (context, deps) => {
             runningConversations.delete(chat.id);
             chat.statusMessage = "";
             clearThinkingMessage(chat.id);
+            if (state === "error") {
+                resumableConversations.add(chat.id);
+            }
+            else {
+                resumableConversations.delete(chat.id);
+            }
             scheduleUsageRefresh(true);
         }
         renderHistoryList();
@@ -1236,6 +1362,7 @@ export const initAiChatUi = (context, deps) => {
         if (chat) {
             chat.statusMessage = "";
             disableAutonomous(chat.id);
+            resumableConversations.add(chat.id);
             clearThinkingMessage(chat.id);
         }
         if (conversationId)
@@ -1324,7 +1451,7 @@ export const initAiChatUi = (context, deps) => {
     renderAttachmentBar();
     requestPlatformState();
     return {
-        handleSettings, handleStatus, handleMessage, handleMessageDelta, handleTool,
+        handleSettings, handleState, handleStatus, handleMessage, handleMessageDelta, handleTool,
         handleProposal, handleApplyResult, handleUndoResult, handleError,
         handlePlatformAuth, handlePlatformAiAccess, handlePlatformUsage,
         handlePlatformUpdate,

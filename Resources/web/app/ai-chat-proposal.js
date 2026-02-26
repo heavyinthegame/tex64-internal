@@ -96,6 +96,7 @@ export const createProposalCard = (proposal, deps) => {
     cancelButton.textContent = "取り消し";
     cancelButton.addEventListener("click", (event) => {
         event.stopPropagation();
+        deps.postToNative({ type: "agent:proposal:dismiss", proposalId: proposal.id }, true);
         deps.dismissProposal(proposal.id);
     });
     const diffContainer = document.createElement("div");

@@ -64,6 +64,15 @@ const BASE64_DATA_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z
 const DEFAULT_PREFETCH_FILES_LIMIT = 3;
 const PREFETCH_FILE_MENTION_PATTERN =
   /(?:^|[^A-Za-z0-9_./-])([A-Za-z0-9_./-]+\.(?:tex|bib|sty|cls|ltx|dtx|md|txt|json|ya?ml|toml|js|ts|cjs|mjs|css|html))(?![A-Za-z0-9_./-])/gi;
+const PERSIST_SESSION_VERSION = 1;
+const PERSIST_MAX_MESSAGES = 140;
+const PERSIST_DEBOUNCE_MS = 450;
+const PERSIST_MAX_TEXT_CHARS = 50_000;
+const PERSIST_MAX_TOOL_CHARS = 80_000;
+const PERSIST_MAX_ARG_CHARS = 8_000;
+const PERSIST_MAX_DEPTH = 10;
+const PERSIST_MAX_ARRAY_LENGTH = 120;
+const PERSIST_MAX_OBJECT_KEYS = 120;
 const parseNumber = (value, fallback = 0) => {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
@@ -77,6 +86,301 @@ const parseNumber = (value, fallback = 0) => {
   return fallback;
 };
 const parseInteger = (value, fallback = 0) => Math.round(parseNumber(value, fallback));
+
+const digestJson = (value) => {
+  try {
+    return crypto.createHash("sha256").update(JSON.stringify(value ?? null)).digest("hex");
+  } catch {
+    return null;
+  }
+};
+
+const clipText = (value, max = 120) => {
+  const text = typeof value === "string" ? value.trim() : "";
+  if (!text) {
+    return "";
+  }
+  const limit = Number.isFinite(max) ? Math.max(16, Math.round(max)) : 120;
+  return text.length > limit ? `${text.slice(0, limit)}…` : text;
+};
+
+const clipLongString = (value, maxChars) => {
+  if (typeof value !== "string") {
+    return "";
+  }
+  const limit = Number.isFinite(maxChars)
+    ? Math.max(256, Math.round(maxChars))
+    : PERSIST_MAX_TEXT_CHARS;
+  if (value.length <= limit) {
+    return value;
+  }
+  return `${value.slice(0, limit)}…`;
+};
+
+const sanitizeForPersistence = (
+  value,
+  {
+    maxStringChars = PERSIST_MAX_TEXT_CHARS,
+    maxDepth = PERSIST_MAX_DEPTH,
+    maxArrayLength = PERSIST_MAX_ARRAY_LENGTH,
+    maxObjectKeys = PERSIST_MAX_OBJECT_KEYS,
+  } = {},
+  depth = 0
+) => {
+  if (depth > maxDepth) {
+    return null;
+  }
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const type = typeof value;
+  if (type === "string") {
+    return clipLongString(value, maxStringChars);
+  }
+  if (type === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (type === "boolean") {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    const limited = value.length > maxArrayLength ? value.slice(0, maxArrayLength) : value;
+    return limited.map((entry) =>
+      sanitizeForPersistence(
+        entry,
+        { maxStringChars, maxDepth, maxArrayLength, maxObjectKeys },
+        depth + 1
+      )
+    );
+  }
+  if (type !== "object") {
+    return null;
+  }
+  const keys = Object.keys(value);
+  const limitedKeys = keys.length > maxObjectKeys ? keys.slice(0, maxObjectKeys) : keys;
+  const result = {};
+  limitedKeys.forEach((key) => {
+    result[key] = sanitizeForPersistence(
+      value[key],
+      { maxStringChars, maxDepth, maxArrayLength, maxObjectKeys },
+      depth + 1
+    );
+  });
+  return result;
+};
+
+const sanitizeConversationForPersistence = (conversation) => {
+  const source = Array.isArray(conversation) ? conversation : [];
+  const windowed =
+    source.length > PERSIST_MAX_MESSAGES
+      ? source.slice(source.length - PERSIST_MAX_MESSAGES)
+      : source;
+  const sanitized = [];
+  windowed.forEach((message) => {
+    if (!message || typeof message !== "object") {
+      return;
+    }
+    const role =
+      typeof message.role === "string" && message.role.trim() ? message.role.trim() : "user";
+    const parts = Array.isArray(message.parts) ? message.parts : [];
+    const outputParts = [];
+    let hadInlineData = false;
+    parts.forEach((part) => {
+      if (!part || typeof part !== "object") {
+        return;
+      }
+      if (typeof part.text === "string" && part.text.length > 0) {
+        outputParts.push({ text: clipLongString(part.text, PERSIST_MAX_TEXT_CHARS) });
+        return;
+      }
+      if (part.inlineData && typeof part.inlineData === "object") {
+        hadInlineData = true;
+        return;
+      }
+      if (part.functionCall && typeof part.functionCall === "object") {
+        const call = part.functionCall;
+        const next = {
+          functionCall: {
+            name: typeof call.name === "string" ? call.name : "",
+            args: sanitizeForPersistence(call.args ?? {}, { maxStringChars: PERSIST_MAX_ARG_CHARS }),
+          },
+        };
+        if (typeof part.thoughtSignature === "string" && part.thoughtSignature) {
+          next.thoughtSignature = clipLongString(part.thoughtSignature, 10_000);
+        }
+        if (part.thought === true) {
+          next.thought = true;
+        }
+        outputParts.push(next);
+        return;
+      }
+      if (part.functionResponse && typeof part.functionResponse === "object") {
+        const fr = part.functionResponse;
+        outputParts.push({
+          functionResponse: {
+            name: typeof fr.name === "string" ? fr.name : "",
+            response: sanitizeForPersistence(fr.response ?? {}, { maxStringChars: PERSIST_MAX_TOOL_CHARS }),
+          },
+        });
+      }
+    });
+    if (outputParts.length === 0 && hadInlineData) {
+      outputParts.push({ text: "(inline data omitted)" });
+    }
+    if (outputParts.length === 0) {
+      return;
+    }
+    sanitized.push({ role, parts: outputParts });
+  });
+  return sanitized;
+};
+
+const summarizeToolArgs = (toolName, argsLike) => {
+  const args = argsLike && typeof argsLike === "object" ? argsLike : {};
+  const name = typeof toolName === "string" ? toolName : "";
+  if (name === "read_file") {
+    return {
+      path: clipText(args.path, 260),
+      encoding: clipText(args.encoding, 20) || (args.binary === true ? "base64" : "utf8"),
+    };
+  }
+  if (name === "read_files") {
+    const paths = Array.isArray(args.paths) ? args.paths.filter((p) => typeof p === "string") : [];
+    return {
+      count: paths.length,
+      paths: paths.slice(0, 5).map((p) => clipText(p, 200)),
+      encoding: clipText(args.encoding, 20) || (args.binary === true ? "base64" : "utf8"),
+    };
+  }
+  if (name === "search_files") {
+    return { query: clipText(args.query, 120) };
+  }
+  if (name === "list_files") {
+    return { directory: clipText(args.directory, 260) };
+  }
+  if (name === "get_project_structure") {
+    return { maxDepth: Number.isFinite(args.maxDepth) ? Math.round(args.maxDepth) : null };
+  }
+  if (name === "get_index") {
+    return {
+      kinds: Array.isArray(args.kinds) ? args.kinds.slice(0, 10).map((k) => clipText(k, 40)) : [],
+      query: clipText(args.query, 120),
+      limit: Number.isFinite(args.limit) ? Math.round(args.limit) : null,
+    };
+  }
+  if (name === "rename_latex_symbol") {
+    return {
+      from: clipText(args.from, 80),
+      to: clipText(args.to, 80),
+      kinds: Array.isArray(args.kinds) ? args.kinds.slice(0, 10).map((k) => clipText(k, 40)) : [],
+    };
+  }
+  if (name === "run_build") {
+    return {
+      mainFile: clipText(args.mainFile, 260),
+      engine: clipText(args.engine, 20),
+    };
+  }
+  if (name === "run_command") {
+    return {
+      command: clipText(args.command, 260),
+      cwd: clipText(args.cwd, 260),
+      timeoutMs: Number.isFinite(args.timeoutMs) ? Math.round(args.timeoutMs) : null,
+    };
+  }
+  if (name === "get_app_settings") {
+    return { keys: Array.isArray(args.keys) ? args.keys.slice(0, 40).map((k) => clipText(k, 60)) : [] };
+  }
+  if (name === "set_app_settings") {
+    const settings =
+      args.settings && typeof args.settings === "object" && !Array.isArray(args.settings)
+        ? args.settings
+        : {};
+    return { keys: Object.keys(settings).slice(0, 40).map((k) => clipText(k, 60)) };
+  }
+  if (name === "propose_write") {
+    return { path: clipText(args.path, 260), contentChars: typeof args.content === "string" ? args.content.length : 0 };
+  }
+  if (name === "propose_patch") {
+    const edits = Array.isArray(args.edits) ? args.edits : [];
+    return {
+      path: clipText(args.path, 260),
+      edits: edits.length,
+      replaceAll: args.replaceAll === true,
+    };
+  }
+  if (name === "propose_delete") {
+    return { path: clipText(args.path, 260) };
+  }
+  if (name === "propose_rename") {
+    return { oldPath: clipText(args.oldPath, 260), newPath: clipText(args.newPath, 260) };
+  }
+  if (name === "propose_create_directory") {
+    return { path: clipText(args.path, 260) };
+  }
+  return { keys: Object.keys(args).slice(0, 40).map((k) => clipText(k, 60)) };
+};
+
+const summarizeToolResult = (toolName, resultLike) => {
+  const result = resultLike && typeof resultLike === "object" ? resultLike : {};
+  const name = typeof toolName === "string" ? toolName : "";
+  const error = typeof result.error === "string" && result.error ? clipText(result.error, 260) : "";
+  const base = {
+    ok: !error,
+    error: error || null,
+  };
+  if (name === "read_file") {
+    const encoding = typeof result.encoding === "string" ? result.encoding : "utf8";
+    const content = typeof result.content === "string" ? result.content : "";
+    const bytes =
+      encoding === "base64" ? Math.round(content.length * 0.75) : Buffer.byteLength(content, "utf8");
+    return {
+      ...base,
+      encoding,
+      bytes,
+      binary: result.binary === true,
+      partial: result.partial === true,
+      source: typeof result.source === "string" ? result.source : null,
+    };
+  }
+  if (name === "read_files") {
+    const files = result.files && typeof result.files === "object" ? result.files : {};
+    const entries = Object.values(files);
+    const errorCount = entries.filter((entry) => entry && typeof entry === "object" && typeof entry.error === "string" && entry.error).length;
+    return {
+      ...base,
+      fileCount: Object.keys(files).length,
+      errorCount,
+    };
+  }
+  if (name === "search_files") {
+    const results = Array.isArray(result.results) ? result.results : [];
+    return {
+      ...base,
+      resultCount: results.length,
+      sample: results.slice(0, 5).map((entry) => ({
+        path: clipText(entry?.path, 260),
+        line: typeof entry?.line === "number" ? entry.line : null,
+      })),
+    };
+  }
+  if (
+    name === "propose_write" ||
+    name === "propose_patch" ||
+    name === "propose_delete" ||
+    name === "propose_rename" ||
+    name === "propose_create_directory" ||
+    name === "rename_latex_symbol"
+  ) {
+    const proposalIds = Array.isArray(result.proposalIds) ? result.proposalIds : [];
+    return {
+      ...base,
+      status: typeof result.status === "string" ? result.status : null,
+      proposalCount: proposalIds.length,
+    };
+  }
+  return base;
+};
 
 const resolvePrefetchMaxChars = (settings) => {
   const raw = settings?.openFileMaxChars;
@@ -212,6 +516,8 @@ const buildSystemPrompt = (context, rootPath, policy, options, extras = {}) => {
     "- propose_create_directory: ディレクトリ作成を提案",
     "",
     "## 必須ルール",
+    "- 作業スタイル: 目的→計画→調査（read/search）→提案（propose_*）→（承認）→適用→検証（run_build）→要約",
+    "- tool/functionCall を行うときは、同じメッセージ内に短い理由（なぜそのツールを呼ぶか）をテキストで1行書く",
     "- 目的は、ユーザーの論文執筆を自律的に前進させること。各ターンで完成に近づく提案を行う",
     "- ユーザーにファイル内容の貼り付けや手動確認を求めない。必要な情報はツールで取得する（例外: ツール制約/ブロック/サイズ超過）",
     "- ファイル指定が曖昧な場合は、Active file → ルートのメイン .tex（分かるなら）→ main.tex の順で推測し、必要なら list_files/search_files で特定する",
@@ -489,6 +795,8 @@ class AgentService {
     sendIssues,
     indexerService,
     apiUsageService,
+    auditService,
+    sessionsService,
     requestAiChat,
   }) {
     this.workspace = workspace;
@@ -503,11 +811,25 @@ class AgentService {
     this.sendIssues = sendIssues;
     this.indexerService = indexerService;
     this.apiUsageService = apiUsageService;
+    this.auditService =
+      auditService && typeof auditService.append === "function" ? auditService : null;
+    this.sessionsService =
+      sessionsService &&
+      typeof sessionsService.saveSession === "function" &&
+      typeof sessionsService.loadSessions === "function"
+        ? sessionsService
+        : null;
     this.requestAiChat = typeof requestAiChat === "function" ? requestAiChat : null;
     this.conversations = new Map();
     this.proposals = new Map();
     this.contextByConversation = new Map();
     this.runningControllers = new Map();
+    this.lastStatusByConversation = new Map();
+    this.workspaceRootByConversation = new Map();
+    this.sessionMetaByConversation = new Map();
+    this.sessionsRestored = false;
+    this.restorePromise = null;
+    this.persistTimers = new Map();
     this.agentPolicy = buildAgentPolicy();
     this.agentOptions = {
       maxIterations: DEFAULT_MAX_ITERATIONS,
@@ -523,6 +845,340 @@ class AgentService {
 
   sendStatus(state, message, conversationId) {
     this.sendToRenderer("agent:status", { state, message, conversationId });
+    const normalizedConversationId =
+      typeof conversationId === "string" && conversationId.trim() ? conversationId.trim() : "";
+    if (normalizedConversationId) {
+      this.lastStatusByConversation.set(normalizedConversationId, {
+        state: typeof state === "string" ? state : "idle",
+        message: typeof message === "string" ? message : "",
+        ts: Date.now(),
+      });
+      this.markSessionDirty(normalizedConversationId);
+    }
+  }
+
+  async ensureSessionsRestored() {
+    if (this.sessionsRestored || !this.sessionsService) {
+      return;
+    }
+    if (this.restorePromise) {
+      await this.restorePromise;
+      return;
+    }
+    this.restorePromise = (async () => {
+      const sessions = await this.sessionsService.loadSessions().catch(() => []);
+      sessions.forEach((session) => {
+        if (!session || typeof session !== "object") {
+          return;
+        }
+        const conversationId =
+          typeof session.conversationId === "string" ? session.conversationId.trim() : "";
+        if (!conversationId) {
+          return;
+        }
+
+        const storedConversation = Array.isArray(session.conversation) ? session.conversation : null;
+        if (
+          storedConversation &&
+          (!this.conversations.has(conversationId) ||
+            (this.conversations.get(conversationId)?.length ?? 0) === 0)
+        ) {
+          this.conversations.set(conversationId, storedConversation);
+        }
+
+        const storedProposals = Array.isArray(session.proposals) ? session.proposals : [];
+        storedProposals.forEach((proposal) => {
+          if (!proposal || typeof proposal !== "object") {
+            return;
+          }
+          const id = typeof proposal.id === "string" ? proposal.id : "";
+          if (!id) {
+            return;
+          }
+          if (!proposal.conversationId) {
+            proposal.conversationId = conversationId;
+          }
+          this.proposals.set(id, proposal);
+        });
+
+        const workspaceRootPath =
+          typeof session.workspaceRootPath === "string" && session.workspaceRootPath.trim()
+            ? session.workspaceRootPath.trim()
+            : "";
+        if (workspaceRootPath && !this.workspaceRootByConversation.has(conversationId)) {
+          this.workspaceRootByConversation.set(conversationId, workspaceRootPath);
+        }
+
+        const createdAt =
+          typeof session.createdAt === "number" && Number.isFinite(session.createdAt)
+            ? session.createdAt
+            : null;
+        const updatedAt =
+          typeof session.updatedAt === "number" && Number.isFinite(session.updatedAt)
+            ? session.updatedAt
+            : null;
+        if ((createdAt || updatedAt) && !this.sessionMetaByConversation.has(conversationId)) {
+          this.sessionMetaByConversation.set(conversationId, {
+            createdAt: createdAt ?? updatedAt ?? Date.now(),
+            updatedAt: updatedAt ?? createdAt ?? Date.now(),
+          });
+        }
+
+        const lastStatus =
+          session.lastStatus && typeof session.lastStatus === "object" ? session.lastStatus : null;
+        if (lastStatus && !this.lastStatusByConversation.has(conversationId)) {
+          this.lastStatusByConversation.set(conversationId, {
+            state: typeof lastStatus.state === "string" ? lastStatus.state : "idle",
+            message: typeof lastStatus.message === "string" ? lastStatus.message : "",
+            ts: typeof lastStatus.ts === "number" ? lastStatus.ts : null,
+          });
+        }
+      });
+      this.sessionsRestored = true;
+    })();
+    await this.restorePromise;
+  }
+
+  markSessionDirty(conversationId) {
+    if (!this.sessionsService) {
+      return;
+    }
+    const normalized =
+      typeof conversationId === "string" && conversationId.trim()
+        ? conversationId.trim()
+        : "default";
+    const existingTimer = this.persistTimers.get(normalized);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+    const timer = setTimeout(() => {
+      this.persistTimers.delete(normalized);
+      this.persistSession(normalized).catch(() => {});
+    }, PERSIST_DEBOUNCE_MS);
+    this.persistTimers.set(normalized, timer);
+  }
+
+  async persistSession(conversationId) {
+    if (!this.sessionsService) {
+      return;
+    }
+    const normalized =
+      typeof conversationId === "string" && conversationId.trim()
+        ? conversationId.trim()
+        : "default";
+    await this.ensureSessionsRestored();
+
+    const conversation = this.conversations.get(normalized) ?? [];
+    const proposals = [];
+    this.proposals.forEach((proposal) => {
+      const pConversationId =
+        typeof proposal?.conversationId === "string" && proposal.conversationId.trim()
+          ? proposal.conversationId.trim()
+          : "default";
+      if (pConversationId === normalized) {
+        proposals.push(proposal);
+      }
+    });
+
+    const now = Date.now();
+    const meta = this.sessionMetaByConversation.get(normalized) ?? { createdAt: now, updatedAt: now };
+    if (!meta.createdAt || !Number.isFinite(meta.createdAt)) {
+      meta.createdAt = now;
+    }
+    meta.updatedAt = now;
+    this.sessionMetaByConversation.set(normalized, meta);
+
+    const currentRoot = this.workspace.getRootPath();
+    const storedRoot = this.workspaceRootByConversation.get(normalized);
+    const workspaceRootPath =
+      currentRoot || (typeof storedRoot === "string" && storedRoot.trim() ? storedRoot.trim() : null);
+    if (workspaceRootPath) {
+      this.workspaceRootByConversation.set(normalized, workspaceRootPath);
+    }
+
+    const lastStatus = this.lastStatusByConversation.get(normalized) ?? null;
+
+    const snapshotBase = {
+      version: PERSIST_SESSION_VERSION,
+      conversationId: normalized,
+      workspaceRootPath: workspaceRootPath || null,
+      createdAt: meta.createdAt,
+      updatedAt: meta.updatedAt,
+      lastStatus,
+      proposals,
+    };
+
+    const byteLimit =
+      typeof this.sessionsService.maxSessionBytes === "number" &&
+      Number.isFinite(this.sessionsService.maxSessionBytes)
+        ? Math.max(128 * 1024, this.sessionsService.maxSessionBytes)
+        : 8 * 1024 * 1024;
+    const estimateBytes = (value) => {
+      try {
+        return Buffer.byteLength(JSON.stringify(value), "utf8");
+      } catch {
+        return Number.POSITIVE_INFINITY;
+      }
+    };
+
+    const conversationWindows = [PERSIST_MAX_MESSAGES, 100, 60, 40, 25, 12];
+    let conversationSnapshot = sanitizeConversationForPersistence(conversation);
+    let snapshot = { ...snapshotBase, conversation: conversationSnapshot };
+    let estimatedBytes = estimateBytes(snapshot);
+
+    for (let index = 0; index < conversationWindows.length && estimatedBytes > byteLimit; index += 1) {
+      const windowSize = conversationWindows[index];
+      const sliced =
+        conversation.length > windowSize ? conversation.slice(conversation.length - windowSize) : conversation;
+      conversationSnapshot = sanitizeConversationForPersistence(sliced);
+      snapshot = { ...snapshotBase, conversation: conversationSnapshot };
+      estimatedBytes = estimateBytes(snapshot);
+    }
+
+    if (estimatedBytes > byteLimit) {
+      snapshot = { ...snapshotBase, conversation: [] };
+      estimatedBytes = estimateBytes(snapshot);
+    }
+    if (estimatedBytes > byteLimit) {
+      snapshot = { ...snapshotBase, conversation: [], proposals: [] };
+    }
+
+    await this.sessionsService.saveSession(snapshot);
+  }
+
+  async getUiState() {
+    await this.ensureSessionsRestored();
+    const conversationIds = new Set();
+    this.conversations.forEach((_value, key) => {
+      if (key) {
+        conversationIds.add(key);
+      }
+    });
+    this.runningControllers.forEach((_value, key) => {
+      if (key) {
+        conversationIds.add(key);
+      }
+    });
+    this.proposals.forEach((proposal) => {
+      const conversationId =
+        typeof proposal?.conversationId === "string" && proposal.conversationId.trim()
+          ? proposal.conversationId.trim()
+          : "default";
+      if (conversationId) {
+        conversationIds.add(conversationId);
+      }
+    });
+
+    const buildTitle = (messages, fallback) => {
+      const firstUser = Array.isArray(messages)
+        ? messages.find((msg) => msg?.role === "user" && typeof msg.text === "string" && msg.text.trim())
+        : null;
+      const raw = typeof firstUser?.text === "string" ? firstUser.text.trim() : "";
+      if (!raw) {
+        return fallback;
+      }
+      return raw.replace(/\s+/g, " ").slice(0, 24) || fallback;
+    };
+
+    const sessions = [];
+    conversationIds.forEach((conversationId) => {
+      const normalizedConversationId =
+        typeof conversationId === "string" && conversationId.trim()
+          ? conversationId.trim()
+          : "default";
+      const conversation = this.conversations.get(normalizedConversationId) ?? [];
+      const messages = [];
+      conversation.forEach((entry) => {
+        const role = typeof entry?.role === "string" ? entry.role : "";
+        const parts = Array.isArray(entry?.parts) ? entry.parts : [];
+        if (role === "user") {
+          const text = extractTextFromParts(parts);
+          if (text.trim()) {
+            messages.push({ role: "user", text: clipLongString(text, 20_000) });
+            return;
+          }
+          const hadInlineData = parts.some((part) => part && typeof part === "object" && part.inlineData);
+          if (hadInlineData) {
+            messages.push({ role: "user", text: "画像を送信しました。" });
+          }
+          return;
+        }
+        if (role === "model") {
+          const text = extractTextFromParts(parts);
+          if (text.trim()) {
+            messages.push({ role: "assistant", text: clipLongString(text, 30_000) });
+          }
+        }
+      });
+
+      const proposals = [];
+      this.proposals.forEach((proposal) => {
+        const pConversationId =
+          typeof proposal?.conversationId === "string" && proposal.conversationId.trim()
+            ? proposal.conversationId.trim()
+            : "default";
+        if (pConversationId === normalizedConversationId) {
+          proposals.push(proposal);
+        }
+      });
+
+      const meta = this.sessionMetaByConversation.get(normalizedConversationId) ?? null;
+      const workspaceRootPath =
+        this.workspaceRootByConversation.get(normalizedConversationId) ?? null;
+      const lastStatus = this.lastStatusByConversation.get(normalizedConversationId) ?? null;
+      const state = this.runningControllers.has(normalizedConversationId)
+        ? "running"
+        : lastStatus?.state === "error"
+        ? "error"
+        : "idle";
+      const title = buildTitle(messages, normalizedConversationId);
+      sessions.push({
+        conversationId: normalizedConversationId,
+        title,
+        workspaceRootPath,
+        createdAt: meta?.createdAt ?? null,
+        updatedAt: meta?.updatedAt ?? null,
+        status: { state, message: lastStatus?.message ?? "" },
+        messages,
+        proposals,
+      });
+    });
+
+    sessions.sort((a, b) => {
+      const aUpdated = typeof a.updatedAt === "number" ? a.updatedAt : 0;
+      const bUpdated = typeof b.updatedAt === "number" ? b.updatedAt : 0;
+      return aUpdated - bUpdated;
+    });
+    return { sessions };
+  }
+
+  emitAuditEvent(eventType, payload, conversationId, runIdOverride) {
+    if (!this.auditService) {
+      return;
+    }
+    const normalizedConversationId =
+      typeof conversationId === "string" && conversationId.trim()
+        ? conversationId.trim()
+        : null;
+    const runId =
+      typeof runIdOverride === "string" && runIdOverride.trim()
+        ? runIdOverride.trim()
+        : normalizedConversationId
+        ? this.runningControllers.get(normalizedConversationId)?.token ?? null
+        : null;
+    const safePayload =
+      payload && typeof payload === "object" && !Array.isArray(payload)
+        ? payload
+        : { value: payload };
+    this.auditService
+      .append({
+        ts: Date.now(),
+        conversationId: normalizedConversationId,
+        runId,
+        eventType: typeof eventType === "string" ? eventType : "event",
+        payload: safePayload,
+      })
+      .catch(() => {});
   }
 
   buildConversation(conversationId) {
@@ -533,8 +1189,48 @@ class AgentService {
   }
 
   clearConversation(conversationId) {
-    this.conversations.set(conversationId, []);
-    this.contextByConversation.delete(conversationId);
+    const normalized =
+      typeof conversationId === "string" && conversationId.trim()
+        ? conversationId.trim()
+        : "default";
+    this.conversations.set(normalized, []);
+    this.contextByConversation.delete(normalized);
+    const proposalIdsToDelete = [];
+    this.proposals.forEach((proposal, proposalId) => {
+      const pConversationId =
+        typeof proposal?.conversationId === "string" && proposal.conversationId.trim()
+          ? proposal.conversationId.trim()
+          : "default";
+      if (pConversationId === normalized) {
+        proposalIdsToDelete.push(proposalId);
+      }
+    });
+    proposalIdsToDelete.forEach((proposalId) => {
+      this.proposals.delete(proposalId);
+    });
+    this.sessionMetaByConversation.delete(normalized);
+    this.workspaceRootByConversation.delete(normalized);
+    this.lastStatusByConversation.delete(normalized);
+    if (this.sessionsService) {
+      this.sessionsService.deleteSession(normalized).catch(() => {});
+    }
+  }
+
+  dismissProposal(proposalId) {
+    const id = typeof proposalId === "string" ? proposalId.trim() : "";
+    if (!id) {
+      return;
+    }
+    const proposal = this.proposals.get(id);
+    if (!proposal) {
+      return;
+    }
+    const conversationId =
+      typeof proposal.conversationId === "string" && proposal.conversationId.trim()
+        ? proposal.conversationId.trim()
+        : "default";
+    this.proposals.delete(id);
+    this.markSessionDirty(conversationId);
   }
 
   abort(conversationId) {
@@ -825,6 +1521,7 @@ class AgentService {
   }
 
   async undoLastApply(conversationId) {
+    await this.ensureSessionsRestored();
     const targetConversationId =
       typeof conversationId === "string" && conversationId.trim()
         ? conversationId.trim()
@@ -838,6 +1535,11 @@ class AgentService {
       }
     }
     if (targetIndex < 0) {
+      this.emitAuditEvent(
+        "undo_last_apply",
+        { ok: false, reason: "no_entry" },
+        targetConversationId || null
+      );
       this.sendToRenderer("agent:undoResult", {
         ok: false,
         message: "取り消せる操作がありません。",
@@ -850,6 +1552,11 @@ class AgentService {
     const rootPath = this.workspace.getRootPath();
     if (!rootPath) {
       this.applyUndoStack.push(entry);
+      this.emitAuditEvent(
+        "undo_last_apply",
+        { ok: false, reason: "workspace_missing", path: entry.path, type: entry.type },
+        targetConversationId || entry.conversationId
+      );
       this.sendToRenderer("agent:undoResult", {
         ok: false,
         message: "ワークスペースが選択されていません。",
@@ -923,6 +1630,12 @@ class AgentService {
 
       await this.updateWorkspaceIfNeeded(rootPath, true);
       this.requestIndex(rootPath);
+      this.emitAuditEvent(
+        "undo_last_apply",
+        { ok: true, path: entry.path, type: entry.type },
+        targetConversationId || entry.conversationId
+      );
+      this.markSessionDirty(targetConversationId || entry.conversationId);
       this.sendToRenderer("agent:undoResult", {
         ok: true,
         path: entry.path,
@@ -930,18 +1643,32 @@ class AgentService {
       });
     } catch (error) {
       this.applyUndoStack.push(entry);
+      this.emitAuditEvent(
+        "undo_last_apply",
+        {
+          ok: false,
+          reason: "undo_failed",
+          path: entry.path,
+          type: entry.type,
+          error: clipText(error?.message ?? "undo failed", 260),
+        },
+        targetConversationId || entry.conversationId
+      );
       this.sendToRenderer("agent:undoResult", {
         ok: false,
         message: error?.message ?? "取り消しに失敗しました。",
         conversationId: targetConversationId || entry.conversationId,
       });
+      this.markSessionDirty(targetConversationId || entry.conversationId);
     }
   }
 
   async applyProposal(proposalId) {
+    await this.ensureSessionsRestored();
     const proposal = this.proposals.get(proposalId);
     const rootPath = this.workspace.getRootPath();
     if (!proposal) {
+      this.emitAuditEvent("proposal_apply", { proposalId, ok: false, reason: "not_found" }, null);
       this.sendToRenderer("agent:applyResult", {
         proposalId,
         ok: false,
@@ -950,6 +1677,11 @@ class AgentService {
       return;
     }
     if (!rootPath) {
+      this.emitAuditEvent(
+        "proposal_apply",
+        { proposalId, ok: false, reason: "workspace_missing", path: proposal.path },
+        proposal.conversationId || "default"
+      );
       this.sendToRenderer("agent:applyResult", {
         proposalId,
         ok: false,
@@ -957,10 +1689,47 @@ class AgentService {
       });
       return;
     }
+    const expectedWorkspace =
+      typeof proposal.workspaceRootPath === "string" && proposal.workspaceRootPath.trim()
+        ? proposal.workspaceRootPath.trim()
+        : "";
+    if (expectedWorkspace && expectedWorkspace !== rootPath) {
+      this.emitAuditEvent(
+        "proposal_apply",
+        {
+          proposalId,
+          ok: false,
+          reason: "workspace_mismatch",
+          path: proposal.path,
+          expectedWorkspace,
+          actualWorkspace: rootPath,
+        },
+        proposal.conversationId || "default"
+      );
+      this.sendToRenderer("agent:applyResult", {
+        proposalId,
+        ok: false,
+        error: "別のワークスペースで作られた提案のため適用できません。",
+      });
+      return;
+    }
     try {
       const type = proposal.type || "write";
       const validation = await this.validateProposalBeforeApply(proposal);
       if (!validation.ok) {
+        this.emitAuditEvent(
+          "proposal_apply",
+          {
+            proposalId,
+            ok: false,
+            reason: "validation_failed",
+            path: proposal.path,
+            type,
+            conflict: validation.conflict === true,
+            error: clipText(validation.error || "validation failed", 260),
+          },
+          proposal.conversationId || "default"
+        );
         this.sendToRenderer("agent:applyResult", {
           proposalId,
           ok: false,
@@ -1060,14 +1829,33 @@ class AgentService {
       await this.updateWorkspaceIfNeeded(rootPath, true);
       this.requestIndex(rootPath);
       this.proposals.delete(proposalId);
+      this.emitAuditEvent(
+        "proposal_apply",
+        { proposalId, ok: true, path: proposal.path, type: proposal.type || "write" },
+        proposal.conversationId || "default"
+      );
+      this.markSessionDirty(proposal.conversationId || "default");
       this.sendToRenderer("agent:applyResult", { proposalId, ok: true });
       await this.maybeAutoBuild(proposal);
     } catch (error) {
+      this.emitAuditEvent(
+        "proposal_apply",
+        {
+          proposalId,
+          ok: false,
+          reason: "apply_failed",
+          path: proposal.path,
+          type: proposal.type || "write",
+          error: clipText(error?.message ?? "apply failed", 260),
+        },
+        proposal.conversationId || "default"
+      );
       this.sendToRenderer("agent:applyResult", {
         proposalId,
         ok: false,
         error: error?.message ?? "操作に失敗しました。",
       });
+      this.markSessionDirty(proposal.conversationId || "default");
     }
   }
 
@@ -1176,6 +1964,7 @@ class AgentService {
 
   async executeToolCall(toolCall, conversationId) {
     try {
+      await this.ensureSessionsRestored();
       const name = toolCall?.name ?? "";
       let args = toolCall?.args ?? {};
       if (typeof args === "string") {
@@ -1652,6 +2441,7 @@ class AgentService {
             summary: `${summaryBase}: ${from} → ${to} (${prepared.appliedCount}箇所)`,
             isNewFile: false,
             conversationId,
+            workspaceRootPath: this.workspace.getRootPath() || undefined,
           };
           this.proposals.set(id, proposal);
           this.sendToRenderer("agent:proposal", { proposal });
@@ -1813,6 +2603,7 @@ class AgentService {
     const shouldKeepInlineData = iteration === 0;
     const entries = [];
     let totalChars = 0;
+    let droppedCount = startIndex;
     windowed.forEach((message, index) => {
       const includeInlineData =
         shouldKeepInlineData && index === latestIndex && message?.role === "user";
@@ -1827,15 +2618,67 @@ class AgentService {
     while (entries.length > 1 && totalChars > maxChars) {
       const removed = entries.shift();
       totalChars -= removed?.size ?? 0;
+      droppedCount += 1;
     }
     while (entries.length > 1 && entries[0]?.message?.role === "tool") {
       const removed = entries.shift();
       totalChars -= removed?.size ?? 0;
+      droppedCount += 1;
     }
-    return entries.map((entry) => entry.message);
+
+    const messages = entries.map((entry) => entry.message);
+    if (droppedCount > 0) {
+      let firstUserText = "";
+      for (const entry of source) {
+        if (entry?.role !== "user") {
+          continue;
+        }
+        const text = extractTextFromParts(entry?.parts);
+        if (text && text.trim()) {
+          firstUserText = text.trim();
+          break;
+        }
+      }
+      let lastUserText = "";
+      for (let index = source.length - 1; index >= 0; index -= 1) {
+        const entry = source[index];
+        if (entry?.role !== "user") {
+          continue;
+        }
+        const text = extractTextFromParts(entry?.parts);
+        if (text && text.trim()) {
+          lastUserText = text.trim();
+          break;
+        }
+      }
+
+      const summaryMessage = {
+        role: "user",
+        parts: [
+          {
+            text: [
+              `Context truncated due to budget (${droppedCount} earlier messages omitted).`,
+              firstUserText ? `- Initial request (truncated): ${clipText(firstUserText, 220)}` : "",
+              lastUserText ? `- Latest request (truncated): ${clipText(lastUserText, 220)}` : "",
+            ]
+              .filter(Boolean)
+              .join("\n"),
+          },
+        ],
+      };
+      const summarySize = this.estimateRequestMessageSize(summaryMessage);
+      while (messages.length > 1 && totalChars + summarySize > maxChars) {
+        const removed = messages.shift();
+        totalChars -= this.estimateRequestMessageSize(removed);
+      }
+      messages.unshift(summaryMessage);
+    }
+
+    return messages;
   }
 
   async run({ message, parts, context, conversationId = "default" }) {
+    await this.ensureSessionsRestored();
     const targetConversationId =
       typeof conversationId === "string" && conversationId.trim()
         ? conversationId.trim()
@@ -1876,6 +2719,8 @@ class AgentService {
 
     const conversation = this.buildConversation(targetConversationId);
     conversation.push({ role: "user", parts: userParts });
+    this.workspaceRootByConversation.set(targetConversationId, rootPath);
+    this.markSessionDirty(targetConversationId);
 
     const rootFileInfo = await this.workspace.rootInfo().catch(() => null);
     const userText = extractTextFromParts(userParts);
@@ -1981,6 +2826,43 @@ class AgentService {
 
     this.sendStatus("running", this.buildProgressMessage("文脈整理中"), targetConversationId);
     const run = this.startConversationRun(targetConversationId);
+    let exitReason = "unknown";
+    let exitError = null;
+
+    const userInlineParts = Array.isArray(userParts)
+      ? userParts.filter((part) => part && typeof part === "object" && part.inlineData)
+      : [];
+    const inlineBytesApprox = userInlineParts.reduce((sum, part) => {
+      const data = typeof part?.inlineData?.data === "string" ? part.inlineData.data : "";
+      return sum + Math.round(data.length * 0.75);
+    }, 0);
+    this.emitAuditEvent(
+      "run_start",
+      {
+        workspaceRoot: rootPath,
+        model: chatModel,
+        resolvedProxyUrl,
+        toolCount: functionDeclarations.length,
+        systemPromptChars: systemPrompt.length,
+        options,
+        policy: {
+          maxFileBytes: policy?.maxFileBytes ?? null,
+          maxReadFiles: policy?.maxReadFiles ?? null,
+          blockedTopLevelCount: policy?.blockedTopLevel?.size ?? null,
+          allowedTopLevelCount: policy?.allowedTopLevel?.size ?? null,
+        },
+        user: {
+          textPreview: clipText(userText, 400),
+          inlineDataCount: userInlineParts.length,
+          inlineBytesApprox,
+        },
+        prefetchPaths,
+        referencedFileSnapshots: referencedFileSnapshots.length,
+        referencedFileErrors: referencedFileErrors.length,
+      },
+      targetConversationId,
+      run.token
+    );
 
     const isCurrentRun = () => this.isRunCurrent(targetConversationId, run.token);
     const callAiChat = async (payload, signal, onDelta) => {
@@ -2009,6 +2891,7 @@ class AgentService {
     try {
       for (let i = 0; i < options.maxIterations; i += 1) {
         if (!isCurrentRun()) {
+          exitReason = "superseded";
           return;
         }
         try {
@@ -2029,6 +2912,21 @@ class AgentService {
           if (!Array.isArray(requestContents) || requestContents.length === 0) {
             throw new Error("送信可能な会話コンテキストがありません。");
           }
+          const requestBytes = requestContents.reduce(
+            (sum, entry) => sum + this.estimateRequestMessageSize(entry),
+            0
+          );
+          this.emitAuditEvent(
+            "model_call",
+            {
+              iteration: i,
+              model: chatModel,
+              requestMessages: requestContents.length,
+              requestBytes,
+            },
+            targetConversationId,
+            run.token
+          );
           const response = await callAiChat(
             {
               model: chatModel,
@@ -2075,16 +2973,63 @@ class AgentService {
             .map((part) => part.text)
             .filter((text) => typeof text === "string" && text.trim().length > 0);
 
+          const usage = this.extractUsageMetadata(response);
+          this.emitAuditEvent(
+            "model_response",
+            {
+              iteration: i,
+              resolvedModel: resolveResponseModel(response) || null,
+              usage,
+              textChars: textParts.join("\n").length,
+              toolCalls: functionCalls
+                .map((part) => String(part?.functionCall?.name || "").trim())
+                .filter(Boolean)
+                .slice(0, 10),
+            },
+            targetConversationId,
+            run.token
+          );
+
           if (candidate) {
             conversation.push(candidate);
+            this.markSessionDirty(targetConversationId);
           }
 
           if (functionCalls.length > 0) {
             for (const part of functionCalls) {
               const call = part.functionCall;
               const toolName = call?.name ?? "";
-              const result = await this.executeToolCall(call, targetConversationId);
+              let callArgs = call?.args ?? {};
+              if (typeof callArgs === "string") {
+                try {
+                  callArgs = JSON.parse(callArgs);
+                } catch {
+                  callArgs = {};
+                }
+              }
+              if (!callArgs || typeof callArgs !== "object") {
+                callArgs = {};
+              }
+              const argsSummary = summarizeToolArgs(toolName, callArgs);
+              const argsDigest = digestJson(argsSummary);
+              this.emitAuditEvent(
+                "tool_call",
+                { iteration: i, toolName, argsDigest, args: argsSummary },
+                targetConversationId,
+                run.token
+              );
+              const result = await this.executeToolCall(
+                { name: toolName, args: callArgs },
+                targetConversationId
+              );
+              this.emitAuditEvent(
+                "tool_result",
+                { iteration: i, toolName, argsDigest, ...summarizeToolResult(toolName, result) },
+                targetConversationId,
+                run.token
+              );
               if (!isCurrentRun()) {
+                exitReason = "superseded";
                 return;
               }
               this.sendToRenderer("agent:tool", {
@@ -2103,6 +3048,7 @@ class AgentService {
                   },
                 ],
               });
+              this.markSessionDirty(targetConversationId);
             }
             continue;
           }
@@ -2110,48 +3056,96 @@ class AgentService {
           if (textParts.length > 0) {
             const text = textParts.join("\n");
             if (!isCurrentRun()) {
+              exitReason = "superseded";
               return;
             }
+            exitReason = "assistant_message";
+            this.emitAuditEvent(
+              "assistant_message",
+              { iteration: i, textChars: text.length, preview: clipText(text, 400) },
+              targetConversationId,
+              run.token
+            );
             this.sendStatus("running", this.buildProgressMessage("回答整形中"), targetConversationId);
             this.sendToRenderer("agent:message", { text, conversationId: targetConversationId });
             this.sendStatus("idle", "待機中", targetConversationId);
+            this.markSessionDirty(targetConversationId);
             return;
           }
 
           if (!isCurrentRun()) {
+            exitReason = "superseded";
             return;
           }
+          exitReason = "empty_response";
+          this.emitAuditEvent(
+            "assistant_message",
+            { iteration: i, text: "empty" },
+            targetConversationId,
+            run.token
+          );
           this.sendToRenderer("agent:message", {
             text: "応答が空でした。",
             conversationId: targetConversationId,
           });
           this.sendStatus("idle", "待機中", targetConversationId);
+          this.markSessionDirty(targetConversationId);
           return;
         } catch (error) {
           if (error?.name === "AbortError") {
+            exitReason = "aborted";
             if (this.isRunCurrent(targetConversationId, run.token)) {
               this.sendStatus("idle", "中断しました。", targetConversationId);
             }
+            this.emitAuditEvent(
+              "run_end",
+              { reason: exitReason },
+              targetConversationId,
+              run.token
+            );
+            this.markSessionDirty(targetConversationId);
             return;
           }
+          exitReason = "error";
+          exitError = error?.message ?? "AIの呼び出しに失敗しました。";
+          this.emitAuditEvent(
+            "run_error",
+            { iteration: i, message: clipText(exitError, 400) },
+            targetConversationId,
+            run.token
+          );
           this.sendToRenderer("agent:error", {
             message: error?.message ?? "AIの呼び出しに失敗しました。",
             conversationId: targetConversationId,
           });
           this.sendStatus("error", "AIエラー", targetConversationId);
+          this.markSessionDirty(targetConversationId);
           return;
         }
       }
 
       if (isCurrentRun()) {
+        exitReason = "max_iterations";
         this.sendToRenderer("agent:message", {
           text: "上限回数に達したため停止しました。",
           conversationId: targetConversationId,
         });
         this.sendStatus("idle", "待機中", targetConversationId);
+        this.markSessionDirty(targetConversationId);
       }
     } finally {
+      if (!run.controller.signal.aborted) {
+        this.emitAuditEvent(
+          "run_end",
+          { reason: exitReason, ...(exitError ? { error: clipText(exitError, 400) } : {}) },
+          targetConversationId,
+          run.token
+        );
+      }
       this.finishConversationRun(targetConversationId, run.token);
+      if (exitReason && exitReason !== "superseded") {
+        this.markSessionDirty(targetConversationId);
+      }
     }
   }
 }
