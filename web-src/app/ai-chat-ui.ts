@@ -28,6 +28,7 @@ type AiChatDeps = {
   postToNative: (payload: { type: string; [key: string]: unknown }, silent?: boolean) => boolean;
   getActiveFilePath: () => string | null;
   getActiveFileSnapshot?: () => { path: string; content: string; isDirty: boolean } | null;
+  getActiveCursorPosition?: () => { lineNumber: number; column: number } | null;
   getActiveSelectionSnapshot?: () => {
     path: string;
     text: string;
@@ -59,6 +60,7 @@ export type AiChatApi = {
   handleApplyResult: (payload: { proposalId: string; ok: boolean; error?: string; conflict?: boolean }) => void;
   handleUndoResult: (payload: { ok: boolean; message?: string; path?: string; conversationId?: string }) => void;
   handleError: (message: string, conversationId?: string) => void;
+  refreshContextBar: () => void;
   handlePlatformAuth: (payload: {
     auth: PlatformAuthSnapshot;
     error?: { code?: string; message?: string };
@@ -500,6 +502,11 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
       chips.push(
         `selection ${selection.startLine}:${selection.startColumn}-${selection.endLine}:${selection.endColumn}`
       );
+    } else {
+      const cursor = deps.getActiveCursorPosition?.() ?? null;
+      if (cursor) {
+        chips.push(`cursor ${cursor.lineNumber}:${cursor.column}`);
+      }
     }
     chips.forEach((label) => {
       const chip = document.createElement("span");
@@ -1600,6 +1607,7 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
   return {
     handleSettings, handleState, handleStatus, handleMessage, handleMessageDelta, handleTool,
     handleProposal, handleApplyResult, handleUndoResult, handleError,
+    refreshContextBar: updateContextBar,
     handlePlatformAuth, handlePlatformAiAccess, handlePlatformUsage,
     handlePlatformUpdate,
     applyPendingFromDiffModal: () => { if (pendingAiProposalId) { deps.postToNative({ type: "agent:apply", proposalId: pendingAiProposalId }); pendingAiProposalId = null; } },
