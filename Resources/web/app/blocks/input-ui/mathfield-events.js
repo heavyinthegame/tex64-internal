@@ -127,7 +127,7 @@ export const createBlockMathfieldEventsOps = (runtime, deps) => {
             return isSubsequence(beforeCore, afterCore);
         };
         const handleMathFieldKeydown = (event) => {
-            var _a, _b, _c;
+            var _a, _b, _c, _d;
             if (event.isComposing) {
                 return;
             }
@@ -146,7 +146,7 @@ export const createBlockMathfieldEventsOps = (runtime, deps) => {
                 event.preventDefault();
                 event.stopImmediatePropagation();
                 if (!tryWrapSelectionWithFraction()) {
-                    deps.insertMathKey({ label: "/", latex: "/" });
+                    deps.insertMathKey({ label: "frac", latex: "\\frac{#?}{#?}" });
                     mathfield.dispatchEvent(new Event("input", { bubbles: true }));
                 }
                 closeWysiwygSuggestions();
@@ -258,6 +258,23 @@ export const createBlockMathfieldEventsOps = (runtime, deps) => {
             if (event.defaultPrevented) {
                 return;
             }
+            if (!event.metaKey &&
+                !event.altKey &&
+                event.ctrlKey &&
+                event.key === ".") {
+                const opened = Boolean((_d = runtime.state.mathWysiwygApi) === null || _d === void 0 ? void 0 : _d.openExplicitSuggestions());
+                const fallbackOpened = opened ? false : matrixOps.openMatrixOpsPalette();
+                if (opened || fallbackOpened) {
+                    event.preventDefault();
+                    event.stopImmediatePropagation();
+                }
+                return;
+            }
+            if (event.key === "Escape") {
+                closeWysiwygSuggestions();
+                mathfield.blur();
+                return;
+            }
         };
         mathfield.addEventListener("keydown", handleMathFieldKeydown, { capture: true });
         const shadowRoot = mathfield.shadowRoot;
@@ -275,31 +292,6 @@ export const createBlockMathfieldEventsOps = (runtime, deps) => {
                 }
             }, { capture: true });
         }
-        mathfield.addEventListener("keydown", (e) => {
-            var _a, _b;
-            if ((_a = runtime.state.mathWysiwygApi) === null || _a === void 0 ? void 0 : _a.handleKeydown(e)) {
-                return;
-            }
-            if (blockDirectLatexCommandInput(runtime, e)) {
-                return;
-            }
-            if (e.isComposing) {
-                return;
-            }
-            if (!e.metaKey && !e.altKey && e.ctrlKey && e.key === ".") {
-                const opened = Boolean((_b = runtime.state.mathWysiwygApi) === null || _b === void 0 ? void 0 : _b.openExplicitSuggestions());
-                const fallbackOpened = opened ? false : matrixOps.openMatrixOpsPalette();
-                if (opened || fallbackOpened) {
-                    e.preventDefault();
-                }
-                return;
-            }
-            if (e.key === "Escape") {
-                closeWysiwygSuggestions();
-                mathfield.blur();
-                return;
-            }
-        });
         mathfield.addEventListener("focus", () => {
             runtime.state.mathKeyboardVisibilityHandler();
             mathfield.classList.add("is-focused");
@@ -317,12 +309,6 @@ export const createBlockMathfieldEventsOps = (runtime, deps) => {
             var _a;
             e.stopPropagation();
             (_a = runtime.state.mathWysiwygApi) === null || _a === void 0 ? void 0 : _a.setComposing(false);
-        });
-        mathfield.addEventListener("pointerdown", () => {
-            // Keep suggestions in sync with caret movement.
-        });
-        mathfield.addEventListener("selection-change", () => {
-            // Handled by the MathWysiwyg auto-suggest listener.
         });
         mathfield.addEventListener("move-out", (event) => {
             event.preventDefault();

@@ -20,8 +20,7 @@ export type BlockInsertKeyOps = {
 };
 
 export const createBlockInsertKeyOps = (
-  runtime: BlockInputRuntime,
-  deps: { updateMathPreview: () => void }
+  runtime: BlockInputRuntime
 ): BlockInsertKeyOps => {
   const resolveInsertValue = (
     key: MathKey,
@@ -212,7 +211,7 @@ export const createBlockInsertKeyOps = (
           typeof beforeValue === "string" && typeof afterValue === "string" && afterValue !== beforeValue;
         if (ok !== false || changed) {
           mathInput.dispatchEvent(new Event("input", { bubbles: true }));
-          deps.updateMathPreview();
+
           return;
         }
       } catch (e) {
@@ -229,7 +228,6 @@ export const createBlockInsertKeyOps = (
           throw new Error("insert() completed without content change");
         }
         mathInput.dispatchEvent(new Event("input", { bubbles: true }));
-        deps.updateMathPreview();
         return;
       } catch {
         // ignore and continue fallback

@@ -103,21 +103,21 @@ export const stripEmptyAlignedRows = (text: string) => {
   if (rows.length <= 1) {
     return text;
   }
-  const hasNonEmpty = rows.some((row) => !isEmptyAlignedRow(row));
-  return hasNonEmpty ? text : "";
+  // Only strip trailing empty rows; preserve structure and leading/middle rows
+  let lastNonEmpty = rows.length - 1;
+  while (lastNonEmpty > 0 && isEmptyAlignedRow(rows[lastNonEmpty])) {
+    lastNonEmpty -= 1;
+  }
+  if (lastNonEmpty === rows.length - 1) {
+    return text;
+  }
+  return rows.slice(0, lastNonEmpty + 1).join("\\\\");
 };
 
 export const normalizeMatrixSyntax = (value: string) => {
   if (!value) {
     return value;
   }
-  const isEscapedAt = (text: string, index: number) => {
-    let slashCount = 0;
-    for (let i = index - 1; i >= 0 && text[i] === "\\"; i -= 1) {
-      slashCount += 1;
-    }
-    return slashCount % 2 === 1;
-  };
   const parseTopLevelBracedCells = (body: string) => {
     const cells: string[] = [];
     let i = 0;
@@ -228,26 +228,18 @@ const restoreLegacyAlignedProxyEnvs = (value: string) =>
     return match;
   });
 
-const isEscapedAtFormat = (text: string, index: number) => {
-  let slashCount = 0;
-  for (let i = index - 1; i >= 0 && text[i] === "\\"; i -= 1) {
-    slashCount += 1;
-  }
-  return slashCount % 2 === 1;
-};
-
-const findBalancedBraceEndFormat = (text: string, start: number) => {
+const findBalancedBraceEnd = (text: string, start: number) => {
   if (text[start] !== "{") {
     return -1;
   }
   let depth = 0;
   for (let i = start; i < text.length; i += 1) {
     const ch = text[i];
-    if (ch === "{" && !isEscapedAtFormat(text, i)) {
+    if (ch === "{" && !isEscapedAt(text, i)) {
       depth += 1;
       continue;
     }
-    if (ch === "}" && !isEscapedAtFormat(text, i)) {
+    if (ch === "}" && !isEscapedAt(text, i)) {
       depth -= 1;
       if (depth === 0) {
         return i;
@@ -285,7 +277,7 @@ const replaceCommandWithBraceArgs = (
         ok = false;
         break;
       }
-      const end = findBalancedBraceEndFormat(value, cursor);
+      const end = findBalancedBraceEnd(value, cursor);
       if (end < 0) {
         ok = false;
         break;

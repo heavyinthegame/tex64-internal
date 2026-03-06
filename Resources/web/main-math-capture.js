@@ -88,32 +88,37 @@ export const createMathCaptureHandler = (params) => {
     const reportError = (message) => {
         params.updateIssues(1, message, "error", [{ severity: "error", message }]);
     };
-    const handleMathCaptureImage = (imageDataUrl) => {
+    const handleMathCaptureImage = async (imageDataUrl) => {
         if (mathCaptureBusy) {
-            return;
+            return { ok: false, error: "処理中です。" };
         }
         if (!imageDataUrl) {
-            reportError("キャプチャ画像がありません。");
-            return;
+            const msg = "キャプチャ画像がありません。";
+            reportError(msg);
+            return { ok: false, error: msg };
         }
         mathCaptureBusy = true;
-        params
-            .recognizeMath(imageDataUrl)
-            .then((latex) => {
+        try {
+            const latex = await params.recognizeMath(imageDataUrl);
             const normalized = normalizeMathCaptureText(latex);
             if (!normalized) {
-                reportError("OCR結果が空でした。");
-                return;
+                const msg = "数式を認識できませんでした";
+                reportError(msg);
+                return { ok: false, error: msg };
             }
             params.onInsertMath(normalized);
-        })
-            .catch((error) => {
-            const message = error instanceof Error ? error.message : "OCRに失敗しました。";
-            reportError(message);
-        })
-            .finally(() => {
+            return { ok: true };
+        }
+        catch (error) {
+            const msg = error instanceof Error
+                ? `認識に失敗しました — ${error.message}`
+                : "認識に失敗しました";
+            reportError(msg);
+            return { ok: false, error: msg };
+        }
+        finally {
             mathCaptureBusy = false;
-        });
+        }
     };
     return {
         handleMathCaptureImage,

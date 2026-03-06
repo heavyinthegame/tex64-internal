@@ -32,7 +32,7 @@ export const getMathfieldInternalModel = (mathfieldApi) => {
     const model = internal === null || internal === void 0 ? void 0 : internal.model;
     return model && typeof model === "object" ? model : null;
 };
-export const getMathfieldInternalMenu = (mathfieldApi) => {
+const getMathfieldInternalMenu = (mathfieldApi) => {
     const internal = getInternalMathfield(mathfieldApi);
     const menu = internal === null || internal === void 0 ? void 0 : internal.menu;
     return menu && typeof menu === "object" ? menu : null;

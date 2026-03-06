@@ -748,7 +748,6 @@ export const initMain = () => {
     console.error("attachMathInputListener error:", e);
     // updateIssues(1, "数式入力リスナーのエラー: " + e.message, "error", []);
   }
-  try { blockInputApi.updateMathPreview(); } catch (e: any) { console.error("updateMathPreview error:", e); }
   searchUi.render();
 
   rootSelectorUi.render();

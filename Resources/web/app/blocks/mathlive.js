@@ -166,6 +166,7 @@ export const initMathLive = (context, deps) => {
             const mathfield = document.createElement("math-field");
             mathfield.id = "block-math-input";
             mathfield.className = "block-math-field";
+            mathfield.setAttribute("placeholder", "数式を入力");
             const scrollHost = document.createElement("div");
             scrollHost.className = "block-math-scroll";
             scrollHost.appendChild(mathfield);
@@ -252,12 +253,20 @@ export const initMathLive = (context, deps) => {
                     if (typeof mathfield.setValue === "function") {
                         mathfield.setValue(preservedValue);
                     }
-                    else if (typeof mathfield.value === "string") {
+                    else if ("value" in mathfield) {
                         mathfield.value = preservedValue;
                     }
                 }
-                catch {
-                    // ignore restore failure
+                catch (restoreError) {
+                    try {
+                        if ("value" in mathfield) {
+                            mathfield.value = preservedValue;
+                        }
+                    }
+                    catch {
+                        console.warn("MathLive: failed to restore preserved value", restoreError);
+                        mathfield.dataset.preservedLatex = preservedValue;
+                    }
                 }
             }
             if (typeof mathfield.setOptions === "function") {
@@ -275,7 +284,6 @@ export const initMathLive = (context, deps) => {
                     locale: "ja",
                 });
             }
-            configureMathLiveAudio();
             // MathLive doesn't support some LaTeX font commands natively (e.g. \mathds),
             // so we map only those minimal render aliases here.
             try {
@@ -410,41 +418,91 @@ export const initMathLive = (context, deps) => {
           color: var(--text, #eef3fb) !important;
           background-color: transparent !important;
         }
+        .ML__container {
+          --hue: 200;
+          position: relative !important;
+          justify-content: flex-start !important;
+          align-items: flex-start !important;
+          padding-right: 0 !important;
+          height: auto !important;
+          min-height: 100% !important;
+        }
         .ML__field {
           color: var(--text, #eef3fb) !important;
         }
         .ML__placeholder {
-          color: #8fb3d4 !important;
-          opacity: 0.85;
+          color: var(--accent, #5bc2ff) !important;
+          opacity: 0.7;
+          background: rgba(91, 194, 255, 0.06);
+          border-radius: 2px;
         }
         .ML__selection {
-          background: rgba(110, 195, 255, 0.55) !important;
+          background: rgba(91, 194, 255, 0.45) !important;
           outline: none !important;
           outline-offset: 0 !important;
           box-shadow: none !important;
-          color: #f8fbff !important;
+          color: var(--text, #f8fbff) !important;
         }
         .ML__prompt {
           border-radius: 4px !important;
-          background: rgba(110, 195, 255, 0.08) !important;
+          background: rgba(91, 194, 255, 0.08) !important;
         }
         .ML__editablePromptBox {
           outline: none !important;
           box-shadow: none !important;
-          background: rgba(110, 195, 255, 0.16) !important;
+          background: rgba(91, 194, 255, 0.16) !important;
           z-index: 0 !important;
         }
         .ML__focused .ML__focusedPromptBox {
           outline: none !important;
           box-shadow: none !important;
-          background: rgba(110, 195, 255, 0.32) !important;
+          background: rgba(91, 194, 255, 0.32) !important;
           z-index: 1 !important;
         }
         .ML__caret {
           background-color: var(--accent, #5bc2ff) !important;
         }
         .ML__contains-highlight {
-          background: rgba(110, 195, 255, 0.25) !important;
+          background: rgba(91, 194, 255, 0.25) !important;
+        }
+        .ML__tex64-unknown-command {
+          border-color: hsl(205, 20%, 40%) !important;
+          background: hsl(210, 15%, 22%) !important;
+          color: hsl(210, 30%, 82%) !important;
+        }
+        .ML__tex64-unknown-command-args {
+          border-left-color: hsl(205, 18%, 45%) !important;
+        }
+        .ML__tex64-aux-command {
+          border-color: hsl(208, 22%, 44%) !important;
+          background: hsl(210, 18%, 20%) !important;
+          color: hsl(210, 40%, 82%) !important;
+        }
+        .ML__tex64-aux-command-arg {
+          border-left-color: hsl(208, 18%, 42%) !important;
+        }
+        .ML__tex64-aux-command--label,
+        .ML__tex64-aux-command--ref,
+        .ML__tex64-aux-command--eqref,
+        .ML__tex64-aux-command--pageref,
+        .ML__tex64-aux-command--autoref {
+          border-color: hsl(203, 30%, 42%) !important;
+          background: hsl(200, 22%, 20%) !important;
+        }
+        .ML__tex64-aux-command--tag,
+        .ML__tex64-aux-command--tagstar {
+          border-color: hsl(30, 35%, 42%) !important;
+          background: hsl(32, 22%, 20%) !important;
+        }
+        .ML__tex64-aux-command--intertext,
+        .ML__tex64-aux-command--shortintertext {
+          border-color: hsl(149, 22%, 40%) !important;
+          background: hsl(145, 18%, 20%) !important;
+        }
+        .ML__tex64-aux-command--notag,
+        .ML__tex64-aux-command--nonumber {
+          border-color: hsl(4, 30%, 44%) !important;
+          background: hsl(6, 18%, 22%) !important;
         }
         .ML__virtual-keyboard-toggle {
           display: none !important;
@@ -457,14 +515,6 @@ export const initMathLive = (context, deps) => {
         }
         button[part="menu-toggle"] {
           display: none !important;
-        }
-        .ML__container {
-          position: relative !important; /* Anchor for absolute child */
-          justify-content: flex-start !important;
-          align-items: flex-start !important; /* Force top alignment */
-          padding-right: 0 !important;
-          height: auto !important; /* Allow growth */
-          min-height: 100% !important;
         }
         .ML__content {
           flex: 1 1 auto !important;

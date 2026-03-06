@@ -112,6 +112,35 @@ export const initMathCaptureUi = (context, deps = {}) => {
             mathCaptureCropSize.textContent = label;
         }
     };
+    const setCropBusy = (busy, message) => {
+        if (mathCaptureCropApply instanceof HTMLElement) {
+            mathCaptureCropApply.classList.toggle("is-busy", busy);
+            mathCaptureCropApply.textContent = busy ? (message !== null && message !== void 0 ? message : "認識中…") : "確定";
+            mathCaptureCropApply.disabled = busy;
+        }
+        if (mathCaptureCropRetry instanceof HTMLElement) {
+            mathCaptureCropRetry.disabled = busy;
+        }
+        // Disable Esc/Enter during processing
+        if (busy) {
+            window.removeEventListener("keydown", handleKeyDown);
+        }
+        else {
+            window.addEventListener("keydown", handleKeyDown);
+        }
+    };
+    const setCropError = (message) => {
+        const hint = context.dom.mathCaptureCropHint;
+        if (hint instanceof HTMLElement) {
+            hint.textContent = message;
+            hint.classList.add("is-error");
+            // Auto-clear after 6 seconds
+            setTimeout(() => {
+                hint.classList.remove("is-error");
+                hint.textContent = "";
+            }, 6000);
+        }
+    };
     if (mathCaptureWindowSearch instanceof HTMLInputElement) {
         mathCaptureWindowSearch.addEventListener("input", () => {
             searchText = mathCaptureWindowSearch.value.trim();
@@ -168,6 +197,8 @@ export const initMathCaptureUi = (context, deps = {}) => {
         openCropper,
         closeCropper,
         setCropSizeLabel,
+        setCropBusy,
+        setCropError,
         setHandlers: (next) => {
             handlers = { ...handlers, ...next };
         },

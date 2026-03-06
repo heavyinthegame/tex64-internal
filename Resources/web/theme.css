@@ -1163,8 +1163,8 @@ math-field.block-math-field {
 }
 
 .block-math-input-container:focus-within {
-  border-color: var(--input-border);
-  box-shadow: none;
+  border-color: rgba(91, 194, 255, 0.35);
+  box-shadow: 0 0 0 3px rgba(91, 194, 255, 0.08), 0 2px 12px rgba(0, 0, 0, 0.15);
   outline: none;
 }
 

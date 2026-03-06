@@ -15,7 +15,6 @@ export type BlockInputApi = {
   isMathInputFocused: () => boolean;
   attachMathInputListener: () => void;
   attachMathFieldEvents: (mathfield: HTMLElement) => void;
-  updateMathPreview: () => void;
 };
 
 export type BlockInputDeps = {

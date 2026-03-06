@@ -1,6 +1,6 @@
 import { PLACEHOLDER_LATEX, applyScriptToText, applyTemplateToText, getMathFieldSelectionRange, indexToOffset, offsetToIndex, } from "../math-input-utils.js";
 import { readMathFieldValue, setSelectionRange, writeMathFieldValue, } from "../input-ui-math-field.js";
-export const createBlockInsertKeyOps = (runtime, deps) => {
+export const createBlockInsertKeyOps = (runtime) => {
     const resolveInsertValue = (key, isTextArea, options) => {
         const source = isTextArea && key.fallback ? key.fallback : key.latex;
         if (!isTextArea && (options === null || options === void 0 ? void 0 : options.preserveTemplateMarkers)) {
@@ -155,7 +155,6 @@ export const createBlockInsertKeyOps = (runtime, deps) => {
                 const changed = typeof beforeValue === "string" && typeof afterValue === "string" && afterValue !== beforeValue;
                 if (ok !== false || changed) {
                     mathInput.dispatchEvent(new Event("input", { bubbles: true }));
-                    deps.updateMathPreview();
                     return;
                 }
             }
@@ -172,7 +171,6 @@ export const createBlockInsertKeyOps = (runtime, deps) => {
                     throw new Error("insert() completed without content change");
                 }
                 mathInput.dispatchEvent(new Event("input", { bubbles: true }));
-                deps.updateMathPreview();
                 return;
             }
             catch {

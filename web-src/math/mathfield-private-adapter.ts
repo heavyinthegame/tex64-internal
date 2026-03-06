@@ -61,7 +61,7 @@ export const getMathfieldInternalModel = (
   return model && typeof model === "object" ? (model as InternalMathfieldModel) : null;
 };
 
-export const getMathfieldInternalMenu = (
+const getMathfieldInternalMenu = (
   mathfieldApi: any
 ): InternalMathfieldMenu | null => {
   const internal = getInternalMathfield(mathfieldApi) as { menu?: unknown } | null;

@@ -740,7 +740,7 @@
   font-size: 0.82em;
   line-height: 1.2;
   white-space: nowrap;
-  vertical-align: baseline;
+  vertical-align: -0.1em;
 }
 .ML__tex64-unknown-command-name {
   font-weight: 600;
@@ -759,6 +759,8 @@
   padding-left: 0.4ex;
   padding-right: 0.4ex;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  border-radius: 2px;
+  background: var(--_placeholder-background, transparent);
 }
 .ML__tex64-aux-command {
   display: inline-flex;
@@ -774,7 +776,7 @@
   font-size: 0.82em;
   line-height: 1.2;
   white-space: nowrap;
-  vertical-align: baseline;
+  vertical-align: -0.1em;
 }
 .ML__tex64-aux-command-name {
   font-weight: 600;

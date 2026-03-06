@@ -14,10 +14,7 @@ export const initBlockInputUi = (context, deps) => {
     });
     const mathValueOps = createMathValueOps(runtime);
     const inputOps = createBlockMathInputElementOps(runtime, mathValueOps);
-    const updateMathPreview = () => {
-        // preview disabled
-    };
-    const insertKeyOps = createBlockInsertKeyOps(runtime, { updateMathPreview });
+    const insertKeyOps = createBlockInsertKeyOps(runtime);
     const mathfieldEventsOps = createBlockMathfieldEventsOps(runtime, {
         insertMathKey: insertKeyOps.insertMathKey,
     });
@@ -59,7 +56,6 @@ export const initBlockInputUi = (context, deps) => {
     const setActiveBlockType = (type) => {
         runtime.state.mathKeyboardVisibilityHandler();
         runtime.state.activeBlockType = type;
-        updateMathPreview();
     };
     return {
         getActiveBlockType: () => runtime.state.activeBlockType,
@@ -75,6 +71,5 @@ export const initBlockInputUi = (context, deps) => {
         isMathInputFocused: inputOps.isMathInputFocused,
         attachMathInputListener: inputOps.attachMathInputListener,
         attachMathFieldEvents: mathfieldEventsOps.attachMathFieldEvents,
-        updateMathPreview,
     };
 };

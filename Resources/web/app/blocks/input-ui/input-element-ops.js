@@ -172,12 +172,6 @@ export const createBlockMathInputElementOps = (runtime, mathValueOps) => {
                 event.stopPropagation();
                 (_a = runtime.state.mathWysiwygApi) === null || _a === void 0 ? void 0 : _a.setComposing(false);
             });
-            textArea.addEventListener("click", () => {
-                // Keep fallback suggestions in sync with caret movement.
-            });
-            textArea.addEventListener("keyup", () => {
-                // Auto updates are handled by math-wysiwyg listeners attached above.
-            });
         }
     };
     return {

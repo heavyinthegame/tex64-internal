@@ -171,7 +171,7 @@ export const createBlockMathfieldEventsOps = (runtime: BlockInputRuntime, deps: 
         event.preventDefault();
         event.stopImmediatePropagation();
         if (!tryWrapSelectionWithFraction()) {
-          deps.insertMathKey({ label: "/", latex: "/" });
+          deps.insertMathKey({ label: "frac", latex: "\\frac{#?}{#?}" });
           mathfield.dispatchEvent(new Event("input", { bubbles: true }));
         }
         closeWysiwygSuggestions();
@@ -282,6 +282,25 @@ export const createBlockMathfieldEventsOps = (runtime: BlockInputRuntime, deps: 
       if (event.defaultPrevented) {
         return;
       }
+      if (
+        !event.metaKey &&
+        !event.altKey &&
+        event.ctrlKey &&
+        event.key === "."
+      ) {
+        const opened = Boolean(runtime.state.mathWysiwygApi?.openExplicitSuggestions());
+        const fallbackOpened = opened ? false : matrixOps.openMatrixOpsPalette();
+        if (opened || fallbackOpened) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+        }
+        return;
+      }
+      if (event.key === "Escape") {
+        closeWysiwygSuggestions();
+        mathfield.blur();
+        return;
+      }
     };
 
     mathfield.addEventListener("keydown", handleMathFieldKeydown, { capture: true });
@@ -306,32 +325,6 @@ export const createBlockMathfieldEventsOps = (runtime: BlockInputRuntime, deps: 
       );
     }
 
-    mathfield.addEventListener("keydown", (e: KeyboardEvent) => {
-      if (runtime.state.mathWysiwygApi?.handleKeydown(e)) {
-        return;
-      }
-      if (blockDirectLatexCommandInput(runtime, e)) {
-        return;
-      }
-      if (e.isComposing) {
-        return;
-      }
-
-      if (!e.metaKey && !e.altKey && e.ctrlKey && e.key === ".") {
-        const opened = Boolean(runtime.state.mathWysiwygApi?.openExplicitSuggestions());
-        const fallbackOpened = opened ? false : matrixOps.openMatrixOpsPalette();
-        if (opened || fallbackOpened) {
-          e.preventDefault();
-        }
-        return;
-      }
-      if (e.key === "Escape") {
-        closeWysiwygSuggestions();
-        mathfield.blur();
-        return;
-      }
-    });
-
     mathfield.addEventListener("focus", () => {
       runtime.state.mathKeyboardVisibilityHandler();
       mathfield.classList.add("is-focused");
@@ -349,14 +342,6 @@ export const createBlockMathfieldEventsOps = (runtime: BlockInputRuntime, deps: 
     mathfield.addEventListener("compositionend", (e) => {
       e.stopPropagation();
       runtime.state.mathWysiwygApi?.setComposing(false);
-    });
-
-    mathfield.addEventListener("pointerdown", () => {
-      // Keep suggestions in sync with caret movement.
-    });
-
-    mathfield.addEventListener("selection-change", () => {
-      // Handled by the MathWysiwyg auto-suggest listener.
     });
 
     mathfield.addEventListener("move-out", (event) => {
