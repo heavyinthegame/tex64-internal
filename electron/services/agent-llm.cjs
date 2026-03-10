@@ -4,7 +4,7 @@ const assertFetch = () => {
   }
 };
 
-const DEFAULT_GEMINI_MODEL = "gemini-3-flash-preview";
+const DEFAULT_GEMINI_MODEL = "gemini-3.1-pro-preview";
 
 const normalizeModelName = (value) => {
   if (typeof value !== "string") {

@@ -38,7 +38,7 @@ const TOOL_STATUS_LABELS = {
 const MAX_USER_INLINE_DATA_BYTES = 5 * 1024 * 1024;
 const MAX_USER_INLINE_DATA_TOTAL_BYTES = 8 * 1024 * 1024;
 const MAX_APPLY_UNDO_ENTRIES = 200;
-const DEFAULT_CHAT_MODEL = "gemini-3-flash-preview";
+const DEFAULT_CHAT_MODEL = "gemini-3.1-pro-preview";
 const DEFAULT_MAX_OUTPUT_TOKENS = 16384;
 const REQUEST_HISTORY_MAX_MESSAGES = 48;
 const REQUEST_HISTORY_MAX_CHARS = 128_000;
@@ -701,7 +701,7 @@ const clampTemperature = (value, fallback = 0.2) => {
 
 const deriveTurnTemperature = (userText, routing, settings) => {
   const text = typeof userText === "string" ? userText.trim() : "";
-  const base = clampTemperature(settings?.temperature, 0.2);
+  const base = clampTemperature(settings?.temperature, 1.0);
   if (!text) {
     return { temperature: base, profile: "default" };
   }

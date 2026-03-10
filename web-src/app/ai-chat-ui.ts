@@ -593,7 +593,7 @@ export const initAiChatUi = (context: AppContext, deps: AiChatDeps): AiChatApi =
 
   const syncModelSelect = (model?: string) => {
     if (!(aiModelSelect instanceof HTMLSelectElement)) return;
-    const value = typeof model === "string" && model ? model : "gemini-3-flash-preview";
+    const value = typeof model === "string" && model ? model : "gemini-3.1-pro-preview";
     if (aiModelSelect.value !== value) {
       aiModelSelect.value = value;
     }

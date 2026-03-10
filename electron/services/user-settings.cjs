@@ -5,9 +5,9 @@ const MAX_RECENT_PROJECTS = 10;
 
 const DEFAULT_SETTINGS = {
   agent: {
-    model: "gemini-3-flash-preview",
+    model: "gemini-3.1-pro-preview",
     inlineModel: "gemini-2.5-flash-lite",
-    temperature: 0.2,
+    temperature: 1.0,
     maxOutputTokens: 16384,
     maxIterations: 500,
     stream: true,

@@ -2,19 +2,13 @@ const fsp = require("fs/promises");
 const path = require("path");
 const { AGENT_TOOL_DECLARATIONS } = require("./agent-tools.cjs");
 const { requestGemini } = require("./agent-llm.cjs");
-const { handleReadFiles } = require("./agent-tools-file.cjs");
-const { normalizePath } = require("./agent-policy.cjs");
 const { normalizeUserMessageParts } = require("./agent-message-parts.cjs");
 const {
-  CAPABILITY_QUESTION_PATTERN, DEFAULT_PREFETCH_FILES_LIMIT, GREETING_ONLY_PATTERN,
-  clipText, digestJson, deriveTurnRouting, deriveTurnTemperature, extractMentionedPaths,
-  extractTextFromParts, findLastTopicResetIndex, normalizeWorkspaceRelativePath,
-  resolvePrefetchMaxChars, summarizeToolArgs, summarizeToolResult, TOOL_STATUS_LABELS,
+  clipText, digestJson,
+  extractTextFromParts, findLastTopicResetIndex,
+  summarizeToolArgs, summarizeToolResult, TOOL_STATUS_LABELS,
 } = require("./agent-core-utils.cjs");
 const {
-  buildCapabilityQuestionSystemPrompt,
-  buildSmalltalkSystemPrompt,
-  buildStandaloneQuestionSystemPrompt,
   buildSystemPrompt,
   resolveResponseModel,
 } = require("./agent-prompt-utils.cjs");
@@ -65,152 +59,32 @@ const runAgentConversation = async (service, { message, parts, context, conversa
   service.markSessionDirty(targetConversationId);
 
   const userText = extractTextFromParts(userParts);
-  const referencedFileSnapshots = [];
-  const referencedFileErrors = [];
-  const routing = deriveTurnRouting(userText, conversation);
-  const rootFileInfo = routing.useWorkspaceContext
-    ? await service.workspace.rootInfo().catch(() => null)
-    : null;
+  const rootFileInfo = await service.workspace.rootInfo().catch(() => null);
 
-  const projectInstructions = routing.useWorkspaceContext
-    ? await fsp
-        .readFile(path.join(rootPath, ".tex64", "agent-instructions.md"), "utf8")
-        .catch(() => null)
-    : null;
+  const projectInstructions = await fsp
+    .readFile(path.join(rootPath, ".tex64", "agent-instructions.md"), "utf8")
+    .catch(() => null);
 
-  const agentMemory = routing.useWorkspaceContext
-    ? await fsp
-        .readFile(path.join(rootPath, ".tex64", "agent-memory.md"), "utf8")
-        .catch(() => null)
-    : null;
+  const agentMemory = await fsp
+    .readFile(path.join(rootPath, ".tex64", "agent-memory.md"), "utf8")
+    .catch(() => null);
 
-  let prefetchPaths = [];
-  if (routing.useWorkspaceContext) {
-    const explicitPaths = Array.isArray(context?.explicitContextPaths)
-      ? context.explicitContextPaths.map((entry) => normalizePath(entry)).filter(Boolean)
-      : [];
-    const mentionedPaths = extractMentionedPaths(userText);
-    const existingSnapshots = new Set();
-    const hasActiveSnapshot =
-      typeof context?.activeFilePath === "string" &&
-      typeof context?.activeFileContent === "string" &&
-      context.activeFilePath.trim().length > 0;
-    if (hasActiveSnapshot) {
-      const normalized = normalizeWorkspaceRelativePath(rootPath, context.activeFilePath);
-      if (normalized) {
-        existingSnapshots.add(normalized);
-      }
-    }
-    const openSnapshots = Array.isArray(context?.openFileSnapshots)
-      ? context.openFileSnapshots
-      : [];
-    openSnapshots.forEach((snapshot) => {
-      if (snapshot && typeof snapshot.path === "string" && typeof snapshot.content === "string") {
-        const normalized = normalizeWorkspaceRelativePath(rootPath, snapshot.path);
-        if (normalized) {
-          existingSnapshots.add(normalized);
-        }
-      }
-    });
-    const prefetchCandidates = [];
-    const pushPrefetchPath = (value) => {
-      const normalized = normalizeWorkspaceRelativePath(rootPath, value);
-      if (!normalized) {
-        return;
-      }
-      if (existingSnapshots.has(normalized)) {
-        return;
-      }
-      if (prefetchCandidates.includes(normalized)) {
-        return;
-      }
-      prefetchCandidates.push(normalized);
-    };
-    explicitPaths.forEach(pushPrefetchPath);
-    mentionedPaths.forEach(pushPrefetchPath);
-
-    // If the UI already provided an active-file snapshot and the user didn't reference
-    // other files, avoid prefetching extra files to keep context small and reduce bias.
-    if (!hasActiveSnapshot && prefetchCandidates.length === 0) {
-      if (typeof context?.activeFilePath === "string" && context.activeFilePath.trim()) {
-        pushPrefetchPath(context.activeFilePath);
-      }
-      if (prefetchCandidates.length === 0 && rootFileInfo?.path) {
-        pushPrefetchPath(rootFileInfo.path);
-      }
-      if (prefetchCandidates.length === 0) {
-        pushPrefetchPath("main.tex");
-      }
-    }
-
-    const maxPrefetchFiles = Number.isFinite(policy?.maxReadFiles)
-      ? Math.max(0, Math.min(DEFAULT_PREFETCH_FILES_LIMIT, policy.maxReadFiles))
-      : DEFAULT_PREFETCH_FILES_LIMIT;
-    prefetchPaths =
-      maxPrefetchFiles > 0 ? prefetchCandidates.slice(0, maxPrefetchFiles) : [];
-    if (prefetchPaths.length > 0) {
-      const maxChars = resolvePrefetchMaxChars(settings);
-      const prefetchResult = await handleReadFiles(
-        service,
-        { paths: prefetchPaths },
-        policy,
-        targetConversationId
-      );
-      const files =
-        prefetchResult?.files && typeof prefetchResult.files === "object"
-          ? prefetchResult.files
-          : {};
-      prefetchPaths.forEach((targetPath) => {
-        const entry = files[targetPath] ?? files[targetPath.replace(/^\.\//, "")] ?? null;
-        if (!entry || typeof entry !== "object") {
-          referencedFileErrors.push({ path: targetPath, error: "読み取り失敗" });
-          return;
-        }
-        if (typeof entry.error === "string" && entry.error) {
-          referencedFileErrors.push({ path: targetPath, error: entry.error });
-          return;
-        }
-        const rawContent = typeof entry.content === "string" ? entry.content : "";
-        const fullLength = rawContent.length;
-        let content = rawContent;
-        let partial = Boolean(entry.partial);
-        if (Number.isFinite(maxChars) && fullLength > maxChars) {
-          content = rawContent.slice(0, maxChars);
-          partial = true;
-        }
-        referencedFileSnapshots.push({
-          path: targetPath,
-          content,
-          partial,
-          contentLength: fullLength,
-          source: typeof entry.source === "string" ? entry.source : "disk",
-        });
-      });
-    }
-  }
-
-  const systemPrompt = routing.pureCapabilityQuestion
-    ? buildCapabilityQuestionSystemPrompt({ workspaceContext: routing.useWorkspaceContext })
-    : routing.useWorkspaceContext
-    ? buildSystemPrompt(context, rootPath, policy, options, {
-        rootFileInfo,
-        scratchpad: service.scratchpadByConversation.get(targetConversationId) ?? "",
-        referencedFileSnapshots,
-        referencedFileErrors,
-        projectInstructions,
-        agentMemory,
-      })
-    : routing.mode === "smalltalk"
-    ? buildSmalltalkSystemPrompt()
-    : buildStandaloneQuestionSystemPrompt();
+  const systemPrompt = buildSystemPrompt(context, rootPath, policy, options, {
+    rootFileInfo,
+    scratchpad: service.scratchpadByConversation.get(targetConversationId) ?? "",
+    projectInstructions,
+    agentMemory,
+  });
   const functionDeclarations =
     options.allowRunCommand === true
       ? AGENT_TOOL_DECLARATIONS
       : AGENT_TOOL_DECLARATIONS.filter((entry) => entry?.name !== "run_command");
-  const tools = routing.disableTools ? [] : [{ functionDeclarations }];
-  const temperatureInfo = deriveTurnTemperature(userText, routing, settings);
+  const tools = [{ functionDeclarations }];
+  const baseTemperature = typeof settings?.temperature === "number" && Number.isFinite(settings.temperature)
+    ? Math.min(2, Math.max(0, settings.temperature))
+    : 1.0;
   const generationConfig = {
-    temperature: temperatureInfo.temperature,
+    temperature: baseTemperature,
     maxOutputTokens,
   };
 
@@ -232,13 +106,10 @@ const runAgentConversation = async (service, { message, parts, context, conversa
       workspaceRoot: rootPath,
       model: chatModel,
       resolvedProxyUrl,
-      toolCount: routing.disableTools ? 0 : functionDeclarations.length,
+      toolCount: functionDeclarations.length,
       systemPromptChars: systemPrompt.length,
       options,
-      temperature: {
-        value: temperatureInfo.temperature,
-        profile: temperatureInfo.profile,
-      },
+      temperature: baseTemperature,
       policy: {
         maxFileBytes: policy?.maxFileBytes ?? null,
         maxReadFiles: policy?.maxReadFiles ?? null,
@@ -250,9 +121,6 @@ const runAgentConversation = async (service, { message, parts, context, conversa
         inlineDataCount: userInlineParts.length,
         inlineBytesApprox,
       },
-      prefetchPaths,
-      referencedFileSnapshots: referencedFileSnapshots.length,
-      referencedFileErrors: referencedFileErrors.length,
     },
     targetConversationId,
     run.token
@@ -282,7 +150,7 @@ const runAgentConversation = async (service, { message, parts, context, conversa
     });
   };
 
-  const maxIterations = routing.disableTools ? 1 : options.maxIterations;
+  const maxIterations = options.maxIterations;
   const declaredToolNames = new Set(
     Array.isArray(functionDeclarations)
       ? functionDeclarations
@@ -290,45 +158,7 @@ const runAgentConversation = async (service, { message, parts, context, conversa
           .filter(Boolean)
       : []
   );
-  const allowedEditFunctionNames = [
-    "list_files",
-    "read_file",
-    "read_files",
-    "search_files",
-    "search_web",
-    "read_url",
-    "open_terminal_session",
-    "execute_bash_command",
-    "send_terminal_input",
-    "read_terminal_output",
-    "kill_terminal",
-    "get_project_structure",
-    "get_index",
-    "read_scratchpad",
-    "write_scratchpad",
-    "rename_latex_symbol",
-    "get_app_settings",
-    "set_app_settings",
-    "write_file",
-    "patch_file",
-    "replace_lines",
-    "delete_file",
-    "rename_file",
-    "create_directory",
-    "propose_write",
-    "propose_patch",
-    "propose_delete",
-    "propose_rename",
-    "propose_create_directory",
-  ].filter((name) => declaredToolNames.has(name));
-  const toolConfigNone = { functionCallingConfig: { mode: "NONE" } };
   const toolConfigAuto = { functionCallingConfig: { mode: "AUTO" } };
-  const toolConfigAnyEdit = {
-    functionCallingConfig: { mode: "ANY", allowedFunctionNames: allowedEditFunctionNames },
-  };
-  const toolConfigAnyBuild = {
-    functionCallingConfig: { mode: "ANY", allowedFunctionNames: ["run_build"] },
-  };
   const appliedEditToolNames = new Set([
     "rename_latex_symbol",
     "write_file",
@@ -410,25 +240,9 @@ const runAgentConversation = async (service, { message, parts, context, conversa
   const buildRequestConversationForTurn = () => {
     const source = Array.isArray(conversation) ? conversation : [];
     if (source.length === 0) return [];
-    if (routing.mode === "smalltalk") {
-      return [source[source.length - 1]];
-    }
     const resetIndex = findLastTopicResetIndex(source);
     const afterReset = resetIndex >= 0 ? source.slice(resetIndex + 1) : source;
-    if (routing.mode === "standalone") {
-      const filtered = afterReset.filter((entry) => entry && entry.role !== "tool");
-      return filtered.length > 8 ? filtered.slice(filtered.length - 8) : filtered;
-    }
-    // workspace: drop user-only greetings/capability checks to reduce accidental carryover.
-    return afterReset.filter((entry) => {
-      if (!entry || typeof entry !== "object") return false;
-      if (entry.role !== "user") return true;
-      const text = extractTextFromParts(entry.parts).trim();
-      if (!text) return true;
-      if (GREETING_ONLY_PATTERN.test(text)) return false;
-      if (CAPABILITY_QUESTION_PATTERN.test(text)) return false;
-      return true;
-    });
+    return afterReset.filter((entry) => entry && typeof entry === "object");
   };
   const READ_ONLY_TOOL_NAMES = new Set([
     "list_files",
@@ -608,13 +422,7 @@ const runAgentConversation = async (service, { message, parts, context, conversa
             contents: requestContents,
             systemInstruction: { parts: [{ text: systemPrompt }] },
             tools,
-            toolConfig: routing.disableTools
-              ? toolConfigNone
-              : i === 0 && routing.forceToolCall === "build"
-              ? toolConfigAnyBuild
-              : i === 0 && routing.forceToolCall === "edit"
-              ? toolConfigAnyEdit
-              : toolConfigAuto,
+            toolConfig: toolConfigAuto,
             generationConfig,
           },
           run.controller.signal,
@@ -703,7 +511,6 @@ const runAgentConversation = async (service, { message, parts, context, conversa
             return;
           }
           if (
-            routing.mode === "workspace" &&
             options.autoBuild === true &&
             canRunBuild &&
             editedSinceLastBuild &&
@@ -716,7 +523,6 @@ const runAgentConversation = async (service, { message, parts, context, conversa
             continue;
           }
           if (
-            routing.mode === "workspace" &&
             canRunBuild &&
             lastBuildStatus === "failure" &&
             recoveryPromptCount < maxRecoveryPromptCount

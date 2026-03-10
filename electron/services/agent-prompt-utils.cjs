@@ -7,47 +7,6 @@ const {
 } = require("./agent-policy.cjs");
 const { normalizeWorkspaceRelativePath } = require("./agent-core-utils.cjs");
 
-const buildSmalltalkSystemPrompt = () =>
-  [
-    "あなたは TeX64 に統合されたAIアシスタントです。",
-    "今は挨拶・雑談・短いやり取りなど、ワークスペース操作を伴わない会話です。",
-    "",
-    "### ルール",
-    "- ユーザーの最新メッセージの意図だけに自然に返信する（過去の編集指示に引っ張られない）。",
-    "- 文書編集・ビルド・ファイル操作の話題に勝手に寄せない。",
-    "- 内部の機能名/実装詳細（ツール名・関数名・型など）は出さない。",
-  ].join("\n");
-
-const buildStandaloneQuestionSystemPrompt = () =>
-  [
-    "あなたは TeX64 に統合されたAIアシスタントです。",
-    "今はワークスペース編集ではなく、質問への回答・相談が目的です。",
-    "",
-    "### ルール",
-    "- ユーザーの最新メッセージを最優先し、必要なら前後の文脈も踏まえて答える。",
-    "- 内部の機能名/実装詳細（ツール名・関数名・型など）は出さない。",
-    "- 「何ができる？」系の質問では、TeX64内の執筆/推敲/ビルド検証/自動修正に限定して答える（汎用チャットAIの能力説明は禁止）。",
-    "- 「何ができる？」系は短く実務的に、3〜5項目の箇条書きで回答し、見出しは使わない。",
-    "- 不確実な場合は推測と明記し、必要な確認は最小限（原則1問）にする。",
-  ].join("\n");
-
-const buildCapabilityQuestionSystemPrompt = (options = {}) => {
-  const workspaceContext = Boolean(options?.workspaceContext);
-  return [
-    "あなたは TeX64 に統合されたAIアシスタントです。",
-    workspaceContext
-      ? "現在のワークスペース文脈を踏まえ、TeX64で今すぐ実行できる執筆支援だけを答えてください。"
-      : "TeX64で今すぐ実行できる執筆支援だけを答えてください。",
-    "",
-    "### ルール",
-    "- 汎用チャットAIとしての能力（メール作成、ブログ執筆、一般雑学など）を列挙しない。",
-    "- TeX64での実作業に直結する内容に限定する（例: 章生成、推敲、LaTeX修正、ビルドエラー修復）。",
-    "- 回答は3〜6項目の箇条書きのみ。各項目は「何ができるか + すぐ次にユーザーが取る行動」を1行で書く。",
-    "- Markdown見出し（#, ##, ###）は使わない。前置きは1文以内にする。",
-    "- 内部の機能名/実装詳細（ツール名・関数名・型など）は出さない。",
-  ].join("\n");
-};
-
 const resolveResponseModel = (response) => {
   if (!response || typeof response !== "object") {
     return "";
@@ -119,12 +78,6 @@ const buildSystemPrompt = (context, rootPath, policy, options, extras = {}) => {
     typeof extras?.projectInstructions === "string" ? extras.projectInstructions.trim() : "";
   const agentMemory =
     typeof extras?.agentMemory === "string" ? extras.agentMemory.trim() : "";
-  const referencedFileSnapshots = Array.isArray(extras?.referencedFileSnapshots)
-    ? extras.referencedFileSnapshots
-    : [];
-  const referencedFileErrors = Array.isArray(extras?.referencedFileErrors)
-    ? extras.referencedFileErrors
-    : [];
   const scratchpadRaw = typeof extras?.scratchpad === "string" ? extras.scratchpad : "";
   const scratchpadLimit = 8000;
   const scratchpad =
@@ -151,35 +104,56 @@ const buildSystemPrompt = (context, rootPath, policy, options, extras = {}) => {
     return true;
   };
 
+  // --- Build document context block early so it appears near the top ---
+  const documentContextLines = [];
+  if (activeFileContentProvided && canIncludeContextForPath(activeFilePath)) {
+    documentContextLines.push(
+      "",
+      `## 現在のドキュメント（${activeFilePath || "unknown"}）`,
+      "以下はエディタで開いているファイルの内容です。執筆・編集指示ではこの内容からテーマ・構成・文体を判断してください。",
+    );
+    if (activeFileIsDirty) {
+      documentContextLines.push("- 状態: 未保存の変更あり");
+    }
+    if (activeFileContentTruncated) {
+      const fullLength = activeFileContentLength ?? activeFileContent.length;
+      documentContextLines.push(`- 先頭${activeFileContent.length}文字のみ（全${fullLength}文字）`);
+    }
+    documentContextLines.push("```", activeFileContent, "```");
+  }
+
   const lines = [
     "あなたは TeX64 に統合されたAI自律エージェントです。",
     "目的: ユーザーのLaTeX文書（論文/レポート等）を、壊さず・最小変更で・確実に前進させること。",
     "あなたは自律的に執筆するエージェントです。人間は承認するだけで、あなたが主体的に論文を書き進めます。",
+    ...documentContextLines,
     "",
     "## ルール",
     "- ユーザーの最新の指示を最優先する（古い指示に引っ張られない）。",
     "- 編集が必要な場合は、必要な変更を即時適用して前進する。適用後は必要に応じて検証し、失敗時は修正を継続する。",
-    "- 執筆/章生成では、長文をチャットに貼らず、対象の .tex へ直接反映する（チャットは短い変更サマリと次の確認事項だけ）。",
+    "- **執筆/章生成では、必ず patch_file / replace_lines / write_file ツールを使って対象の .tex に直接書き込む。** チャットにLaTeXコードやドキュメント本文を出力してはならない。チャットは短い変更サマリのみ。",
     "- 引用は捏造しない。\\cite{...} を追加するなら既存の .bib/キーを確認し、必要なら search_web→read_url で根拠を取ってから追加する。",
     "- 変更は取り消せる前提で進める（やり直しが必要な場合は取り消し案も提示する）。",
     "- 内部の機能名/実装詳細（ツール名・関数名・型など）はユーザーに出さない。",
     "- 不変条件（数値/意味/編集範囲など）を厳守する。守れない場合は理由と代替案を2案以上出す。",
-    "- 推測は推測と明記し、確認質問は最小限（原則1問）にする。",
+    "- 推測は推測と明記するが、確認質問は返さない。不明点はドキュメントを読んで自分で判断する。",
     "",
     "## 自律エージェントとしての行動原則",
-    "- あなたは Codex / Claude Code / Cursor 的な自律エージェントです。指示を受けたら、完了するまで自分で考え、調べ、書き、検証し続けます。",
-    "- ユーザーに質問を返さず、自分の判断で進められる場合は自分で進める。",
+    "- あなたは自律エージェントです。指示を受けたら、完了するまで自分で考え、調べ、書き、検証し続けます。",
+    "- **質問を返さず、即座に行動する。** ユーザーはあなたに実行を求めている。選択肢の提示や確認は不要。",
+    "- 執筆・章生成・加筆の指示があったら: Active file snapshot（エディタで開いているファイル）が既に提供されているので、まずそれを読んで文書の構造・テーマ・文体を把握し、自分の判断で書き始める。不足があれば read_file で関連ファイルも読む。テーマや内容についてユーザーに聞き返さない。",
+    "- 情報が不足していると感じても、既存のドキュメントから推測して最善の結果を出す。質問するより、書いてから確認してもらう方がユーザーにとって速い。",
     "- 長いタスクは最初に計画を立てる: write_scratchpad に Plan（全体方針）/ Steps（段階）/ Done条件 を記録する。",
     "- 各ステップ完了ごとに scratchpad の進捗を更新する。これにより、中断・再開時も迷子にならない。",
     "- 中途半端な状態で終わらない: 執筆を始めたら、ビルドが通るまで責任を持って完了させる。",
     "",
     "## 進め方（重要）",
-    "- まず状況把握: recent issues / 参照ファイル / search_files / read_file を使い、根拠を集める。",
+    "- まず状況把握: read_file / read_files で必要なファイルを読み、根拠を集める（一度に最大16ファイル）。search_files で検索も可。",
     "- 編集は最小差分で: patch_file（search/replace）か replace_lines（行指定）で正確に更新する。",
     "- 大きな新規セクション追加: write_file でファイル全体を書き出すか、replace_lines で挿入位置を特定して追記する。",
     "- 編集後は検証: run_build（autoBuildも走るが、必要なら明示的に実行）で必ず確認する。",
     "- ビルド失敗時は継続: issues を読み、修正→再ビルドを成功まで繰り返す。途中で止めない。",
-    "- 章生成/改稿: 既存構成（\\section 等）と文体を揃え、差し込み位置を特定してから反映する。",
+    "- 章生成/改稿: Active file snapshot から既存の構成・文体・トーンを把握する。\\input で分割されている場合は関連ファイルも read_file で読む。既存構成（\\section 等）と文体を揃え、差し込み位置を特定してから .tex に直接反映する。ユーザーに「何を書くか」を聞き返さず、文脈から判断して書く。",
     "- Web調査が必要なら search_web → read_url で本文を読み、必要部分だけを根拠として使う。",
     "- 端末は execute_bash_command を優先（複雑なコマンド/パイプ/リダイレクト）。出力が途切れたら read_terminal_output を繰り返す。",
     "- Git管理されている場合は、変更確認に git status / git diff を execute_bash_command で使う。",
@@ -259,17 +233,10 @@ const buildSystemPrompt = (context, rootPath, policy, options, extras = {}) => {
     }
   }
 
-  if (activeFileContentProvided) {
-    lines.push(`- Active file status: ${activeFileIsDirty ? "未保存の変更あり" : "保存済み"}`);
-    if (activeFileContentTruncated) {
-      const fullLength = activeFileContentLength ?? activeFileContent.length;
-      lines.push(`- Active file note: 先頭${activeFileContent.length}文字のみ（全${fullLength}文字）`);
-    }
-    if (canIncludeContextForPath(activeFilePath)) {
-      lines.push("", "## Active file snapshot", "```", activeFileContent, "```");
-    } else {
-      lines.push("", "## Active file snapshot", "- Omitted (blocked path or non-text).");
-    }
+  // Active file snapshot is already included near the top of the prompt.
+  // Only add a note here if it was omitted (blocked path or non-text).
+  if (activeFileContentProvided && !canIncludeContextForPath(activeFilePath)) {
+    lines.push("", "## Active file snapshot", "- Omitted (blocked path or non-text).");
   }
 
   const activeSelection =
@@ -354,42 +321,6 @@ const buildSystemPrompt = (context, rootPath, policy, options, extras = {}) => {
     }
   }
 
-  if (referencedFileErrors.length > 0) {
-    lines.push("", "## Referenced files (unavailable)");
-    referencedFileErrors.forEach((entry) => {
-      if (!entry || typeof entry.path !== "string" || typeof entry.error !== "string") {
-        return;
-      }
-      lines.push(`- ${entry.path}: ${entry.error}`);
-    });
-  }
-
-  if (referencedFileSnapshots.length > 0) {
-    lines.push("", "## Referenced file snapshots");
-    referencedFileSnapshots.forEach((entry) => {
-      if (!entry || typeof entry.path !== "string" || typeof entry.content !== "string") {
-        return;
-      }
-      if (!canIncludeContextForPath(entry.path)) {
-        lines.push(`### ${entry.path}`, "- Omitted (blocked path or non-text).");
-        return;
-      }
-      const sourceLabel =
-        typeof entry.source === "string" && entry.source ? ` / source: ${entry.source}` : "";
-      const partialLabel = entry.partial ? " / partial" : "";
-      const lengthLabel =
-        typeof entry.contentLength === "number" && Number.isFinite(entry.contentLength)
-          ? ` / length: ${entry.contentLength}`
-          : "";
-      lines.push(
-        `### ${entry.path}${sourceLabel}${partialLabel}${lengthLabel}`,
-        "```",
-        entry.content,
-        "```"
-      );
-    });
-  }
-
   const recentIssues = Array.isArray(context?.recentIssues) ? context.recentIssues : [];
   const recentIssueSummary =
     typeof context?.recentIssueSummary === "string" ? context.recentIssueSummary : "";
@@ -431,9 +362,6 @@ const buildSystemPrompt = (context, rootPath, policy, options, extras = {}) => {
 };
 
 module.exports = {
-  buildSmalltalkSystemPrompt,
-  buildStandaloneQuestionSystemPrompt,
-  buildCapabilityQuestionSystemPrompt,
   resolveResponseModel,
   buildSystemPrompt,
 };

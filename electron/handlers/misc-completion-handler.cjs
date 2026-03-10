@@ -54,7 +54,7 @@ const createApiGhostCompletionHandler = ({
     const chatModel =
       typeof agentSettings?.model === "string" && agentSettings.model.trim()
         ? agentSettings.model.trim()
-        : "gemini-3-flash-preview";
+        : "gemini-3.1-pro-preview";
     const inlineModel =
       typeof agentSettings?.inlineModel === "string" && agentSettings.inlineModel.trim()
         ? agentSettings.inlineModel.trim()

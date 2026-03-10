@@ -85,7 +85,7 @@ const handler = async (req, res) => {
   const modelFromEnv = typeof process.env.GEMINI_MODEL === "string"
     ? process.env.GEMINI_MODEL.trim()
     : "";
-  const model = normalizeModelName(modelFromRequest) || normalizeModelName(modelFromEnv) || "gemini-3-flash-preview";
+  const model = normalizeModelName(modelFromRequest) || normalizeModelName(modelFromEnv) || "gemini-3.1-pro-preview";
 
   const acceptHeader = typeof req.headers?.accept === "string" ? req.headers.accept : "";
   const wantsStream = Boolean(stream) || acceptHeader.includes("text/event-stream");

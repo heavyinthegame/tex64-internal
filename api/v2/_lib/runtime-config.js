@@ -193,7 +193,7 @@ export const getRuntimeConfig = () => {
     geminiDefaultModel:
       typeof process.env.GEMINI_MODEL === "string" && process.env.GEMINI_MODEL.trim()
         ? process.env.GEMINI_MODEL.trim()
-        : "gemini-3-flash-preview",
+        : "gemini-3.1-pro-preview",
     geminiEndpoint: sanitizeHttpUrl(
       process.env.TEX64_GEMINI_ENDPOINT,
       "https://generativelanguage.googleapis.com/v1beta/models"

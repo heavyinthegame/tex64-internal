@@ -98,7 +98,7 @@ export const invokeGemini = async (requestPayload, options = {}) => {
   const model =
     normalizeModelName(options.model) ||
     normalizeModelName(options.geminiDefaultModel) ||
-    "gemini-3-flash-preview";
+    "gemini-3.1-pro-preview";
   const upstreamUrl = `${endpointBase}/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(
     apiKey
   )}`;
