@@ -54,7 +54,28 @@ const runAgentConversation = async (service, { message, parts, context, conversa
   }
 
   const conversation = service.buildConversation(targetConversationId);
-  conversation.push({ role: "user", parts: userParts });
+  // Inject active file content into the first user message so Gemini sees it
+  // in the conversation (not just system prompt). Gemini weights user-turn
+  // content more heavily than system instructions, so this prevents the model
+  // from ignoring the open document and asking clarifying questions instead.
+  let enrichedUserParts = userParts;
+  if (
+    conversation.length === 0 &&
+    typeof context?.activeFileContent === "string" &&
+    context.activeFileContent.trim()
+  ) {
+    const pathLabel =
+      typeof context?.activeFilePath === "string" && context.activeFilePath
+        ? context.activeFilePath
+        : "unknown";
+    const truncNote =
+      context?.activeFileContentTruncated && typeof context?.activeFileContentLength === "number"
+        ? `（先頭${context.activeFileContent.length}文字/全${context.activeFileContentLength}文字）`
+        : "";
+    const fileCtxText = `[エディタで開いているファイル: ${pathLabel}${truncNote}]\n\`\`\`\n${context.activeFileContent}\n\`\`\`\n`;
+    enrichedUserParts = [{ text: fileCtxText }, ...(Array.isArray(userParts) ? userParts : [userParts])];
+  }
+  conversation.push({ role: "user", parts: enrichedUserParts });
   service.workspaceRootByConversation.set(targetConversationId, rootPath);
   service.markSessionDirty(targetConversationId);
 
