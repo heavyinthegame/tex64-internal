@@ -69,7 +69,7 @@ export const MANUAL_TRIGGERS_PART_3: WysiwygManualTrigger[] = [
   {
     trigger: "impliedby",
     priority: 85,
-    pack: "cs",
+
     candidates: [{ latex: "\\Leftarrow", label: "⇐", displayLatex: "\\Leftarrow" }],
   },
   {
@@ -198,7 +198,7 @@ export const MANUAL_TRIGGERS_PART_3: WysiwygManualTrigger[] = [
   {
     trigger: "middle",
     priority: 88,
-    pack: "math",
+
     candidates: [
       {
         latex: "\\left(#?\\middle|#?\\right)",
@@ -248,7 +248,7 @@ export const MANUAL_TRIGGERS_PART_3: WysiwygManualTrigger[] = [
   {
     trigger: "defeq",
     priority: 90,
-    pack: "math",
+
     candidates: [
       {
         latex: "\\stackrel{def}{=}",
@@ -260,37 +260,37 @@ export const MANUAL_TRIGGERS_PART_3: WysiwygManualTrigger[] = [
   {
     trigger: "coloneqq",
     priority: 90,
-    pack: "math",
+
     candidates: [{ latex: "\\coloneqq", label: ":=", displayLatex: "\\coloneqq" }],
   },
   {
     trigger: "eqqcolon",
     priority: 90,
-    pack: "math",
+
     candidates: [{ latex: "\\eqqcolon", label: "=:", displayLatex: "\\eqqcolon" }],
   },
   {
     trigger: "and",
     priority: 80,
-    pack: "cs",
+
     candidates: [{ latex: "\\land", label: "∧", displayLatex: "\\land" }],
   },
   {
     trigger: "or",
     priority: 80,
-    pack: "cs",
+
     candidates: [{ latex: "\\lor", label: "∨", displayLatex: "\\lor" }],
   },
   {
     trigger: "not",
     priority: 80,
-    pack: "cs",
+
     candidates: [{ latex: "\\neg", label: "¬", displayLatex: "\\neg" }],
   },
   {
     trigger: "ni",
     priority: 80,
-    pack: "cs",
+
     candidates: [{ latex: "\\ni", label: "∋", displayLatex: "\\ni" }],
   },
   {
@@ -318,7 +318,7 @@ export const MANUAL_TRIGGERS_PART_3: WysiwygManualTrigger[] = [
   {
     trigger: "d2dx2",
     priority: 90,
-    pack: "math",
+
     candidates: [
       {
         latex: "\\frac{\\mathrm{d}^2 #?}{\\mathrm{d}#?^2}",
@@ -330,7 +330,7 @@ export const MANUAL_TRIGGERS_PART_3: WysiwygManualTrigger[] = [
   {
     trigger: "p2dx2",
     priority: 90,
-    pack: "math",
+
     candidates: [
       {
         latex: "\\frac{\\partial^2 #?}{\\partial #?^2}",
@@ -342,7 +342,7 @@ export const MANUAL_TRIGGERS_PART_3: WysiwygManualTrigger[] = [
   {
     trigger: "d3dx3",
     priority: 90,
-    pack: "math",
+
     candidates: [
       {
         latex: "\\frac{\\mathrm{d}^3 #?}{\\mathrm{d}#?^3}",
@@ -354,7 +354,7 @@ export const MANUAL_TRIGGERS_PART_3: WysiwygManualTrigger[] = [
   {
     trigger: "p3dx3",
     priority: 90,
-    pack: "math",
+
     candidates: [
       {
         latex: "\\frac{\\partial^3 #?}{\\partial #?^3}",
@@ -366,13 +366,13 @@ export const MANUAL_TRIGGERS_PART_3: WysiwygManualTrigger[] = [
   {
     trigger: "divergence",
     priority: 90,
-    pack: "physics",
+
     candidates: [{ latex: "\\nabla\\cdot", label: "∇·", displayLatex: "\\nabla\\cdot" }],
   },
   {
     trigger: "curl",
     priority: 90,
-    pack: "physics",
+
     candidates: [
       { latex: "\\nabla\\times", label: "∇×", displayLatex: "\\nabla\\times" },
     ],
@@ -380,13 +380,16 @@ export const MANUAL_TRIGGERS_PART_3: WysiwygManualTrigger[] = [
   {
     trigger: "laplacian",
     priority: 90,
-    pack: "physics",
+
     candidates: [{ latex: "\\nabla^2", label: "∇²", displayLatex: "\\nabla^2" }],
   },
   {
     trigger: "text",
     priority: 85,
-    candidates: [{ latex: "\\mathrm{#?}", label: "text", displayLatex: "\\mathrm{unit}" }],
+    candidates: [
+      { latex: "\\text{#?}", label: "text", displayLatex: "\\text{where}" },
+      { latex: "\\mathrm{#?}", label: "mathrm", displayLatex: "\\mathrm{unit}" },
+    ],
   },
   {
     trigger: "rm",
@@ -406,7 +409,7 @@ export const MANUAL_TRIGGERS_PART_3: WysiwygManualTrigger[] = [
   {
     trigger: "mathbb",
     priority: 80,
-    pack: "math",
+
     candidates: [
       { latex: "\\mathbb{R}", label: "ℝ", displayLatex: "\\mathbb{R}" },
       { latex: "\\mathbb{C}", label: "ℂ", displayLatex: "\\mathbb{C}" },
@@ -418,7 +421,7 @@ export const MANUAL_TRIGGERS_PART_3: WysiwygManualTrigger[] = [
   {
     trigger: "bb",
     priority: 80,
-    pack: "math",
+
     candidates: [
       { latex: "\\mathbb{R}", label: "ℝ", displayLatex: "\\mathbb{R}" },
       { latex: "\\mathbb{C}", label: "ℂ", displayLatex: "\\mathbb{C}" },
@@ -430,67 +433,67 @@ export const MANUAL_TRIGGERS_PART_3: WysiwygManualTrigger[] = [
   {
     trigger: "mathfrak",
     priority: 80,
-    pack: "math",
+
     candidates: [{ latex: "\\mathfrak{#?}", label: "frak", displayLatex: "\\mathfrak{g}" }],
   },
   {
     trigger: "frak",
     priority: 80,
-    pack: "math",
+
     candidates: [{ latex: "\\mathfrak{#?}", label: "frak", displayLatex: "\\mathfrak{g}" }],
   },
   {
     trigger: "mathsf",
     priority: 80,
-    pack: "math",
+
     candidates: [{ latex: "\\mathsf{#?}", label: "sf", displayLatex: "\\mathsf{ABC}" }],
   },
   {
     trigger: "sf",
     priority: 80,
-    pack: "math",
+
     candidates: [{ latex: "\\mathsf{#?}", label: "sf", displayLatex: "\\mathsf{ABC}" }],
   },
   {
     trigger: "mathtt",
     priority: 80,
-    pack: "math",
+
     candidates: [{ latex: "\\mathtt{#?}", label: "tt", displayLatex: "\\mathtt{ABC}" }],
   },
   {
     trigger: "tt",
     priority: 80,
-    pack: "math",
+
     candidates: [{ latex: "\\mathtt{#?}", label: "tt", displayLatex: "\\mathtt{ABC}" }],
   },
   {
     trigger: "mathit",
     priority: 80,
-    pack: "math",
+
     candidates: [{ latex: "\\mathit{#?}", label: "it", displayLatex: "\\mathit{ABC}" }],
   },
   {
     trigger: "it",
     priority: 80,
-    pack: "math",
+
     candidates: [{ latex: "\\mathit{#?}", label: "it", displayLatex: "\\mathit{ABC}" }],
   },
   {
     trigger: "mathscr",
     priority: 80,
-    pack: "personal",
+
     candidates: [{ latex: "\\mathscr{#?}", label: "scr", displayLatex: "\\mathscr{A}" }],
   },
   {
     trigger: "scr",
     priority: 80,
-    pack: "personal",
+
     candidates: [{ latex: "\\mathscr{#?}", label: "scr", displayLatex: "\\mathscr{A}" }],
   },
   {
     trigger: "boldsymbol",
     priority: 80,
-    pack: "personal",
+
     candidates: [
       { latex: "\\boldsymbol{#?}", label: "bold", displayLatex: "\\boldsymbol{x}" },
       { latex: "\\bm{#?}", label: "bm", displayLatex: "\\bm{x}" },
@@ -499,19 +502,19 @@ export const MANUAL_TRIGGERS_PART_3: WysiwygManualTrigger[] = [
   {
     trigger: "bm",
     priority: 80,
-    pack: "personal",
+
     candidates: [{ latex: "\\bm{#?}", label: "bm", displayLatex: "\\bm{x}" }],
   },
   {
     trigger: "mathds",
     priority: 80,
-    pack: "personal",
+
     candidates: [{ latex: "\\mathds{#?}", label: "ds", displayLatex: "\\mathbb{A}" }],
   },
   {
     trigger: "ds",
     priority: 80,
-    pack: "personal",
+
     candidates: [{ latex: "\\mathds{#?}", label: "ds", displayLatex: "\\mathbb{A}" }],
   },
   {

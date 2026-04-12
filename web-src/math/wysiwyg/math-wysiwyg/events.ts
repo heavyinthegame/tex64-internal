@@ -54,8 +54,8 @@ export const createMathWysiwygEventsOps = (
       if (event.metaKey || event.ctrlKey || event.altKey) {
         return false;
       }
-      event.preventDefault();
       if (runtime.panelState.active && runtime.panelState.currentCandidates.length > 0) {
+        event.preventDefault();
         if (event.shiftKey) {
           runtime.panelState.selectedIndex =
             (runtime.panelState.selectedIndex - 1 + runtime.panelState.currentCandidates.length) %
@@ -65,8 +65,9 @@ export const createMathWysiwygEventsOps = (
             (runtime.panelState.selectedIndex + 1) % runtime.panelState.currentCandidates.length;
         }
         panelOps.renderPanel();
+        return true;
       }
-      return true;
+      return false;
     }
     if (!runtime.panelState.active) {
       return false;
@@ -195,7 +196,7 @@ export const createMathWysiwygEventsOps = (
         runtime.editAnchorOffset = selectionStart;
         return;
       }
-      if (runtime.editAnchorOffset === null || cursorOffset < runtime.editAnchorOffset || nowMs() - runtime.lastInputTime > 600) {
+      if (runtime.editAnchorOffset === null || cursorOffset < runtime.editAnchorOffset) {
         runtime.editAnchorOffset = cursorOffset;
       }
     };
@@ -287,7 +288,7 @@ export const createMathWysiwygEventsOps = (
     runtime.mathfield.addEventListener(
       "selection-change",
       () => {
-        if (runtime.editAnchorOffset !== null && nowMs() - runtime.lastInputTime > 120) {
+        if (runtime.editAnchorOffset !== null) {
           const selection = getMathFieldSelectionRange(mathfieldApi);
           const cursorOffset = resolveCursorOffset(mathfieldApi, selection);
           const scopeRange = resolveScopeRange(mathfieldApi, cursorOffset);

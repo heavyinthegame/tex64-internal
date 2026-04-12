@@ -1,4 +1,4 @@
-import { mathKeyboardFixedKeys, mathKeyboardSets } from "../../app/math-keyboard.js";
+import { mathKeyboardFixedKeys, mathKeyboardSets } from "../../app/math-keyboard-data.js";
 import type { MathKey } from "../../app/types.js";
 
 export const normalizeLatexKey = (value?: string | null) => (value ?? "").trim();

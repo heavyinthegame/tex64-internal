@@ -3,8 +3,8 @@ export const MANUAL_TRIGGERS_PART_2 = [
         trigger: "dot",
         priority: 80,
         candidates: [
-            { latex: "\\cdot", label: "⋅", displayLatex: "\\cdot" },
             { latex: "\\dot{#?}", label: "dot", displayLatex: "\\dot{x}" },
+            { latex: "\\cdot", label: "⋅", displayLatex: "\\cdot" },
         ],
     },
     {
@@ -45,13 +45,11 @@ export const MANUAL_TRIGGERS_PART_2 = [
     {
         trigger: "prob",
         priority: 90,
-        pack: "cs",
         candidates: [{ latex: "\\mathbb{P}", label: "ℙ", displayLatex: "\\mathbb{P}" }],
     },
     {
         trigger: "expect",
         priority: 90,
-        pack: "cs",
         candidates: [{ latex: "\\mathbb{E}", label: "E", displayLatex: "\\mathbb{E}" }],
     },
     {
@@ -124,9 +122,9 @@ export const MANUAL_TRIGGERS_PART_2 = [
         trigger: "inf",
         priority: 100,
         candidates: [
-            { latex: "\\infty", label: "∞", displayLatex: "\\infty" },
             { latex: "\\inf", label: "inf", displayLatex: "\\inf" },
             { latex: "\\inf_{#?}", label: "inf_{ }", displayLatex: "\\inf_{x}" },
+            { latex: "\\infty", label: "∞", displayLatex: "\\infty" },
         ],
     },
     {
@@ -251,73 +249,61 @@ export const MANUAL_TRIGGERS_PART_2 = [
     {
         trigger: "nabla",
         priority: 90,
-        pack: "physics",
         candidates: [{ latex: "\\nabla", label: "∇", displayLatex: "\\nabla" }],
     },
     {
         trigger: "grad",
         priority: 80,
-        pack: "physics",
         candidates: [{ latex: "\\nabla", label: "∇", displayLatex: "\\nabla" }],
     },
     {
         trigger: "forall",
         priority: 90,
-        pack: "cs",
         candidates: [{ latex: "\\forall", label: "∀", displayLatex: "\\forall" }],
     },
     {
         trigger: "exists",
         priority: 90,
-        pack: "cs",
         candidates: [{ latex: "\\exists", label: "∃", displayLatex: "\\exists" }],
     },
     {
         trigger: "empty",
         priority: 80,
-        pack: "cs",
         candidates: [{ latex: "\\emptyset", label: "∅", displayLatex: "\\emptyset" }],
     },
     {
         trigger: "in",
         priority: 80,
-        pack: "cs",
         candidates: [{ latex: "\\in", label: "∈", displayLatex: "\\in" }],
     },
     {
         trigger: "notin",
         priority: 80,
-        pack: "cs",
         candidates: [{ latex: "\\notin", label: "∉", displayLatex: "\\notin" }],
     },
     {
         trigger: "mid",
         priority: 80,
-        pack: "math",
         candidates: [{ latex: "\\mid", label: "∣", displayLatex: "\\mid" }],
     },
     {
         trigger: "nmid",
         priority: 80,
-        pack: "math",
         candidates: [{ latex: "\\nmid", label: "∤", displayLatex: "\\nmid" }],
     },
     {
         trigger: "parallel",
         priority: 80,
-        pack: "math",
         candidates: [{ latex: "\\parallel", label: "∥", displayLatex: "\\parallel" }],
     },
     {
         trigger: "perp",
         priority: 80,
-        pack: "math",
         candidates: [{ latex: "\\perp", label: "⊥", displayLatex: "\\perp" }],
     },
     {
         trigger: "subset",
         priority: 80,
-        pack: "cs",
         candidates: [
             { latex: "\\subset", label: "⊂", displayLatex: "\\subset" },
             { latex: "\\subseteq", label: "⊆", displayLatex: "\\subseteq" },
@@ -327,7 +313,6 @@ export const MANUAL_TRIGGERS_PART_2 = [
     {
         trigger: "supset",
         priority: 80,
-        pack: "cs",
         candidates: [
             { latex: "\\supset", label: "⊃", displayLatex: "\\supset" },
             { latex: "\\supseteq", label: "⊇", displayLatex: "\\supseteq" },
@@ -337,43 +322,36 @@ export const MANUAL_TRIGGERS_PART_2 = [
     {
         trigger: "cup",
         priority: 80,
-        pack: "cs",
         candidates: [{ latex: "\\cup", label: "∪", displayLatex: "\\cup" }],
     },
     {
         trigger: "bigcup",
         priority: 80,
-        pack: "cs",
         candidates: [{ latex: "\\bigcup", label: "⋃", displayLatex: "\\bigcup" }],
     },
     {
         trigger: "cap",
         priority: 80,
-        pack: "cs",
         candidates: [{ latex: "\\cap", label: "∩", displayLatex: "\\cap" }],
     },
     {
         trigger: "bigcap",
         priority: 80,
-        pack: "cs",
         candidates: [{ latex: "\\bigcap", label: "⋂", displayLatex: "\\bigcap" }],
     },
     {
         trigger: "iff",
         priority: 80,
-        pack: "cs",
         candidates: [{ latex: "\\iff", label: "⇔", displayLatex: "\\iff" }],
     },
     {
         trigger: "therefore",
         priority: 70,
-        pack: "cs",
         candidates: [{ latex: "\\therefore", label: "∴", displayLatex: "\\therefore" }],
     },
     {
         trigger: "because",
         priority: 70,
-        pack: "cs",
         candidates: [{ latex: "\\because", label: "∵", displayLatex: "\\because" }],
     },
     {
@@ -458,13 +436,11 @@ export const MANUAL_TRIGGERS_PART_2 = [
     {
         trigger: "ll",
         priority: 90,
-        pack: "math",
         candidates: [{ latex: "\\ll", label: "≪", displayLatex: "\\ll" }],
     },
     {
         trigger: "gg",
         priority: 90,
-        pack: "math",
         candidates: [{ latex: "\\gg", label: "≫", displayLatex: "\\gg" }],
     },
     {

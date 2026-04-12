@@ -1,5 +1,5 @@
 import { collectKeyVariants, extractCommand, getKeyByLatex, normalizeLatexKey } from "./math-wysiwyg-keymap.js";
-import { ALIAS_TRIGGERS, MANUAL_TRIGGERS } from "./math-wysiwyg-triggers-data.js";
+import { MANUAL_TRIGGERS } from "./math-wysiwyg-triggers-data.js";
 const isWordToken = (value) => /^[A-Za-z]+$/.test(value);
 const buildMathKeyDisplayLatex = (key) => {
     var _a, _b;
@@ -33,7 +33,7 @@ export const makeCandidate = (trigger, key, priority, labelOverride, displayLate
 export const buildTriggerMap = () => {
     const map = new Map();
     const candidateIdsByTrigger = new Map();
-    const ensureGroup = (trigger, groupPriority, pack) => {
+    const ensureGroup = (trigger, groupPriority) => {
         const normalizedTrigger = trigger.toLowerCase();
         let group = map.get(normalizedTrigger);
         if (!group) {
@@ -41,7 +41,6 @@ export const buildTriggerMap = () => {
                 trigger: normalizedTrigger,
                 candidates: [],
                 priority: groupPriority !== null && groupPriority !== void 0 ? groupPriority : 0,
-                pack,
             };
             map.set(normalizedTrigger, group);
             candidateIdsByTrigger.set(normalizedTrigger, new Set());
@@ -51,10 +50,10 @@ export const buildTriggerMap = () => {
         }
         return group;
     };
-    const addCandidate = (trigger, key, priority, labelOverride, displayLatexOverride, groupPriority, pack = "core") => {
+    const addCandidate = (trigger, key, priority, labelOverride, displayLatexOverride, groupPriority) => {
         const normalizedTrigger = trigger.toLowerCase();
         const candidate = makeCandidate(normalizedTrigger, key, priority, labelOverride, displayLatexOverride);
-        const group = ensureGroup(normalizedTrigger, groupPriority, pack);
+        const group = ensureGroup(normalizedTrigger, groupPriority);
         const seenIds = candidateIdsByTrigger.get(normalizedTrigger);
         if (!seenIds) {
             return;
@@ -66,50 +65,19 @@ export const buildTriggerMap = () => {
     };
     MANUAL_TRIGGERS.forEach((entry) => {
         entry.candidates.forEach((candidate, index) => {
-            var _a;
             const key = getKeyByLatex(candidate.latex, candidate.label, candidate.displayLatex);
-            addCandidate(entry.trigger, key, entry.priority - index * 2, candidate.label, candidate.displayLatex, entry.priority, (_a = entry.pack) !== null && _a !== void 0 ? _a : "core");
+            addCandidate(entry.trigger, key, entry.priority - index * 2, candidate.label, candidate.displayLatex, entry.priority);
         });
     });
     const variants = collectKeyVariants();
     variants.forEach((key) => {
         const command = extractCommand(key.latex);
         if (command) {
-            addCandidate(command, key, 30, undefined, undefined, undefined, "core");
+            addCandidate(command, key, 30);
         }
         if (isWordToken(key.label)) {
-            addCandidate(key.label, key, 20, undefined, undefined, undefined, "core");
+            addCandidate(key.label, key, 20);
         }
-    });
-    const addAliasCandidates = (alias, canonical, priorityBoost = 0) => {
-        const canonicalKey = canonical.toLowerCase();
-        const aliasKey = alias.toLowerCase();
-        const canonicalGroup = map.get(canonicalKey);
-        if (!canonicalGroup) {
-            return;
-        }
-        const aliasGroup = ensureGroup(aliasKey, canonicalGroup.priority + priorityBoost, canonicalGroup.pack);
-        const aliasSeenIds = candidateIdsByTrigger.get(aliasKey);
-        if (!aliasSeenIds) {
-            return;
-        }
-        canonicalGroup.candidates.forEach((candidate) => {
-            const aliasCandidate = {
-                ...candidate,
-                hint: canonicalGroup.trigger,
-                priority: candidate.priority + priorityBoost,
-            };
-            if (!aliasSeenIds.has(aliasCandidate.id)) {
-                aliasGroup.candidates.push(aliasCandidate);
-                aliasSeenIds.add(aliasCandidate.id);
-            }
-        });
-        aliasGroup.priority = Math.max(aliasGroup.priority, canonicalGroup.priority + priorityBoost);
-        aliasGroup.pack = canonicalGroup.pack;
-    };
-    ALIAS_TRIGGERS.forEach((entry) => {
-        var _a;
-        addAliasCandidates(entry.alias, entry.canonical, (_a = entry.priorityBoost) !== null && _a !== void 0 ? _a : 0);
     });
     return map;
 };

@@ -1,7 +1,6 @@
 import { PLACEHOLDER_LATEX, getMathFieldSelectionRange } from "../math-input-utils.js";
 import { readMathFieldValue } from "../input-ui-math-field.js";
 import { normalizeLegacyEnvMarkers, shouldWrapAligned, stripEmptyAlignedRows, unwrapAligned, } from "../input-ui-latex-format.js";
-import { blockDirectLatexCommandInput } from "./direct-command-input.js";
 import { createMathfieldMatrixOps } from "./mathfield-matrix-ops.js";
 export const createBlockMathfieldEventsOps = (runtime, deps) => {
     const attachMathFieldEvents = (mathfield) => {
@@ -136,9 +135,6 @@ export const createBlockMathfieldEventsOps = (runtime, deps) => {
             }
             if ((_a = runtime.state.mathWysiwygApi) === null || _a === void 0 ? void 0 : _a.handleKeydown(event)) {
                 event.stopImmediatePropagation();
-                return;
-            }
-            if (blockDirectLatexCommandInput(runtime, event)) {
                 return;
             }
             if (event.key === "/" &&
@@ -293,7 +289,6 @@ export const createBlockMathfieldEventsOps = (runtime, deps) => {
             }, { capture: true });
         }
         mathfield.addEventListener("focus", () => {
-            runtime.state.mathKeyboardVisibilityHandler();
             mathfield.classList.add("is-focused");
         });
         mathfield.addEventListener("blur", () => {

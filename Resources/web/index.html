@@ -63,8 +63,7 @@
     </div>
     <div class="app">
       <header class="topbar">
-        <div class="topbar-drag"></div>
-        <div class="top-actions">
+        <div class="topbar-left">
           <button
             id="toggle-sidebar-button"
             type="button"
@@ -79,6 +78,9 @@
               <rect class="topbar-layout-fill" x="3" y="5" width="6" height="14" rx="2" fill="currentColor" opacity="0.35"></rect>
             </svg>
           </button>
+        </div>
+        <div class="topbar-drag"></div>
+        <div class="top-actions">
           <button
             id="toggle-bottom-panel-button"
             type="button"
@@ -398,28 +400,6 @@
                 <div class="block-form is-active" data-form="math">
                   <div id="block-math-input-container" class="block-math-input-container"></div>
                 </div>
-              </div>
-              <div class="math-keyboard-dock" id="math-keyboard-dock" aria-hidden="true">
-                <div class="math-keyboard-header">
-                  <span class="math-keyboard-title">MATH</span>
-                  <div class="math-keyboard-controls">
-                    <button class="math-keyboard-shift" id="math-keyboard-shift" type="button" aria-pressed="false">Shift</button>
-                  </div>
-                </div>
-                <div class="math-keyboard-tabs" role="tablist" aria-label="math keyboard">
-                  <button class="math-keyboard-tab is-active" type="button" data-math-tab="sets">
-                    set
-                  </button>
-                  <button class="math-keyboard-tab" type="button" data-math-tab="logic">
-                    logic
-                  </button>
-                  <button class="math-keyboard-tab" type="button" data-math-tab="arrows">
-                    arrow
-                  </button>
-                </div>
-                <div class="math-keyboard-grid" id="math-keyboard-grid"></div>
-                <div class="math-keyboard-divider"></div>
-                <div class="math-keyboard-fixed-grid" id="math-keyboard-fixed-grid"></div>
               </div>
             </div>
           </div>
@@ -1560,64 +1540,6 @@
                     type="button"
                     data-display-format="display-bracket"
                   >\[ ... \]</button>
-                </div>
-              </div>
-            </div>
-            <div class="block-settings-page" data-block-settings-page="suggestions">
-              <div class="block-settings-nav">
-                <button class="panel-button ghost block-settings-back" type="button">
-                  Back
-                </button>
-              </div>
-              <div class="block-settings-section">
-                <div class="block-settings-section-title">Show suggestions</div>
-                <div class="block-settings-options">
-                  <button
-                    class="block-settings-option"
-                    type="button"
-                    data-wysiwyg-auto="on"
-                  >Display automatically</button>
-                  <button
-                    class="block-settings-option"
-                    type="button"
-                    data-wysiwyg-auto="off"
-                  >manual only</button>
-                </div>
-                <div class="block-settings-section-hint">
-                  Manual display: <span class="block-settings-kbd">Ctrl</span> + <span class="block-settings-kbd">.</span>
-                </div>
-              </div>
-              <div class="block-settings-section">
-                <div class="block-settings-section-title">trigger pack</div>
-                <div class="block-settings-options">
-                  <button
-                    class="block-settings-option"
-                    type="button"
-                    data-wysiwyg-pack="math"
-                  >math extension</button>
-                  <button
-                    class="block-settings-option"
-                    type="button"
-                    data-wysiwyg-pack="physics"
-                  >physics/quantum</button>
-                  <button
-                    class="block-settings-option"
-                    type="button"
-                    data-wysiwyg-pack="cs"
-                  >set/logic</button>
-                  <button
-                    class="block-settings-option"
-                    type="button"
-                    data-wysiwyg-pack="personal"
-                  >personal/decoration</button>
-                  <button
-                    class="block-settings-option"
-                    type="button"
-                    data-wysiwyg-pack="jp"
-                  >Japanese trigger</button>
-                </div>
-                <div class="block-settings-section-hint">
-                  Switch the suggestions to be included in automatic suggestions (search all packs for manual display)
                 </div>
               </div>
             </div>

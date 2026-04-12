@@ -24,14 +24,12 @@ export type MathWysiwygDeps = {
   container: HTMLElement | null;
   insertKey: (key: MathKey) => void;
   autoSuggest?: boolean;
-  enabledPacks?: string[];
   mruStorageKey?: string;
   getMruStorageKey?: () => string;
 };
 
 export type MathWysiwygConfig = {
   autoSuggest: boolean;
-  enabledPacks: string[];
 };
 
 export type TokenMatch = {

@@ -73,8 +73,6 @@ export const createBlockSettingsModalOps = (runtime: BlockInputRuntime): BlockSe
         const target = item.dataset.blockSettingsTarget;
         if (target === "insert-format") {
           setBlockSettingsPage("insert-format");
-        } else if (target === "suggestions") {
-          setBlockSettingsPage("suggestions");
         }
       });
     });

@@ -8,7 +8,6 @@ export const createBlockInputRuntime = (context, deps, initial) => {
             mathInputFallback: null,
             currentMathValue: "",
             mathFieldWrapped: false,
-            mathKeyboardVisibilityHandler: () => { },
             mathWysiwygApi: null,
             globalWysiwygKeydownBound: false,
             mathInsertMode: "inline",

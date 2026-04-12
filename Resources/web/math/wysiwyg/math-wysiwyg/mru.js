@@ -202,7 +202,6 @@ export const createMathWysiwygMruOps = (state) => {
             const candidates = buildWordCandidates(token, {
                 allowContains: false,
                 allowContainsMinLength: 99,
-                allowedPacks: undefined,
             });
             const takeCount = token === "int" || token === "sum" ? 2 : 1;
             candidates.slice(0, takeCount).forEach((candidate) => {

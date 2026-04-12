@@ -8,7 +8,6 @@ export type MathWysiwygRuntime = {
   deps: MathWysiwygDeps;
 
   autoSuggest: boolean;
-  enabledPacks: Set<string>;
 
   mathfield: HTMLElement | null;
   eventController: AbortController | null;
@@ -66,7 +65,6 @@ export const createMathWysiwygRuntime = (deps: MathWysiwygDeps): MathWysiwygRunt
   const runtime: MathWysiwygRuntime = {
     deps,
     autoSuggest: deps.autoSuggest ?? true,
-    enabledPacks: new Set(deps.enabledPacks ?? []),
     mathfield: null,
     eventController: null,
     composing: false,

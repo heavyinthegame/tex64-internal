@@ -8,7 +8,6 @@ import {
 } from "../input-ui-latex-format.js";
 import type { MathKey } from "../../types.js";
 import type { BlockInputRuntime } from "./runtime.js";
-import { blockDirectLatexCommandInput } from "./direct-command-input.js";
 import { createMathfieldMatrixOps, type ReadMathFieldLatex } from "./mathfield-matrix-ops.js";
 
 export type BlockMathfieldEventsOps = {
@@ -158,9 +157,6 @@ export const createBlockMathfieldEventsOps = (runtime: BlockInputRuntime, deps: 
       }
       if (runtime.state.mathWysiwygApi?.handleKeydown(event)) {
         event.stopImmediatePropagation();
-        return;
-      }
-      if (blockDirectLatexCommandInput(runtime, event)) {
         return;
       }
       if (
@@ -324,7 +320,6 @@ export const createBlockMathfieldEventsOps = (runtime: BlockInputRuntime, deps: 
     }
 
     mathfield.addEventListener("focus", () => {
-      runtime.state.mathKeyboardVisibilityHandler();
       mathfield.classList.add("is-focused");
     });
 

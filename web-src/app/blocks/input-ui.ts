@@ -1,6 +1,5 @@
-// Side-effect imports: ensure math-wysiwyg core and trigger packs are bundled for Blocks math input.
+// Side-effect import: ensure math-wysiwyg core is bundled for Blocks math input.
 import "../../math/wysiwyg/math-wysiwyg.js";
-import "../../math/wysiwyg/math-wysiwyg-packs.js";
 
 export type { BlockInputApi } from "./input-ui/types.js";
 

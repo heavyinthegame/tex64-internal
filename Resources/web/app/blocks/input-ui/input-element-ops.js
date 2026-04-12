@@ -1,7 +1,6 @@
 import { readMathFieldValue, writeMathFieldValue } from "../input-ui-math-field.js";
 import { normalizeLegacyEnvMarkers, unwrapAligned } from "../input-ui-latex-format.js";
 import { decorateTextareaAsMathfield } from "./textarea-shim.js";
-import { blockDirectLatexCommandInput } from "./direct-command-input.js";
 export const createBlockMathInputElementOps = (runtime, mathValueOps) => {
     const setMathInputElement = (element) => {
         runtime.state.mathInput = element;
@@ -136,9 +135,6 @@ export const createBlockMathInputElementOps = (runtime, mathValueOps) => {
                     event.stopImmediatePropagation();
                     return;
                 }
-                if (blockDirectLatexCommandInput(runtime, event)) {
-                    return;
-                }
                 const isSuggestShortcut = (event.ctrlKey || event.metaKey) && !event.altKey && event.key === ".";
                 if (isSuggestShortcut) {
                     const opened = Boolean((_b = runtime.state.mathWysiwygApi) === null || _b === void 0 ? void 0 : _b.openExplicitSuggestions());
@@ -154,7 +150,6 @@ export const createBlockMathInputElementOps = (runtime, mathValueOps) => {
                 }
             });
             textArea.addEventListener("focus", () => {
-                runtime.state.mathKeyboardVisibilityHandler();
                 textArea.classList.add("is-focused");
             });
             textArea.addEventListener("blur", () => {

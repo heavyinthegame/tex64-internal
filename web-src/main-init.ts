@@ -12,7 +12,6 @@ import { initFileTreeUi } from "./app/file-tree-ui.js";
 import { initMathCaptureUi } from "./app/math-capture-ui.js";
 import { initMathCapture } from "./app/math-capture.js";
 import { initLauncherUi } from "./app/launcher-ui.js";
-import { initMathKeyboard } from "./app/math-keyboard-ui.js";
 import { initMonacoSetup } from "./app/monaco-setup.js";
 
 import { createFilePreviewBroker } from "./app/file-preview.js";
@@ -197,14 +196,12 @@ export const initMain = () => {
   let onFilesTabActive = () => {};
 
   let onSettingsTabActive = () => {};
-  let updateMathKeyboardVisibility = () => {};
   let setSettingsTabAlert = (_hasAlert: boolean) => {};
   let updateEditorWordWrap = (_enabled: boolean) => {};
   let pendingEditorWordWrapEnabled: boolean | null = null;
   const tabController = initTabController(appContext, {
     onFilesTabActive: () => onFilesTabActive(),
     onSettingsTabActive: () => onSettingsTabActive(),
-    updateMathKeyboardVisibility: () => updateMathKeyboardVisibility(),
   });
   const setActiveTab = (tabKey: TabKey) => {
     tabController.setActiveTab(tabKey);
@@ -420,19 +417,11 @@ export const initMain = () => {
     },
   });
 
-  const mathKeyboardApi = initMathKeyboard(appContext, {
-    getActiveTab: tabController.getActiveTab,
-    getActiveBlockType: () => blockInputApi.getActiveBlockType(),
-    onInsertKey: blockInputApi.insertMathKey,
-  });
-  blockInputApi.setMathKeyboardVisibilityHandler(mathKeyboardApi.updateVisibility);
-  updateMathKeyboardVisibility = () => mathKeyboardApi.updateVisibility();
-
   const mathLiveApi = initMathLive(appContext, {
     onMathFieldCreated: blockInputApi.setMathInputElement,
     onAttachMathFieldEvents: blockInputApi.attachMathFieldEvents,
-    onMathLiveReady: mathKeyboardApi.markMathLiveReady,
-    onEnsureMathLiveReady: mathKeyboardApi.ensureMathLiveReady,
+    onMathLiveReady: () => {},
+    onEnsureMathLiveReady: () => {},
   });
 
   blockAutoDetect = initBlockAutoDetection({
@@ -721,7 +710,6 @@ export const initMain = () => {
   fileTreeUi.render();
   outlineUi.render();
   blockInputApi.setActiveBlockType(blockInputApi.getActiveBlockType());
-  mathKeyboardApi.setTab("sets");
   editorTabsUi.setupInteractions();
   try { mathLiveApi.setupMathField(); } catch (e: any) { 
     console.error("setupMathField error:", e);

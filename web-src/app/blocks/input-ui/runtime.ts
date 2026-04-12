@@ -6,7 +6,6 @@ import type { BlockInputDeps, BlockSettingsPage } from "./types.js";
 
 export type MathWysiwygSettingsState = {
   autoSuggest: boolean;
-  enabledPacks: string[];
 };
 
 export type BlockInputRuntime = {
@@ -18,7 +17,6 @@ export type BlockInputRuntime = {
     mathInputFallback: string | null;
     currentMathValue: string;
     mathFieldWrapped: boolean;
-    mathKeyboardVisibilityHandler: () => void;
     mathWysiwygApi: MathWysiwygApi | null;
     globalWysiwygKeydownBound: boolean;
     mathInsertMode: MathInsertMode;
@@ -48,7 +46,6 @@ export const createBlockInputRuntime = (
       mathInputFallback: null,
       currentMathValue: "",
       mathFieldWrapped: false,
-      mathKeyboardVisibilityHandler: () => {},
       mathWysiwygApi: null,
       globalWysiwygKeydownBound: false,
       mathInsertMode: "inline",

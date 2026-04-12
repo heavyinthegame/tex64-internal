@@ -2,7 +2,6 @@ export const MANUAL_TRIGGERS_PART_4 = [
     {
         trigger: "smashoperator",
         priority: 74,
-        pack: "personal",
         candidates: [
             {
                 latex: "\\operatorname*{#?}",
@@ -14,7 +13,6 @@ export const MANUAL_TRIGGERS_PART_4 = [
     {
         trigger: "prescript",
         priority: 74,
-        pack: "personal",
         candidates: [
             {
                 latex: "{}^{#?}_{#?}{#?}",
@@ -26,13 +24,11 @@ export const MANUAL_TRIGGERS_PART_4 = [
     {
         trigger: "symbf",
         priority: 74,
-        pack: "personal",
         candidates: [{ latex: "\\mathbf{#?}", label: "symbf", displayLatex: "\\mathbf{x}" }],
     },
     {
         trigger: "mathchoice",
         priority: 72,
-        pack: "personal",
         candidates: [
             {
                 latex: "\\mathchoice{#?}{#?}{#?}{#?}",
@@ -44,7 +40,6 @@ export const MANUAL_TRIGGERS_PART_4 = [
     {
         trigger: "unicode",
         priority: 70,
-        pack: "personal",
         candidates: [
             { latex: "\\unicode{x#?}", label: "unicode", displayLatex: "\\unicode{x03B1}" },
         ],
@@ -52,67 +47,56 @@ export const MANUAL_TRIGGERS_PART_4 = [
     {
         trigger: "label",
         priority: 80,
-        pack: "math",
         candidates: [{ latex: "\\label{#?}", label: "label", displayLatex: "\\label{eq:id}" }],
     },
     {
         trigger: "tag",
         priority: 80,
-        pack: "math",
         candidates: [{ latex: "\\tag{#?}", label: "tag", displayLatex: "\\tag{A1}" }],
     },
     {
         trigger: "tagstar",
         priority: 78,
-        pack: "math",
         candidates: [{ latex: "\\tag*{#?}", label: "tag*", displayLatex: "\\tag*{A1}" }],
     },
     {
         trigger: "notag",
         priority: 78,
-        pack: "math",
         candidates: [{ latex: "\\notag", label: "notag", displayLatex: "\\notag" }],
     },
     {
         trigger: "nonumber",
         priority: 78,
-        pack: "math",
         candidates: [{ latex: "\\nonumber", label: "nonumber", displayLatex: "\\nonumber" }],
     },
     {
         trigger: "eqref",
         priority: 78,
-        pack: "math",
         candidates: [{ latex: "\\eqref{#?}", label: "eqref", displayLatex: "\\eqref{eq:id}" }],
     },
     {
         trigger: "ref",
         priority: 76,
-        pack: "math",
         candidates: [{ latex: "\\ref{#?}", label: "ref", displayLatex: "\\ref{sec:id}" }],
     },
     {
         trigger: "pageref",
         priority: 76,
-        pack: "math",
         candidates: [{ latex: "\\pageref{#?}", label: "pageref", displayLatex: "\\pageref{sec:id}" }],
     },
     {
         trigger: "autoref",
         priority: 76,
-        pack: "math",
         candidates: [{ latex: "\\autoref{#?}", label: "autoref", displayLatex: "\\autoref{sec:id}" }],
     },
     {
         trigger: "intertext",
         priority: 76,
-        pack: "math",
         candidates: [{ latex: "\\intertext{#?}", label: "intertext", displayLatex: "\\intertext{text}" }],
     },
     {
         trigger: "shortintertext",
         priority: 76,
-        pack: "math",
         candidates: [
             {
                 latex: "\\shortintertext{#?}",
@@ -146,7 +130,6 @@ export const MANUAL_TRIGGERS_PART_4 = [
     {
         trigger: "alignat",
         priority: 80,
-        pack: "math",
         candidates: [
             {
                 latex: "\\begin{alignat*}{2}#?&=#?\\quad #?&=#?\\end{alignat*}",
@@ -158,7 +141,6 @@ export const MANUAL_TRIGGERS_PART_4 = [
     {
         trigger: "flalign",
         priority: 80,
-        pack: "math",
         candidates: [
             {
                 latex: "\\begin{flalign*}#? &= #?\\end{flalign*}",
@@ -170,7 +152,6 @@ export const MANUAL_TRIGGERS_PART_4 = [
     {
         trigger: "multline",
         priority: 80,
-        pack: "math",
         candidates: [
             {
                 latex: "\\begin{multline*}#?\\\\#?\\end{multline*}",
@@ -182,7 +163,6 @@ export const MANUAL_TRIGGERS_PART_4 = [
     {
         trigger: "split",
         priority: 78,
-        pack: "math",
         candidates: [
             {
                 latex: "\\begin{split}#? &= #?\\\\#? &= #?\\end{split}",
@@ -194,7 +174,6 @@ export const MANUAL_TRIGGERS_PART_4 = [
     {
         trigger: "subequations",
         priority: 78,
-        pack: "math",
         candidates: [
             {
                 latex: "\\begin{subequations}\\begin{aligned}#? &= #?\\\\#? &= #?\\end{aligned}\\end{subequations}",
@@ -232,7 +211,6 @@ export const MANUAL_TRIGGERS_PART_4 = [
     {
         trigger: "hbar",
         priority: 85,
-        pack: "physics",
         candidates: [{ latex: "\\hbar", label: "ℏ", displayLatex: "\\hbar" }],
     },
     {
@@ -243,7 +221,6 @@ export const MANUAL_TRIGGERS_PART_4 = [
     {
         trigger: "bra",
         priority: 85,
-        pack: "physics",
         candidates: [
             {
                 latex: "\\langle #? \\vert",
@@ -255,7 +232,6 @@ export const MANUAL_TRIGGERS_PART_4 = [
     {
         trigger: "ket",
         priority: 85,
-        pack: "physics",
         candidates: [
             {
                 latex: "\\vert #? \\rangle",
@@ -267,7 +243,6 @@ export const MANUAL_TRIGGERS_PART_4 = [
     {
         trigger: "braket",
         priority: 85,
-        pack: "physics",
         candidates: [
             {
                 latex: "\\langle #? \\vert #? \\rangle",
@@ -276,60 +251,141 @@ export const MANUAL_TRIGGERS_PART_4 = [
             },
         ],
     },
+    // ===== Function operators =====
+    { trigger: "sinh", priority: 100, candidates: [{ latex: "\\sinh", label: "sinh", displayLatex: "\\sinh" }] },
+    { trigger: "cosh", priority: 100, candidates: [{ latex: "\\cosh", label: "cosh", displayLatex: "\\cosh" }] },
+    { trigger: "tanh", priority: 100, candidates: [{ latex: "\\tanh", label: "tanh", displayLatex: "\\tanh" }] },
+    { trigger: "coth", priority: 100, candidates: [{ latex: "\\coth", label: "coth", displayLatex: "\\coth" }] },
+    { trigger: "hom", priority: 85, candidates: [{ latex: "\\hom", label: "hom", displayLatex: "\\hom" }] },
+    { trigger: "deg", priority: 85, candidates: [{ latex: "\\deg", label: "deg", displayLatex: "\\deg" }] },
+    { trigger: "arg", priority: 85, candidates: [{ latex: "\\arg", label: "arg", displayLatex: "\\arg" }] },
+    { trigger: "Pr", priority: 85, candidates: [{ latex: "\\Pr", label: "Pr", displayLatex: "\\Pr" }] },
+    { trigger: "lg", priority: 85, candidates: [{ latex: "\\lg", label: "lg", displayLatex: "\\lg" }] },
+    // ===== Arrows =====
+    { trigger: "hookrightarrow", priority: 85, candidates: [{ latex: "\\hookrightarrow", label: "↪", displayLatex: "\\hookrightarrow" }] },
+    { trigger: "hookleftarrow", priority: 85, candidates: [{ latex: "\\hookleftarrow", label: "↩", displayLatex: "\\hookleftarrow" }] },
     {
-        trigger: "sekibun",
-        priority: 70,
-        pack: "jp",
-        candidates: [{ latex: "\\int", label: "∫", displayLatex: "\\int" }],
-    },
-    {
-        trigger: "shiguma",
-        priority: 70,
-        pack: "jp",
-        candidates: [{ latex: "\\sum", label: "Σ", displayLatex: "\\sum" }],
-    },
-    {
-        trigger: "henbibun",
-        priority: 70,
-        pack: "jp",
-        candidates: [{ latex: "\\partial", label: "∂", displayLatex: "\\partial" }],
-    },
-    {
-        trigger: "ruuto",
-        priority: 70,
-        pack: "jp",
-        candidates: [{ latex: "\\sqrt{#?}", label: "√", displayLatex: "\\sqrt{x}" }],
-    },
-    {
-        trigger: "bunsuu",
-        priority: 70,
-        pack: "jp",
-        candidates: [{ latex: "\\frac{#?}{#?}", label: "a/b", displayLatex: "\\frac{a}{b}" }],
-    },
-    {
-        trigger: "gyouretsu",
-        priority: 70,
-        pack: "jp",
+        trigger: "uparrow",
+        priority: 85,
         candidates: [
-            {
-                latex: "\\begin{pmatrix}#?&#?\\\\#?&#?\\end{pmatrix}",
-                label: "pmatrix",
-                displayLatex: "\\begin{pmatrix}a&b\\\\c&d\\end{pmatrix}",
-            },
+            { latex: "\\uparrow", label: "↑", displayLatex: "\\uparrow" },
+            { latex: "\\Uparrow", label: "⇑", displayLatex: "\\Uparrow" },
         ],
     },
     {
-        trigger: "bekutoru",
-        priority: 70,
-        pack: "jp",
-        candidates: [{ latex: "\\vec{#?}", label: "→x", displayLatex: "\\vec{x}" }],
-    },
-    {
-        trigger: "kakko",
-        priority: 70,
-        pack: "jp",
+        trigger: "downarrow",
+        priority: 85,
         candidates: [
-            { latex: "\\left(#?\\right)", label: "( )", displayLatex: "\\left(x\\right)" },
+            { latex: "\\downarrow", label: "↓", displayLatex: "\\downarrow" },
+            { latex: "\\Downarrow", label: "⇓", displayLatex: "\\Downarrow" },
         ],
     },
+    {
+        trigger: "updownarrow",
+        priority: 85,
+        candidates: [
+            { latex: "\\updownarrow", label: "↕", displayLatex: "\\updownarrow" },
+            { latex: "\\Updownarrow", label: "⇕", displayLatex: "\\Updownarrow" },
+        ],
+    },
+    { trigger: "nearrow", priority: 80, candidates: [{ latex: "\\nearrow", label: "↗", displayLatex: "\\nearrow" }] },
+    { trigger: "searrow", priority: 80, candidates: [{ latex: "\\searrow", label: "↘", displayLatex: "\\searrow" }] },
+    { trigger: "swarrow", priority: 80, candidates: [{ latex: "\\swarrow", label: "↙", displayLatex: "\\swarrow" }] },
+    { trigger: "nwarrow", priority: 80, candidates: [{ latex: "\\nwarrow", label: "↖", displayLatex: "\\nwarrow" }] },
+    {
+        trigger: "longrightarrow",
+        priority: 85,
+        candidates: [
+            { latex: "\\longrightarrow", label: "⟶", displayLatex: "\\longrightarrow" },
+            { latex: "\\Longrightarrow", label: "⟹", displayLatex: "\\Longrightarrow" },
+        ],
+    },
+    {
+        trigger: "longleftarrow",
+        priority: 85,
+        candidates: [
+            { latex: "\\longleftarrow", label: "⟵", displayLatex: "\\longleftarrow" },
+            { latex: "\\Longleftarrow", label: "⟸", displayLatex: "\\Longleftarrow" },
+        ],
+    },
+    {
+        trigger: "longleftrightarrow",
+        priority: 85,
+        candidates: [
+            { latex: "\\longleftrightarrow", label: "⟷", displayLatex: "\\longleftrightarrow" },
+            { latex: "\\Longleftrightarrow", label: "⟺", displayLatex: "\\Longleftrightarrow" },
+        ],
+    },
+    { trigger: "longmapsto", priority: 85, candidates: [{ latex: "\\longmapsto", label: "⟼", displayLatex: "\\longmapsto" }] },
+    { trigger: "rightharpoonup", priority: 80, candidates: [{ latex: "\\rightharpoonup", label: "⇀", displayLatex: "\\rightharpoonup" }] },
+    { trigger: "rightharpoondown", priority: 80, candidates: [{ latex: "\\rightharpoondown", label: "⇁", displayLatex: "\\rightharpoondown" }] },
+    { trigger: "leftharpoonup", priority: 80, candidates: [{ latex: "\\leftharpoonup", label: "↼", displayLatex: "\\leftharpoonup" }] },
+    { trigger: "leftharpoondown", priority: 80, candidates: [{ latex: "\\leftharpoondown", label: "↽", displayLatex: "\\leftharpoondown" }] },
+    { trigger: "rightleftharpoons", priority: 80, candidates: [{ latex: "\\rightleftharpoons", label: "⇌", displayLatex: "\\rightleftharpoons" }] },
+    { trigger: "twoheadrightarrow", priority: 80, candidates: [{ latex: "\\twoheadrightarrow", label: "↠", displayLatex: "\\twoheadrightarrow" }] },
+    // ===== Relations =====
+    { trigger: "prec", priority: 85, candidates: [{ latex: "\\prec", label: "≺", displayLatex: "\\prec" }, { latex: "\\preceq", label: "⪯", displayLatex: "\\preceq" }] },
+    { trigger: "succ", priority: 85, candidates: [{ latex: "\\succ", label: "≻", displayLatex: "\\succ" }, { latex: "\\succeq", label: "⪰", displayLatex: "\\succeq" }] },
+    { trigger: "vdash", priority: 85, candidates: [{ latex: "\\vdash", label: "⊢", displayLatex: "\\vdash" }] },
+    { trigger: "dashv", priority: 85, candidates: [{ latex: "\\dashv", label: "⊣", displayLatex: "\\dashv" }] },
+    { trigger: "models", priority: 85, candidates: [{ latex: "\\models", label: "⊨", displayLatex: "\\models" }] },
+    { trigger: "bowtie", priority: 80, candidates: [{ latex: "\\bowtie", label: "⋈", displayLatex: "\\bowtie" }] },
+    { trigger: "sim", priority: 90, candidates: [{ latex: "\\sim", label: "∼", displayLatex: "\\sim" }] },
+    { trigger: "simeq", priority: 90, candidates: [{ latex: "\\simeq", label: "≃", displayLatex: "\\simeq" }] },
+    { trigger: "cong", priority: 90, candidates: [{ latex: "\\cong", label: "≅", displayLatex: "\\cong" }] },
+    { trigger: "doteq", priority: 80, candidates: [{ latex: "\\doteq", label: "≐", displayLatex: "\\doteq" }] },
+    { trigger: "asymp", priority: 80, candidates: [{ latex: "\\asymp", label: "≍", displayLatex: "\\asymp" }] },
+    { trigger: "sqsubset", priority: 80, candidates: [{ latex: "\\sqsubset", label: "⊏", displayLatex: "\\sqsubset" }, { latex: "\\sqsubseteq", label: "⊑", displayLatex: "\\sqsubseteq" }] },
+    { trigger: "sqsupset", priority: 80, candidates: [{ latex: "\\sqsupset", label: "⊐", displayLatex: "\\sqsupset" }, { latex: "\\sqsupseteq", label: "⊒", displayLatex: "\\sqsupseteq" }] },
+    // ===== Binary operators =====
+    { trigger: "ast", priority: 80, candidates: [{ latex: "\\ast", label: "∗", displayLatex: "\\ast" }] },
+    { trigger: "star", priority: 80, candidates: [{ latex: "\\star", label: "⋆", displayLatex: "\\star" }] },
+    { trigger: "bullet", priority: 80, candidates: [{ latex: "\\bullet", label: "•", displayLatex: "\\bullet" }] },
+    { trigger: "diamond", priority: 80, candidates: [{ latex: "\\diamond", label: "◇", displayLatex: "\\diamond" }] },
+    { trigger: "ominus", priority: 80, candidates: [{ latex: "\\ominus", label: "⊖", displayLatex: "\\ominus" }] },
+    { trigger: "oslash", priority: 80, candidates: [{ latex: "\\oslash", label: "⊘", displayLatex: "\\oslash" }] },
+    { trigger: "odot", priority: 80, candidates: [{ latex: "\\odot", label: "⊙", displayLatex: "\\odot" }] },
+    { trigger: "sqcap", priority: 80, candidates: [{ latex: "\\sqcap", label: "⊓", displayLatex: "\\sqcap" }] },
+    { trigger: "sqcup", priority: 80, candidates: [{ latex: "\\sqcup", label: "⊔", displayLatex: "\\sqcup" }] },
+    { trigger: "uplus", priority: 80, candidates: [{ latex: "\\uplus", label: "⊎", displayLatex: "\\uplus" }] },
+    { trigger: "dagger", priority: 80, candidates: [{ latex: "\\dagger", label: "†", displayLatex: "\\dagger" }, { latex: "\\ddagger", label: "‡", displayLatex: "\\ddagger" }] },
+    { trigger: "wr", priority: 75, candidates: [{ latex: "\\wr", label: "≀", displayLatex: "\\wr" }] },
+    { trigger: "amalg", priority: 75, candidates: [{ latex: "\\amalg", label: "⨿", displayLatex: "\\amalg" }] },
+    { trigger: "triangleleft", priority: 80, candidates: [{ latex: "\\triangleleft", label: "◁", displayLatex: "\\triangleleft" }] },
+    { trigger: "triangleright", priority: 80, candidates: [{ latex: "\\triangleright", label: "▷", displayLatex: "\\triangleright" }] },
+    // ===== Large operators =====
+    { trigger: "coprod", priority: 90, candidates: [{ latex: "\\coprod", label: "∐", displayLatex: "\\coprod" }] },
+    { trigger: "bigsqcup", priority: 80, candidates: [{ latex: "\\bigsqcup", label: "⊔", displayLatex: "\\bigsqcup" }] },
+    { trigger: "bigvee", priority: 80, candidates: [{ latex: "\\bigvee", label: "⋁", displayLatex: "\\bigvee" }] },
+    { trigger: "bigwedge", priority: 80, candidates: [{ latex: "\\bigwedge", label: "⋀", displayLatex: "\\bigwedge" }] },
+    { trigger: "bigodot", priority: 80, candidates: [{ latex: "\\bigodot", label: "⊙", displayLatex: "\\bigodot" }] },
+    { trigger: "bigoplus", priority: 80, candidates: [{ latex: "\\bigoplus", label: "⊕", displayLatex: "\\bigoplus" }] },
+    { trigger: "bigotimes", priority: 80, candidates: [{ latex: "\\bigotimes", label: "⊗", displayLatex: "\\bigotimes" }] },
+    { trigger: "biguplus", priority: 80, candidates: [{ latex: "\\biguplus", label: "⊎", displayLatex: "\\biguplus" }] },
+    // ===== Dots =====
+    { trigger: "vdots", priority: 80, candidates: [{ latex: "\\vdots", label: "⋮", displayLatex: "\\vdots" }] },
+    { trigger: "ddots", priority: 80, candidates: [{ latex: "\\ddots", label: "⋱", displayLatex: "\\ddots" }] },
+    // ===== Accents/decorations =====
+    { trigger: "widehat", priority: 80, candidates: [{ latex: "\\widehat{#?}", label: "widehat", displayLatex: "\\widehat{AB}" }] },
+    { trigger: "widetilde", priority: 80, candidates: [{ latex: "\\widetilde{#?}", label: "widetilde", displayLatex: "\\widetilde{AB}" }] },
+    { trigger: "check", priority: 80, candidates: [{ latex: "\\check{#?}", label: "check", displayLatex: "\\check{x}" }] },
+    { trigger: "breve", priority: 80, candidates: [{ latex: "\\breve{#?}", label: "breve", displayLatex: "\\breve{x}" }] },
+    { trigger: "acute", priority: 80, candidates: [{ latex: "\\acute{#?}", label: "acute", displayLatex: "\\acute{x}" }] },
+    { trigger: "grave", priority: 80, candidates: [{ latex: "\\grave{#?}", label: "grave", displayLatex: "\\grave{x}" }] },
+    { trigger: "mathring", priority: 80, candidates: [{ latex: "\\mathring{#?}", label: "ring", displayLatex: "\\mathring{x}" }] },
+    // ===== Logic =====
+    { trigger: "nexists", priority: 85, candidates: [{ latex: "\\nexists", label: "∄", displayLatex: "\\nexists" }] },
+    { trigger: "top", priority: 80, candidates: [{ latex: "\\top", label: "⊤", displayLatex: "\\top" }] },
+    { trigger: "bot", priority: 80, candidates: [{ latex: "\\bot", label: "⊥", displayLatex: "\\bot" }] },
+    // ===== Miscellaneous symbols =====
+    { trigger: "aleph", priority: 85, candidates: [{ latex: "\\aleph", label: "ℵ", displayLatex: "\\aleph" }] },
+    { trigger: "imath", priority: 80, candidates: [{ latex: "\\imath", label: "ı", displayLatex: "\\imath" }] },
+    { trigger: "jmath", priority: 80, candidates: [{ latex: "\\jmath", label: "ȷ", displayLatex: "\\jmath" }] },
+    { trigger: "Re", priority: 85, candidates: [{ latex: "\\Re", label: "ℜ", displayLatex: "\\Re" }] },
+    { trigger: "Im", priority: 85, candidates: [{ latex: "\\Im", label: "ℑ", displayLatex: "\\Im" }] },
+    { trigger: "wp", priority: 80, candidates: [{ latex: "\\wp", label: "℘", displayLatex: "\\wp" }] },
+    { trigger: "complement", priority: 80, candidates: [{ latex: "\\complement", label: "∁", displayLatex: "\\complement" }] },
+    { trigger: "varnothing", priority: 80, candidates: [{ latex: "\\varnothing", label: "∅", displayLatex: "\\varnothing" }] },
+    { trigger: "triangle", priority: 80, candidates: [{ latex: "\\triangle", label: "△", displayLatex: "\\triangle" }] },
+    { trigger: "surd", priority: 80, candidates: [{ latex: "\\surd", label: "√", displayLatex: "\\surd" }] },
 ];

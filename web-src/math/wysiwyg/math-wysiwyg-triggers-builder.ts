@@ -1,7 +1,6 @@
 import { collectKeyVariants, extractCommand, getKeyByLatex, normalizeLatexKey } from "./math-wysiwyg-keymap.js";
-import { ALIAS_TRIGGERS, MANUAL_TRIGGERS } from "./math-wysiwyg-triggers-data.js";
+import { MANUAL_TRIGGERS } from "./math-wysiwyg-triggers-data.js";
 import type { Candidate, TriggerGroup } from "./math-wysiwyg-triggers-types.js";
-import type { WysiwygPackId } from "./math-wysiwyg-packs.js";
 import type { MathKey } from "../../app/types.js";
 
 const isWordToken = (value: string) => /^[A-Za-z]+$/.test(value);
@@ -46,8 +45,7 @@ export const buildTriggerMap = () => {
 
   const ensureGroup = (
     trigger: string,
-    groupPriority: number | undefined,
-    pack: WysiwygPackId
+    groupPriority: number | undefined
   ): TriggerGroup => {
     const normalizedTrigger = trigger.toLowerCase();
     let group = map.get(normalizedTrigger);
@@ -56,7 +54,6 @@ export const buildTriggerMap = () => {
         trigger: normalizedTrigger,
         candidates: [],
         priority: groupPriority ?? 0,
-        pack,
       };
       map.set(normalizedTrigger, group);
       candidateIdsByTrigger.set(normalizedTrigger, new Set<string>());
@@ -72,8 +69,7 @@ export const buildTriggerMap = () => {
     priority: number,
     labelOverride?: string,
     displayLatexOverride?: string,
-    groupPriority?: number,
-    pack: WysiwygPackId = "core"
+    groupPriority?: number
   ) => {
     const normalizedTrigger = trigger.toLowerCase();
     const candidate = makeCandidate(
@@ -83,7 +79,7 @@ export const buildTriggerMap = () => {
       labelOverride,
       displayLatexOverride
     );
-    const group = ensureGroup(normalizedTrigger, groupPriority, pack);
+    const group = ensureGroup(normalizedTrigger, groupPriority);
     const seenIds = candidateIdsByTrigger.get(normalizedTrigger);
     if (!seenIds) {
       return;
@@ -103,8 +99,7 @@ export const buildTriggerMap = () => {
         entry.priority - index * 2,
         candidate.label,
         candidate.displayLatex,
-        entry.priority,
-        entry.pack ?? "core"
+        entry.priority
       );
     });
   });
@@ -113,56 +108,11 @@ export const buildTriggerMap = () => {
   variants.forEach((key) => {
     const command = extractCommand(key.latex);
     if (command) {
-      addCandidate(command, key, 30, undefined, undefined, undefined, "core");
+      addCandidate(command, key, 30);
     }
     if (isWordToken(key.label)) {
-      addCandidate(key.label, key, 20, undefined, undefined, undefined, "core");
+      addCandidate(key.label, key, 20);
     }
-  });
-
-  const addAliasCandidates = (
-    alias: string,
-    canonical: string,
-    priorityBoost = 0
-  ) => {
-    const canonicalKey = canonical.toLowerCase();
-    const aliasKey = alias.toLowerCase();
-    const canonicalGroup = map.get(canonicalKey);
-    if (!canonicalGroup) {
-      return;
-    }
-
-    const aliasGroup = ensureGroup(
-      aliasKey,
-      canonicalGroup.priority + priorityBoost,
-      canonicalGroup.pack
-    );
-    const aliasSeenIds = candidateIdsByTrigger.get(aliasKey);
-    if (!aliasSeenIds) {
-      return;
-    }
-
-    canonicalGroup.candidates.forEach((candidate) => {
-      const aliasCandidate: Candidate = {
-        ...candidate,
-        hint: canonicalGroup.trigger,
-        priority: candidate.priority + priorityBoost,
-      };
-      if (!aliasSeenIds.has(aliasCandidate.id)) {
-        aliasGroup.candidates.push(aliasCandidate);
-        aliasSeenIds.add(aliasCandidate.id);
-      }
-    });
-
-    aliasGroup.priority = Math.max(
-      aliasGroup.priority,
-      canonicalGroup.priority + priorityBoost
-    );
-    aliasGroup.pack = canonicalGroup.pack;
-  };
-
-  ALIAS_TRIGGERS.forEach((entry) => {
-    addAliasCandidates(entry.alias, entry.canonical, entry.priorityBoost ?? 0);
   });
 
   return map;

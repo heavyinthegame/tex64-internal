@@ -132,8 +132,7 @@ export const createMathWysiwygCandidateOps = (
     if (!normalized) {
       return [];
     }
-    const allowedPacks = runtime.enabledPacks.size > 0 ? runtime.enabledPacks : undefined;
-    return buildWordCandidates(normalized, { allowedPacks }).map((candidate) => ({
+    return buildWordCandidates(normalized).map((candidate) => ({
       id: candidate.id,
       key: candidate.key,
       label: candidate.label,
@@ -192,7 +191,6 @@ export const createMathWysiwygCandidateOps = (
       return;
     }
 
-    const allowedPacks = explicit ? undefined : runtime.enabledPacks.size > 0 ? runtime.enabledPacks : undefined;
     if (tokenMatch.kind === "word" || tokenMatch.kind === "command" || tokenMatch.kind === "slash-command") {
       const normalized = tokenMatch.token.toLowerCase();
       const minLength =
@@ -228,7 +226,7 @@ export const createMathWysiwygCandidateOps = (
       } else {
         const rawCandidates = buildWordCandidates(slashToken, {
           allowContainsMinLength: explicit ? 1 : AUTO_CONTAINS_MIN_LENGTH,
-          allowedPacks,
+
           dedupeByLatex: !explicit,
         });
         const preferred = rawCandidates.filter((candidate) =>
@@ -245,7 +243,6 @@ export const createMathWysiwygCandidateOps = (
     } else {
       nextCandidates = buildWordCandidates(tokenMatch.token, {
         allowContainsMinLength: explicit ? 2 : AUTO_CONTAINS_MIN_LENGTH,
-        allowedPacks,
         dedupeByLatex: !explicit,
       });
     }
@@ -258,7 +255,7 @@ export const createMathWysiwygCandidateOps = (
         const suffix = tokenMatch.token.slice(dropPrefix);
         const suffixCandidates = buildWordCandidates(suffix, {
           allowContainsMinLength: explicit ? 2 : AUTO_CONTAINS_MIN_LENGTH,
-          allowedPacks,
+
           dedupeByLatex: !explicit,
         });
         if (suffixCandidates.length === 0) {

@@ -46,7 +46,6 @@ export const initTabController = (context, deps) => {
         if (tabKey === "settings") {
             deps.onSettingsTabActive();
         }
-        deps.updateMathKeyboardVisibility();
     };
     return {
         getActiveTab: () => activeTab,

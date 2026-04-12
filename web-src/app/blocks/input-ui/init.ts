@@ -40,7 +40,6 @@ export const initBlockInputUi = (context: AppContext, deps: BlockInputDeps): Blo
     container: context.dom.blockMathInputContainer instanceof HTMLElement ? context.dom.blockMathInputContainer : null,
     insertKey: (key) => insertKeyOps.insertMathKey(key),
     autoSuggest: runtime.state.mathWysiwygSettings.autoSuggest,
-    enabledPacks: runtime.state.mathWysiwygSettings.enabledPacks,
     getMruStorageKey: () => {
       const rootKey = deps.getWorkspaceRootKey?.();
       return rootKey ? `tex64.math-wysiwyg.mru.${rootKey}` : "tex64.math-wysiwyg.mru";
@@ -67,19 +66,13 @@ export const initBlockInputUi = (context: AppContext, deps: BlockInputDeps): Blo
   insertSettingsOps.applyMathInsertSettings();
   wysiwygSettingsOps.applyMathWysiwygSettings();
 
-  const setMathKeyboardVisibilityHandler = (handler: () => void) => {
-    runtime.state.mathKeyboardVisibilityHandler = handler;
-  };
-
   const setActiveBlockType = (type: BlockType) => {
-    runtime.state.mathKeyboardVisibilityHandler();
     runtime.state.activeBlockType = type;
   };
 
   return {
     getActiveBlockType: () => runtime.state.activeBlockType,
     setActiveBlockType,
-    setMathKeyboardVisibilityHandler,
     getMathInputValue: inputOps.getMathInputValue,
     setMathInputValue: inputOps.setMathInputValue,
     getBlockDraft: draftOps.getBlockDraft,

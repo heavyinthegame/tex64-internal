@@ -29,7 +29,6 @@ export const initBlockInputUi = (context, deps) => {
         container: context.dom.blockMathInputContainer instanceof HTMLElement ? context.dom.blockMathInputContainer : null,
         insertKey: (key) => insertKeyOps.insertMathKey(key),
         autoSuggest: runtime.state.mathWysiwygSettings.autoSuggest,
-        enabledPacks: runtime.state.mathWysiwygSettings.enabledPacks,
         getMruStorageKey: () => {
             var _a;
             const rootKey = (_a = deps.getWorkspaceRootKey) === null || _a === void 0 ? void 0 : _a.call(deps);
@@ -54,17 +53,12 @@ export const initBlockInputUi = (context, deps) => {
     });
     insertSettingsOps.applyMathInsertSettings();
     wysiwygSettingsOps.applyMathWysiwygSettings();
-    const setMathKeyboardVisibilityHandler = (handler) => {
-        runtime.state.mathKeyboardVisibilityHandler = handler;
-    };
     const setActiveBlockType = (type) => {
-        runtime.state.mathKeyboardVisibilityHandler();
         runtime.state.activeBlockType = type;
     };
     return {
         getActiveBlockType: () => runtime.state.activeBlockType,
         setActiveBlockType,
-        setMathKeyboardVisibilityHandler,
         getMathInputValue: inputOps.getMathInputValue,
         setMathInputValue: inputOps.setMathInputValue,
         getBlockDraft: draftOps.getBlockDraft,

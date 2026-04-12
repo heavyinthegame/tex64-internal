@@ -18,14 +18,6 @@ const mustContainChecks = [
     pattern: '../../math/wysiwyg/math-wysiwyg.js',
   },
   {
-    file: path.join(projectRoot, "web-src", "app", "blocks", "input-ui.ts"),
-    pattern: '../../math/wysiwyg/math-wysiwyg-packs.js',
-  },
-  {
-    file: path.join(projectRoot, "web-src", "app", "blocks", "math-wysiwyg-settings.ts"),
-    pattern: '../../math/wysiwyg/math-wysiwyg-packs.js',
-  },
-  {
     file: path.join(projectRoot, "web-src", "tsconfig.json"),
     pattern: '"math/wysiwyg/**/*.ts"',
   },

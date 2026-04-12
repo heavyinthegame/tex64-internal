@@ -82,7 +82,7 @@
 
   --sidebar-width: 52px;
   --sidebar-panel-width: calc((100vw - var(--sidebar-width) - 4px) * 0.25);
-  --topbar-height: 38px;
+  --topbar-height: 44px;
 }
 
 * {
@@ -581,6 +581,13 @@ body.has-launcher .app {
   -webkit-app-region: drag;
 }
 
+.topbar-left {
+  display: inline-flex;
+  align-items: center;
+  padding-left: 78px;
+  -webkit-app-region: no-drag;
+}
+
 .topbar-drag {
   flex: 1;
   min-width: 0;
@@ -590,8 +597,8 @@ body.has-launcher .app {
 .top-actions {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
-  padding: 0 8px;
+  gap: 6px;
+  padding: 0 10px;
   -webkit-app-region: no-drag;
 }
 
@@ -599,8 +606,8 @@ body.has-launcher .app {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
   padding: 0;
   border: none;
   border-radius: var(--radius-sm);
@@ -1063,22 +1070,22 @@ math-field.block-math-field {
   display: inline-block;
   width: max-content;
   min-width: 100%;
-  height: auto; /* Auto expand */
+  height: auto;
   min-height: 100%;
   padding: 6px 0 10px;
   font-size: 20px;
-  line-height: normal; /* Keep normal line-height */
-  background: transparent; /* Transparent to show container bg */
+  line-height: normal;
+  background: transparent;
   color: var(--text);
-  border: none; /* No border on the field itself */
+  border: none;
   border-radius: 0;
   --caret-color: var(--accent-strong);
   --selection-color: var(--text);
   --selection-background-color: var(--focus-ring);
-  transition: none; /* Container handles transition */
+  transition: none;
   outline: none;
-  box-shadow: none !important; /* Remove any default shadows */
-  overflow: visible; /* Let container handle scrolling */
+  box-shadow: none !important;
+  overflow: visible;
 }
 
 .block-math-input-container {
@@ -1211,8 +1218,6 @@ math-field.block-math-field {
 }
 
 .block-math-input-container:focus-within {
-  border-color: rgba(91, 194, 255, 0.35);
-  box-shadow: 0 0 0 3px rgba(91, 194, 255, 0.08), 0 2px 12px rgba(0, 0, 0, 0.15);
   outline: none;
 }
 
@@ -3236,7 +3241,7 @@ math-field.block-math-field::placeholder {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 24px;
+  height: 28px;
   margin: 0;
   border-radius: var(--radius-sm);
   border: 1px solid transparent;
@@ -3381,7 +3386,7 @@ math-field.block-math-field::placeholder {
 }
 
 #build-button {
-  width: 28px;
+  width: 30px;
   padding: 0;
   margin-left: 2px;
   border-color: rgba(121, 126, 249, 0.45);
@@ -3612,234 +3617,6 @@ math-field.block-math-field::placeholder {
   overflow: hidden;
 }
 
-.math-keyboard-dock {
-  display: none;
-  gap: 4px;
-  padding: 4px 6px;
-  border: 1px solid var(--panel-border);
-  border-radius: var(--radius-md);
-  background: linear-gradient(180deg, rgba(22, 28, 36, 0.95) 0%, var(--bg) 100%);
-  box-shadow:
-    0 -10px 22px rgba(0, 0, 0, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.04);
-  align-self: auto;
-  margin-top: auto;
-  flex: none;
-  z-index: 10;
-}
-
-.math-keyboard-dock.is-open {
-  display: grid;
-}
-
-.math-keyboard-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding-bottom: 2px;
-  border-bottom: 1px solid rgba(133, 181, 255, 0.08);
-}
-
-.math-keyboard-controls {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  justify-content: flex-end;
-}
-
-.math-keyboard-shift {
-  border: 1px solid var(--control-border);
-  border-radius: 999px;
-  background: var(--control-bg);
-  color: var(--text-soft);
-  font-size: 10px;
-  text-transform: none;
-  letter-spacing: 0.08em;
-  padding: 6px 12px;
-  cursor: pointer;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-}
-
-.math-keyboard-shift.is-active {
-  background: var(--accent-strong);
-  border-color: var(--accent-strong);
-  color: #0b1117;
-  box-shadow:
-    0 8px 18px rgba(133, 181, 255, 0.25),
-    inset 0 1px 0 rgba(255, 255, 255, 0.25);
-}
-
-.math-keyboard-shift:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
-}
-
-.math-keyboard-title {
-  font-size: 9px;
-  text-transform: none;
-  letter-spacing: 0.2em;
-  color: var(--text-soft);
-}
-
-.math-keyboard-tabs {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  flex-wrap: nowrap;
-  justify-content: flex-start;
-  padding: 2px;
-  border-radius: 9px;
-  background: var(--panel-muted);
-  border: 1px solid var(--panel-border);
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.math-keyboard-tabs::-webkit-scrollbar {
-  display: none;
-}
-
-.math-keyboard-tab {
-  border: 1px solid transparent;
-  border-radius: 999px;
-  background: var(--panel-strong);
-  color: var(--muted);
-  font-size: 9px;
-  padding: 3px 10px;
-  cursor: pointer;
-  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
-}
-
-.math-keyboard-tab.is-active {
-  color: var(--text);
-  border-color: rgba(133, 181, 255, 0.7);
-  background: var(--accent-soft-strong);
-  box-shadow: inset 0 0 0 1px rgba(133, 181, 255, 0.2);
-}
-
-.math-keyboard-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(44px, auto));
-  gap: 3px;
-  align-content: start;
-  height: 110px;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding: 4px;
-  border-radius: 9px;
-  background: rgba(0, 0, 0, 0.18);
-  border: 1px solid var(--panel-border);
-  scrollbar-gutter: stable;
-}
-
-.math-keyboard-divider {
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--panel-border-strong), transparent);
-  opacity: 0.9;
-}
-
-.math-keyboard-dock:not(.has-fixed-keys) .math-keyboard-divider,
-.math-keyboard-dock:not(.has-fixed-keys) .math-keyboard-fixed-grid {
-  display: none;
-}
-
-.math-keyboard-fixed-label {
-  font-size: 10px;
-  text-transform: none;
-  letter-spacing: 0.12em;
-  color: var(--text-soft);
-}
-
-.math-keyboard-fixed-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(44px, auto));
-  gap: 3px;
-  justify-content: start;
-  align-content: start;
-  padding: 4px;
-  border-radius: 9px;
-  background: rgba(0, 0, 0, 0.18);
-  border: 1px solid var(--panel-border);
-}
-
-.math-keyboard-key {
-  border: 1px solid var(--control-border);
-  border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text);
-  min-width: 44px;
-  min-height: 44px;
-  padding: 4px 6px;
-  text-align: center;
-  cursor: pointer;
-  font-family: "Hiragino Sans", "Avenir Next", "Yu Gothic", sans-serif;
-  line-height: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 500;
-  text-rendering: optimizeLegibility;
-  white-space: nowrap;
-  transition: all 0.1s ease;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-}
-
-.math-keyboard-key.has-math {
-  /* font properties reset to allow MathLive to handle them */
-  text-rendering: auto;
-}
-
-.math-keyboard-key.has-hint {
-  flex-direction: column;
-  gap: 4px;
-}
-
-.math-keyboard-key.has-hint::after {
-  content: attr(data-key-hint);
-  font-size: 9px;
-  color: var(--text-soft);
-  letter-spacing: 0.04em;
-}
-
-.math-keyboard-math {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-  font-size: 16px; /* Natural readable size */
-}
-
-/* .math-keyboard-math .ML__latex rule removed */
-
-.math-keyboard-key:hover {
-  border-color: rgba(133, 181, 255, 0.6);
-  background: linear-gradient(180deg, #22303A 0%, #11161C 100%);
-  transform: translateY(-1px);
-}
-
-.math-keyboard-key:active {
-  transform: translateY(1px);
-  box-shadow:
-    inset 0 2px 6px rgba(0, 0, 0, 0.45),
-    0 3px 8px rgba(0, 0, 0, 0.35);
-}
-
-.math-keyboard-key:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
-}
-
-.math-keyboard-key.is-compact {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0;
-}
-
-.math-keyboard-key.is-tiny {
-  font-size: 10px;
-  font-weight: 600;
-}
 
 .editor-host {
   position: absolute;
@@ -7072,6 +6849,3 @@ body.has-editor .editor-group:not(.is-empty) .editor-placeholder {
   padding: 8px 12px;
 }
 
-.bottom-panel-body .math-keyboard-dock {
-  flex-shrink: 0;
-}

@@ -182,7 +182,6 @@ export const buildOperatorCandidates = (token: string) => {
 type WordCandidateOptions = {
   allowContains?: boolean;
   allowContainsMinLength?: number;
-  allowedPacks?: Set<string>;
   dedupeByLatex?: boolean;
 };
 
@@ -191,7 +190,6 @@ export const buildWordCandidates = (token: string, options: WordCandidateOptions
   const allowContains = options.allowContains ?? true;
   const allowContainsMinLength = options.allowContainsMinLength ?? 2;
   const canContains = allowContains && normalized.length >= allowContainsMinLength;
-  const allowedPacks = options.allowedPacks;
   const dedupeByLatex = options.dedupeByLatex ?? true;
   const prefixMatches: Array<{ candidate: Candidate; score: number }> = [];
   const containsMatches: Array<{ candidate: Candidate; score: number }> = [];
@@ -203,25 +201,16 @@ export const buildWordCandidates = (token: string, options: WordCandidateOptions
     if (!group) {
       return;
     }
-    if (allowedPacks && !allowedPacks.has(group.pack)) {
-      return;
-    }
     const baseScoreMap = { exact: 220, prefix: 180 } as const;
     const lengthPenalty = trigger.length - normalized.length;
     const baseScore = baseScoreMap[matchType] - lengthPenalty;
     group.candidates.forEach((candidate) => {
-      const scriptBoost = 0;
-      const isAlias = candidate.hint !== trigger;
-      const aliasPenalty =
-        isAlias && normalized.length <= 2 ? 140 : isAlias && matchType !== "exact" ? 40 : 0;
       const exactHintBoost = candidate.hint === normalized ? 120 : 0;
       const score =
         baseScore +
         candidate.priority +
         group.priority +
-        scriptBoost +
-        exactHintBoost -
-        aliasPenalty;
+        exactHintBoost;
       prefixMatches.push({ candidate, score });
     });
   });
@@ -238,20 +227,13 @@ export const buildWordCandidates = (token: string, options: WordCandidateOptions
       if (!group) {
         return;
       }
-      if (allowedPacks && !allowedPacks.has(group.pack)) {
-        return;
-      }
       const baseScoreMap = { contains: 120 } as const;
       const indexPenalty = trigger.indexOf(normalized) * 2;
       const lengthPenalty = trigger.length - normalized.length;
       const baseScore = baseScoreMap.contains - lengthPenalty - indexPenalty;
       group.candidates.forEach((candidate) => {
-        const scriptBoost = 0;
-        const isAlias = candidate.hint !== trigger;
-        const aliasPenalty =
-          isAlias && normalized.length <= 2 ? 140 : isAlias ? 40 : 0;
         const score =
-          baseScore + candidate.priority + group.priority + scriptBoost - aliasPenalty;
+          baseScore + candidate.priority + group.priority;
         containsMatches.push({ candidate, score });
       });
     });

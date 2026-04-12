@@ -52,9 +52,6 @@ export const createBlockSettingsModalOps = (runtime) => {
                 if (target === "insert-format") {
                     setBlockSettingsPage("insert-format");
                 }
-                else if (target === "suggestions") {
-                    setBlockSettingsPage("suggestions");
-                }
             });
         });
     }

@@ -1,11 +1,13 @@
-import { getUiLocale, onUiLocaleChange } from "../i18n.js";
+import { onUiLocaleChange } from "../i18n.js";
 import { closeMathfieldInternalMenu } from "../../math/mathfield-private-adapter.js";
 export const initMathLive = (context, deps) => {
     const { blockMathInputContainer } = context.dom;
     let setupInFlight = false;
     let setupRetryScheduled = false;
     let containerPointerDownHandler = null;
-    const resolveMathLiveLocale = () => (getUiLocale() === "en" ? "en" : "ja");
+    // Always use "en" for MathLive locale to prevent IME auto-switching.
+    // MathLive handles math input in Latin script regardless of UI locale.
+    const resolveMathLiveLocale = () => "en";
     const applyMathfieldLocale = (mathfield) => {
         if (!(mathfield instanceof HTMLElement)) {
             return;
@@ -458,6 +460,12 @@ export const initMathLive = (context, deps) => {
           color: var(--text, #eef3fb) !important;
           background-color: transparent !important;
         }
+        .ML__keyboard-sink {
+          ime-mode: disabled !important;
+        }
+        textarea.ML__keyboard-sink {
+          ime-mode: disabled !important;
+        }
         .ML__container {
           --hue: 200;
           position: relative !important;
@@ -471,10 +479,9 @@ export const initMathLive = (context, deps) => {
           color: var(--text, #eef3fb) !important;
         }
         .ML__placeholder {
-          color: var(--accent, #5bc2ff) !important;
+          color: var(--muted, #888) !important;
           opacity: 0.7;
-          background: rgba(91, 194, 255, 0.06);
-          border-radius: 2px;
+          background: transparent !important;
         }
         .ML__selection {
           background: rgba(91, 194, 255, 0.45) !important;
@@ -484,65 +491,73 @@ export const initMathLive = (context, deps) => {
           color: var(--text, #f8fbff) !important;
         }
         .ML__prompt {
-          border-radius: 4px !important;
-          background: rgba(91, 194, 255, 0.08) !important;
+          background: transparent !important;
+          border: none !important;
+          outline: none !important;
         }
         .ML__editablePromptBox {
           outline: none !important;
           box-shadow: none !important;
-          background: rgba(91, 194, 255, 0.16) !important;
-          z-index: 0 !important;
+          background: transparent !important;
         }
         .ML__focused .ML__focusedPromptBox {
           outline: none !important;
           box-shadow: none !important;
-          background: rgba(91, 194, 255, 0.32) !important;
-          z-index: 1 !important;
+          background: transparent !important;
+        }
+        .ML__correctPromptBox,
+        .ML__incorrectPromptBox {
+          outline: none !important;
+          box-shadow: none !important;
+        }
+        .ML__lockedPromptBox {
+          background-color: transparent !important;
         }
         .ML__caret {
           background-color: var(--accent, #5bc2ff) !important;
         }
         .ML__contains-highlight {
-          background: rgba(91, 194, 255, 0.25) !important;
+          background: transparent !important;
+        }
+        .ML__focused .ML__contains-highlight {
+          background: transparent !important;
+        }
+        .ML__contains-caret .ML__close,
+        .ML__contains-caret .ML__open {
+          color: inherit !important;
+        }
+        .ML__focused .ML__text {
+          background: transparent !important;
         }
         .ML__tex64-unknown-command {
-          border-color: hsl(205, 20%, 40%) !important;
-          background: hsl(210, 15%, 22%) !important;
-          color: hsl(210, 30%, 82%) !important;
+          border-color: transparent !important;
+          background: transparent !important;
+          color: inherit !important;
         }
         .ML__tex64-unknown-command-args {
-          border-left-color: hsl(205, 18%, 45%) !important;
+          border-left-color: transparent !important;
         }
         .ML__tex64-aux-command {
-          border-color: hsl(208, 22%, 44%) !important;
-          background: hsl(210, 18%, 20%) !important;
-          color: hsl(210, 40%, 82%) !important;
+          border-color: transparent !important;
+          background: transparent !important;
+          color: inherit !important;
         }
         .ML__tex64-aux-command-arg {
-          border-left-color: hsl(208, 18%, 42%) !important;
+          border-left-color: transparent !important;
         }
         .ML__tex64-aux-command--label,
         .ML__tex64-aux-command--ref,
         .ML__tex64-aux-command--eqref,
         .ML__tex64-aux-command--pageref,
-        .ML__tex64-aux-command--autoref {
-          border-color: hsl(203, 30%, 42%) !important;
-          background: hsl(200, 22%, 20%) !important;
-        }
+        .ML__tex64-aux-command--autoref,
         .ML__tex64-aux-command--tag,
-        .ML__tex64-aux-command--tagstar {
-          border-color: hsl(30, 35%, 42%) !important;
-          background: hsl(32, 22%, 20%) !important;
-        }
+        .ML__tex64-aux-command--tagstar,
         .ML__tex64-aux-command--intertext,
-        .ML__tex64-aux-command--shortintertext {
-          border-color: hsl(149, 22%, 40%) !important;
-          background: hsl(145, 18%, 20%) !important;
-        }
+        .ML__tex64-aux-command--shortintertext,
         .ML__tex64-aux-command--notag,
         .ML__tex64-aux-command--nonumber {
-          border-color: hsl(4, 30%, 44%) !important;
-          background: hsl(6, 18%, 22%) !important;
+          border-color: transparent !important;
+          background: transparent !important;
         }
         .ML__virtual-keyboard-toggle {
           display: none !important;
@@ -559,6 +574,7 @@ export const initMathLive = (context, deps) => {
         .ML__content {
           flex: 1 1 auto !important;
           min-width: 0 !important;
+          overflow: visible !important;
         }
         .ML__toggles {
           margin-left: auto !important;

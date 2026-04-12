@@ -3,7 +3,6 @@ import { normalizeLegacyEnvMarkers, unwrapAligned } from "../input-ui-latex-form
 import type { BlockInputRuntime } from "./runtime.js";
 import type { MathValueOps } from "./math-normalize.js";
 import { decorateTextareaAsMathfield } from "./textarea-shim.js";
-import { blockDirectLatexCommandInput } from "./direct-command-input.js";
 
 export type BlockMathInputElementOps = {
   setMathInputElement: (element: HTMLElement | null) => void;
@@ -171,9 +170,6 @@ export const createBlockMathInputElementOps = (
           event.stopImmediatePropagation();
           return;
         }
-        if (blockDirectLatexCommandInput(runtime, event)) {
-          return;
-        }
         const isSuggestShortcut = (event.ctrlKey || event.metaKey) && !event.altKey && event.key === ".";
         if (isSuggestShortcut) {
           const opened = Boolean(runtime.state.mathWysiwygApi?.openExplicitSuggestions());
@@ -189,7 +185,6 @@ export const createBlockMathInputElementOps = (
         }
       });
       textArea.addEventListener("focus", () => {
-        runtime.state.mathKeyboardVisibilityHandler();
         textArea.classList.add("is-focused");
       });
       textArea.addEventListener("blur", () => {

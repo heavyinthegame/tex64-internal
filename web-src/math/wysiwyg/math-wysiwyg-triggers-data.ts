@@ -10,5 +10,3 @@ export const MANUAL_TRIGGERS: WysiwygManualTrigger[] = [
   ...MANUAL_TRIGGERS_PART_3,
   ...MANUAL_TRIGGERS_PART_4,
 ];
-
-export { ALIAS_TRIGGERS } from "./triggers-data/alias.js";

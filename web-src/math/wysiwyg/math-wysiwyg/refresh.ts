@@ -247,12 +247,8 @@ export const createMathWysiwygRefreshOps = (
         selection.start !== selection.end &&
         selectionRanges.some((range) => cursorOffset >= range.start && cursorOffset <= range.end);
       if (selection.start !== selection.end && !isPlaceholderSelection) {
-        const selectionLength = Math.abs(selection.end - selection.start);
-        const now = typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
-        if (selectionLength > 1 && now - runtime.lastInputTime > 120) {
-          candidateOps.updateCandidates(null, options);
-          return;
-        }
+        candidateOps.updateCandidates(null, options);
+        return;
       }
 
       const analysisRange = resolveAnalysisRange(runtime, mathfieldApi, cursorOffset);
@@ -366,9 +362,6 @@ export const createMathWysiwygRefreshOps = (
   const updateConfig = (config: Partial<MathWysiwygConfig>) => {
     if (typeof config.autoSuggest === "boolean") {
       runtime.autoSuggest = config.autoSuggest;
-    }
-    if (Array.isArray(config.enabledPacks)) {
-      runtime.enabledPacks = new Set(config.enabledPacks);
     }
     if (!runtime.autoSuggest && runtime.panelState.active && !runtime.panelState.explicitSession) {
       candidateOps.updateCandidates(null);

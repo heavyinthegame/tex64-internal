@@ -1,6 +1,6 @@
 import { DEFAULT_MRU_STORAGE_KEY } from "./constants.js";
 export const createMathWysiwygRuntime = (deps) => {
-    var _a, _b;
+    var _a;
     const enqueueMicrotaskSafe = (task) => {
         if (typeof queueMicrotask === "function") {
             queueMicrotask(task);
@@ -26,7 +26,6 @@ export const createMathWysiwygRuntime = (deps) => {
     const runtime = {
         deps,
         autoSuggest: (_a = deps.autoSuggest) !== null && _a !== void 0 ? _a : true,
-        enabledPacks: new Set((_b = deps.enabledPacks) !== null && _b !== void 0 ? _b : []),
         mathfield: null,
         eventController: null,
         composing: false,

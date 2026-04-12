@@ -1,4 +1,4 @@
-import { mathKeyboardFixedKeys, mathKeyboardSets } from "../../app/math-keyboard.js";
+import { mathKeyboardFixedKeys, mathKeyboardSets } from "../../app/math-keyboard-data.js";
 export const normalizeLatexKey = (value) => (value !== null && value !== void 0 ? value : "").trim();
 const EXCLUDED_COMMANDS = new Set([
     "left",

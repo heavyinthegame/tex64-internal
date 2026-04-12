@@ -1,0 +1,200 @@
+[
+  {
+    "file": "main.tex",
+    "snippet": "$\\alpha=\\beta=\\gamma$",
+    "content": {
+      "formula": "\\alpha=\\beta=\\gamma"
+    },
+    "mode": "new",
+    "createdAt": "2026-04-10T11:41:38.032Z"
+  },
+  {
+    "file": "main.tex",
+    "snippet": "$\\frac{\\sqrt{\\pi}}{2}$",
+    "content": {
+      "formula": "\\frac{\\sqrt{\\pi}}{2}"
+    },
+    "mode": "new",
+    "createdAt": "2026-04-10T13:14:31.018Z"
+  },
+  {
+    "file": "main.tex",
+    "snippet": "$\\sum_{k=1n}^{n}k=1\\alpha_{k}$",
+    "content": {
+      "formula": "\\sum_{k=1n}^{n}k=1\\alpha_{k}"
+    },
+    "mode": "new",
+    "createdAt": "2026-04-10T13:17:20.964Z"
+  },
+  {
+    "file": "main.tex",
+    "snippet": "\\begin{cases}x & x.0\\\\ -x & xleq\\\\ 0 & \\placeholder{}\\end{cases}",
+    "content": {
+      "formula": "\\begin{cases}x & x.0\\\\ -x & xleq\\\\ 0 & \\placeholder{}\\end{cases}"
+    },
+    "mode": "new",
+    "createdAt": "2026-04-10T13:20:19.572Z"
+  },
+  {
+    "file": "main.tex",
+    "snippet": "$\\hat{x}\\hat{x}+\\vec{v}+\\overline{AB}$",
+    "content": {
+      "formula": "\\hat{x}\\hat{x}+\\vec{v}+\\overline{AB}"
+    },
+    "mode": "new",
+    "createdAt": "2026-04-10T13:37:20.487Z"
+  },
+  {
+    "file": "main.tex",
+    "snippet": "$\\forall\\epsilon>0,\\exists\\delta>0$",
+    "content": {
+      "formula": "\\forall\\epsilon>0,\\exists\\delta>0"
+    },
+    "mode": "new",
+    "createdAt": "2026-04-10T14:22:28.870Z"
+  },
+  {
+    "file": "main.tex",
+    "snippet": "$A\\to B\\Rightarrow C\\hookrightarrow D$",
+    "content": {
+      "formula": "A\\to B\\Rightarrow C\\hookrightarrow D"
+    },
+    "mode": "new",
+    "createdAt": "2026-04-10T14:26:35.597Z"
+  },
+  {
+    "file": "main.tex",
+    "snippet": "$x\\leq y$",
+    "content": {
+      "formula": "x\\leq y"
+    },
+    "mode": "new",
+    "createdAt": "2026-04-10T14:28:30.177Z"
+  },
+  {
+    "file": "main.tex",
+    "snippet": "\\begin{pmatrix}1 & \\cdots\\\\ \\vdots & \\ddots\\end{pmatrix}",
+    "content": {
+      "formula": "\\begin{pmatrix}1 & \\cdots\\\\ \\vdots & \\ddots\\end{pmatrix}"
+    },
+    "mode": "new",
+    "createdAt": "2026-04-10T14:31:55.075Z"
+  },
+  {
+    "file": "main.tex",
+    "snippet": "$\\gamma\\zeta\\eta\\iota\\kappa\\lambda\\mu\\nu\\xi\\tau\\upsilon\\chi\\psi\\omega\\rho\\sigma$",
+    "content": {
+      "formula": "\\gamma\\zeta\\eta\\iota\\kappa\\lambda\\mu\\nu\\xi\\tau\\upsilon\\chi\\psi\\omega\\rho\\sigma"
+    },
+    "mode": "new",
+    "createdAt": "2026-04-10T14:52:18.255Z"
+  },
+  {
+    "file": "main.tex",
+    "snippet": "$leq\\hat{x}　\\bar{y}　\\tilde{z}　\\dot{a}　\\ddots b　\\vec{v}　\\widehat{A}　\\widetilde{B}　\\check{c}　\\breve{d}　\\acute{e}　\\grave{f}　\\mathring{g}$",
+    "content": {
+      "formula": "leq\\hat{x}　\\bar{y}　\\tilde{z}　\\dot{a}　\\ddots b　\\vec{v}　\\widehat{A}　\\widetilde{B}　\\check{c}　\\breve{d}　\\acute{e}　\\grave{f}　\\mathring{g}"
+    },
+    "mode": "new",
+    "createdAt": "2026-04-10T15:09:24.510Z"
+  },
+  {
+    "file": "main.tex",
+    "snippet": "$\\sinh　\\cosh　\\tanh　\\coth　\\hom　\\deg　\\arg　\\ker　\\dim　\\operatorname{\\mathrm{rank}}　\\gcd　\\operatorname{\\mathrm{lcm}}　\\lg　\\Pr$",
+    "content": {
+      "formula": "\\sinh　\\cosh　\\tanh　\\coth　\\hom　\\deg　\\arg　\\ker　\\dim　\\operatorname{\\mathrm{rank}}　\\gcd　\\operatorname{\\mathrm{lcm}}　\\lg　\\Pr"
+    },
+    "mode": "new",
+    "createdAt": "2026-04-10T15:18:50.191Z"
+  },
+  {
+    "file": "main.tex",
+    "snippet": "$\\coprod　\\oplus　\\bigoplus　\\otimes　\\bigotimes　\\ast　\\star　\\bullet　\\diamond　\\sqcap　\\sqcup　\\uplus　\\dagger　\\wr　\\amalg　\\triangleleft　\\triangleright$",
+    "content": {
+      "formula": "\\coprod　\\oplus　\\bigoplus　\\otimes　\\bigotimes　\\ast　\\star　\\bullet　\\diamond　\\sqcap　\\sqcup　\\uplus　\\dagger　\\wr　\\amalg　\\triangleleft　\\triangleright"
+    },
+    "mode": "new",
+    "createdAt": "2026-04-10T15:31:14.248Z"
+  },
+  {
+    "file": "main.tex",
+    "snippet": "$\\aleph　\\hbar　\\ell　\\imath　\\jmath　\\Re　\\imath　\\wp　\\complement　\\varnothing　\\triangleright　\\top　\\bot　\\nexists　\\surd　\\nabla　\\mathbb{R}R　F　g　v　where$",
+    "content": {
+      "formula": "\\aleph　\\hbar　\\ell　\\imath　\\jmath　\\Re　\\imath　\\wp　\\complement　\\varnothing　\\triangleright　\\top　\\bot　\\nexists　\\surd　\\nabla　\\mathbb{R}R　F　g　v　where"
+    },
+    "mode": "new",
+    "createdAt": "2026-04-10T15:48:42.155Z"
+  },
+  {
+    "file": "main.tex",
+    "snippet": "$\\leq　\\geq　\\neq　\\approx　\\sim　\\simeq　\\cong　\\cong　\\propto　\\prec　\\succ　\\subset　\\supset　\\int　\\notin　\\ni　\\vdash　\\dashv　\\models\\,\\mathrm{d}\\placeholder{}$",
+    "content": {
+      "formula": "\\leq　\\geq　\\neq　\\approx　\\sim　\\simeq　\\cong　\\cong　\\propto　\\prec　\\succ　\\subset　\\supset　\\int　\\notin　\\ni　\\vdash　\\dashv　\\models\\,\\mathrm{d}\\placeholder{}"
+    },
+    "mode": "new",
+    "createdAt": "2026-04-10T16:02:16.017Z"
+  },
+  {
+    "file": "main.tex",
+    "snippet": "$\\Rightarrow　\\approx　\\pm　\\cdots$",
+    "content": {
+      "formula": "\\Rightarrow　\\approx　\\pm　\\cdots"
+    },
+    "mode": "new",
+    "createdAt": "2026-04-10T23:22:56.175Z"
+  },
+  {
+    "file": "main.tex",
+    "snippet": "$\\uparrow　\\downarrow　\\nearrow　\\searrow　\\longrightarrow{}　\\longmapsto　\\rightharpoonup　\\rightleftharpoons　\\twoheadrightarrow　\\iff　\\leftrightarrow$",
+    "content": {
+      "formula": "\\uparrow　\\downarrow　\\nearrow　\\searrow　\\longrightarrow{}　\\longmapsto　\\rightharpoonup　\\rightleftharpoons　\\twoheadrightarrow　\\iff　\\leftrightarrow"
+    },
+    "mode": "new",
+    "createdAt": "2026-04-10T23:30:12.045Z"
+  },
+  {
+    "file": "main.tex",
+    "snippet": "$\\longrightarrow{}\\ominus　\\oslash　\\odot　\\bigvee　\\bigwedge　\\bigodot　\\bigsqcup　\\biguplus　\\setminus　\\bigotimes　\\div　\\circ$",
+    "content": {
+      "formula": "\\longrightarrow{}\\ominus　\\oslash　\\odot　\\bigvee　\\bigwedge　\\bigodot　\\bigsqcup　\\biguplus　\\setminus　\\bigotimes　\\div　\\circ"
+    },
+    "mode": "new",
+    "createdAt": "2026-04-10T23:38:07.729Z"
+  },
+  {
+    "file": "main.tex",
+    "snippet": "$\\longrightarrow{}\\left|x　\\left\\lVert v　\\left\\lceil y　\\left\\lfloor z　\\left(a　\\left[b　\\left\\{c　\\langle d　\\langle e,f　\\left.g\\right|_0\\rangle\\rangle\\right\\}\\right]\\right)\\right\\rfloor\\right\\rceil\\right\\rVert\\right|$",
+    "content": {
+      "formula": "\\longrightarrow{}\\left|x　\\left\\lVert v　\\left\\lceil y　\\left\\lfloor z　\\left(a　\\left[b　\\left\\{c　\\langle d　\\langle e,f　\\left.g\\right|_0\\rangle\\rangle\\right\\}\\right]\\right)\\right\\rfloor\\right\\rceil\\right\\rVert\\right|"
+    },
+    "mode": "new",
+    "createdAt": "2026-04-10T23:49:43.801Z"
+  },
+  {
+    "file": "main.tex",
+    "snippet": "$\\longrightarrow{}a　\\quad　b　\\qquad　c　\\ldots　d$",
+    "content": {
+      "formula": "\\longrightarrow{}a　\\quad　b　\\qquad　c　\\ldots　d"
+    },
+    "mode": "new",
+    "createdAt": "2026-04-10T23:54:03.732Z"
+  },
+  {
+    "file": "main.tex",
+    "snippet": "$\\longrightarrow{}\\cancel{x　\\boxed{y　\\binom{n}{k　\\overset{b　\\underset{d　\\underbrace{e　\\overbrace{f}}}{c}}{a}}}}$",
+    "content": {
+      "formula": "\\longrightarrow{}\\cancel{x　\\boxed{y　\\binom{n}{k　\\overset{b　\\underset{d　\\underbrace{e　\\overbrace{f}}}{c}}{a}}}}"
+    },
+    "mode": "new",
+    "createdAt": "2026-04-11T00:02:59.748Z"
+  },
+  {
+    "file": "main.tex",
+    "snippet": "$\\longrightarrow{}\\begin{bmatrix}\\placeholder{} & \\begin{bmatrix}\\placeholder{} & \\placeholder{}\\\\ \\placeholder{} & 　\\mathbb{R}　\\mathbb{C}　\\mathbb{Z}　\\mathbb{Q}　\\mathbb{N}　prob\\\\ \\placeholder{} & \\placeholder{}\\end{bmatrix}　\\mathbb{E}\\\\  & \\end{bmatrix}$",
+    "content": {
+      "formula": "\\longrightarrow{}\\begin{bmatrix}\\placeholder{} & \\begin{bmatrix}\\placeholder{} & \\placeholder{}\\\\ \\placeholder{} & 　\\mathbb{R}　\\mathbb{C}　\\mathbb{Z}　\\mathbb{Q}　\\mathbb{N}　prob\\\\ \\placeholder{} & \\placeholder{}\\end{bmatrix}　\\mathbb{E}\\\\  & \\end{bmatrix}"
+    },
+    "mode": "new",
+    "createdAt": "2026-04-11T00:10:25.369Z"
+  }
+]

@@ -108,7 +108,7 @@ export const MANUAL_TRIGGERS_PART_1: WysiwygManualTrigger[] = [
   {
     trigger: "min",
     priority: 85,
-    pack: "math",
+
     candidates: [
       { latex: "\\min", label: "min", displayLatex: "\\min" },
       { latex: "\\min_{#?}", label: "min_{ }", displayLatex: "\\min_{x}" },
@@ -117,7 +117,7 @@ export const MANUAL_TRIGGERS_PART_1: WysiwygManualTrigger[] = [
   {
     trigger: "max",
     priority: 85,
-    pack: "math",
+
     candidates: [
       { latex: "\\max", label: "max", displayLatex: "\\max" },
       { latex: "\\max_{#?}", label: "max_{ }", displayLatex: "\\max_{x}" },
@@ -126,7 +126,7 @@ export const MANUAL_TRIGGERS_PART_1: WysiwygManualTrigger[] = [
   {
     trigger: "sup",
     priority: 85,
-    pack: "math",
+
     candidates: [
       { latex: "\\sup", label: "sup", displayLatex: "\\sup" },
       { latex: "\\sup_{#?}", label: "sup_{ }", displayLatex: "\\sup_{x}" },
@@ -135,13 +135,13 @@ export const MANUAL_TRIGGERS_PART_1: WysiwygManualTrigger[] = [
   {
     trigger: "gcd",
     priority: 85,
-    pack: "math",
+
     candidates: [{ latex: "\\gcd", label: "gcd", displayLatex: "\\gcd" }],
   },
   {
     trigger: "lcm",
     priority: 85,
-    pack: "math",
+
     candidates: [
       {
         latex: "\\operatorname{lcm}",
@@ -153,7 +153,7 @@ export const MANUAL_TRIGGERS_PART_1: WysiwygManualTrigger[] = [
   {
     trigger: "mod",
     priority: 80,
-    pack: "math",
+
     candidates: [
       { latex: "\\bmod", label: "bmod", displayLatex: "\\bmod" },
       { latex: "\\pmod{#?}", label: "pmod", displayLatex: "\\pmod{n}" },
@@ -162,7 +162,7 @@ export const MANUAL_TRIGGERS_PART_1: WysiwygManualTrigger[] = [
   {
     trigger: "sgn",
     priority: 80,
-    pack: "math",
+
     candidates: [
       {
         latex: "\\operatorname{sgn}",
@@ -174,13 +174,13 @@ export const MANUAL_TRIGGERS_PART_1: WysiwygManualTrigger[] = [
   {
     trigger: "det",
     priority: 90,
-    pack: "math",
+
     candidates: [{ latex: "\\det", label: "det", displayLatex: "\\det" }],
   },
   {
     trigger: "tr",
     priority: 90,
-    pack: "math",
+
     candidates: [
       {
         latex: "\\operatorname{tr}",
@@ -192,7 +192,7 @@ export const MANUAL_TRIGGERS_PART_1: WysiwygManualTrigger[] = [
   {
     trigger: "rank",
     priority: 90,
-    pack: "math",
+
     candidates: [
       {
         latex: "\\operatorname{rank}",
@@ -204,19 +204,19 @@ export const MANUAL_TRIGGERS_PART_1: WysiwygManualTrigger[] = [
   {
     trigger: "ker",
     priority: 90,
-    pack: "math",
+
     candidates: [{ latex: "\\ker", label: "ker", displayLatex: "\\ker" }],
   },
   {
     trigger: "dim",
     priority: 90,
-    pack: "math",
+
     candidates: [{ latex: "\\dim", label: "dim", displayLatex: "\\dim" }],
   },
   {
     trigger: "Var",
     priority: 85,
-    pack: "cs",
+
     candidates: [
       {
         latex: "\\operatorname{Var}",
@@ -228,7 +228,7 @@ export const MANUAL_TRIGGERS_PART_1: WysiwygManualTrigger[] = [
   {
     trigger: "Cov",
     priority: 85,
-    pack: "cs",
+
     candidates: [
       {
         latex: "\\operatorname{Cov}",
@@ -240,7 +240,7 @@ export const MANUAL_TRIGGERS_PART_1: WysiwygManualTrigger[] = [
   {
     trigger: "set",
     priority: 90,
-    pack: "cs",
+
     candidates: [
       {
         latex: "\\left\\{#? \\mid #?\\right\\}",
@@ -318,7 +318,7 @@ export const MANUAL_TRIGGERS_PART_1: WysiwygManualTrigger[] = [
   {
     trigger: "smallmatrix",
     priority: 98,
-    pack: "math",
+
     candidates: [
       {
         latex: "\\begin{smallmatrix}#?&#?\\\\#?&#?\\end{smallmatrix}",
@@ -346,7 +346,7 @@ export const MANUAL_TRIGGERS_PART_1: WysiwygManualTrigger[] = [
   {
     trigger: "dcases",
     priority: 96,
-    pack: "math",
+
     candidates: [
       {
         latex: "\\begin{dcases}#?&#?\\\\#?&#?\\end{dcases}",
@@ -358,7 +358,7 @@ export const MANUAL_TRIGGERS_PART_1: WysiwygManualTrigger[] = [
   {
     trigger: "rcases",
     priority: 96,
-    pack: "math",
+
     candidates: [
       {
         latex: "\\begin{rcases}#?&#?\\\\#?&#?\\end{rcases}",
@@ -467,7 +467,7 @@ export const MANUAL_TRIGGERS_PART_1: WysiwygManualTrigger[] = [
   {
     trigger: "overbrace",
     priority: 80,
-    pack: "personal",
+
     candidates: [
       { latex: "\\overbrace{#?}", label: "overbrace", displayLatex: "\\overbrace{x}" },
       { latex: "\\overbrace{#?}^{#?}", label: "overbrace^", displayLatex: "\\overbrace{x}^{n}" },
@@ -476,7 +476,7 @@ export const MANUAL_TRIGGERS_PART_1: WysiwygManualTrigger[] = [
   {
     trigger: "underbrace",
     priority: 80,
-    pack: "personal",
+
     candidates: [
       { latex: "\\underbrace{#?}", label: "underbrace", displayLatex: "\\underbrace{x}" },
       { latex: "\\underbrace{#?}_{#?}", label: "underbrace_", displayLatex: "\\underbrace{x}_{n}" },
@@ -485,13 +485,13 @@ export const MANUAL_TRIGGERS_PART_1: WysiwygManualTrigger[] = [
   {
     trigger: "boxed",
     priority: 75,
-    pack: "personal",
+
     candidates: [{ latex: "\\boxed{#?}", label: "boxed", displayLatex: "\\boxed{x}" }],
   },
   {
     trigger: "cancel",
     priority: 75,
-    pack: "personal",
+
     candidates: [
       { latex: "\\cancel{#?}", label: "cancel", displayLatex: "\\cancel{x}" },
       { latex: "\\bcancel{#?}", label: "bcancel", displayLatex: "\\bcancel{x}" },
@@ -501,7 +501,7 @@ export const MANUAL_TRIGGERS_PART_1: WysiwygManualTrigger[] = [
   {
     trigger: "cancelto",
     priority: 70,
-    pack: "personal",
+
     candidates: [
       {
         latex: "\\overset{#?}{\\cancel{#?}}",

@@ -4,7 +4,6 @@ import type { AppContext } from "./context.js";
 type TabControllerDeps = {
   onFilesTabActive: () => void;
   onSettingsTabActive: () => void;
-  updateMathKeyboardVisibility: () => void;
 };
 
 export type TabControllerApi = {
@@ -70,7 +69,6 @@ export const initTabController = (
     if (tabKey === "settings") {
       deps.onSettingsTabActive();
     }
-    deps.updateMathKeyboardVisibility();
   };
 
   return {

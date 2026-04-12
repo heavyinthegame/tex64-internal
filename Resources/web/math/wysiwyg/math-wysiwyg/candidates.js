@@ -83,8 +83,7 @@ export const createMathWysiwygCandidateOps = (runtime, deps) => {
         if (!normalized) {
             return [];
         }
-        const allowedPacks = runtime.enabledPacks.size > 0 ? runtime.enabledPacks : undefined;
-        return buildWordCandidates(normalized, { allowedPacks }).map((candidate) => ({
+        return buildWordCandidates(normalized).map((candidate) => ({
             id: candidate.id,
             key: candidate.key,
             label: candidate.label,
@@ -139,7 +138,6 @@ export const createMathWysiwygCandidateOps = (runtime, deps) => {
             panelOps.setPanelVisible(false);
             return;
         }
-        const allowedPacks = explicit ? undefined : runtime.enabledPacks.size > 0 ? runtime.enabledPacks : undefined;
         if (tokenMatch.kind === "word" || tokenMatch.kind === "command" || tokenMatch.kind === "slash-command") {
             const normalized = tokenMatch.token.toLowerCase();
             const minLength = tokenMatch.kind === "slash-command"
@@ -175,7 +173,6 @@ export const createMathWysiwygCandidateOps = (runtime, deps) => {
             else {
                 const rawCandidates = buildWordCandidates(slashToken, {
                     allowContainsMinLength: explicit ? 1 : AUTO_CONTAINS_MIN_LENGTH,
-                    allowedPacks,
                     dedupeByLatex: !explicit,
                 });
                 const preferred = rawCandidates.filter((candidate) => SLASH_COMMAND_HINT_SET.has(candidate.hint.toLowerCase()));
@@ -189,7 +186,6 @@ export const createMathWysiwygCandidateOps = (runtime, deps) => {
         else {
             nextCandidates = buildWordCandidates(tokenMatch.token, {
                 allowContainsMinLength: explicit ? 2 : AUTO_CONTAINS_MIN_LENGTH,
-                allowedPacks,
                 dedupeByLatex: !explicit,
             });
         }
@@ -200,7 +196,6 @@ export const createMathWysiwygCandidateOps = (runtime, deps) => {
                 const suffix = tokenMatch.token.slice(dropPrefix);
                 const suffixCandidates = buildWordCandidates(suffix, {
                     allowContainsMinLength: explicit ? 2 : AUTO_CONTAINS_MIN_LENGTH,
-                    allowedPacks,
                     dedupeByLatex: !explicit,
                 });
                 if (suffixCandidates.length === 0) {
