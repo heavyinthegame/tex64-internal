@@ -16,5 +16,14 @@
     },
     "mode": "new",
     "createdAt": "2026-04-10T09:31:48.254Z"
+  },
+  {
+    "file": "main.tex",
+    "snippet": "\\[f(x)=\\frac{1}{\\sqrt{2\\pi}}\\int_{-\\infty}^{\\infty}F(k)e^{ikx}dk\\]",
+    "content": {
+      "formula": "f(x)=\\frac{1}{\\sqrt{2\\pi}}\\int_{-\\infty}^{\\infty}F(k)e^{ikx}dk"
+    },
+    "mode": "new",
+    "createdAt": "2026-04-13T03:39:15.578Z"
   }
 ]

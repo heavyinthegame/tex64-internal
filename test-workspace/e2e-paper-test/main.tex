@@ -39,7 +39,6 @@ The remainder of the paper is organized as follows. Section~\ref{sec:preliminari
 \section{Preliminaries}\label{sec:preliminaries}
 \subsection{Notation}
 
-
 Attention-based models operate on sequences of vectors. We write an input sequence as $X = (x_1, x_2, \dots, x_n)$, where each $x_i \in \mathbb{R}^d$ is a token representation. In practice, these vectors may come from learned embeddings, image patches, audio frames, or other modality-specific encoders. The goal is to transform the input into contextualized representations that incorporate information from the entire sequence.
 
 Throughout this paper, we use $n$ for sequence length, $d$ for the model dimension, and $d_k$ and $d_v$ for the dimensions of keys and values. We also use matrices $Q$, $K$, and $V$ to denote collections of queries, keys, and values, respectively. This notation is standard in the Transformer literature and makes it easy to express attention as a matrix operation.
@@ -93,6 +92,8 @@ Another important point is that attention is highly modular. The same basic oper
 Overall, the story of attention is one of balance. Dense attention is elegant and powerful, sparse attention is efficient and scalable, and approximate attention is practical for long contexts. The ongoing challenge is to combine these advantages without losing the modeling capacity that made Transformers successful in the first place.
 
 \section{Conclusion}
+
+\[f(x)=\frac{1}{\sqrt{2\pi}}\int_{-\infty}^{\infty}F(k)e^{ikx}dk\]
 
 Attention has reshaped modern machine learning by providing a simple yet powerful way to route information through a model. In Transformers, it serves as the core operation that enables contextual representation learning, flexible alignment, and scalable parallel computation.
 

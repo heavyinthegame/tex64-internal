@@ -1,13 +1,13 @@
 # Fdb version 4
-["bibtex main"] 1775815244.33595 "main.aux" "main.bbl" "main" 1775815245.5645 0
+["bibtex main"] 1776051560.45801 "main.aux" "main.bbl" "main" 1776051561.71395 0
   "./references.bib" 1775794050.87355 2087 600bd54b90502b36135b96edb973cc29 ""
   "/usr/local/texlive/2024/texmf-dist/bibtex/bst/base/plain.bst" 1292289607 20613 bd3fbfa9f64872b81ac57a0dd2ed855f ""
-  "main.aux" 1775815245.26054 2285 9c4e6782537a6c8593c00c7d75300cfd "lualatex"
+  "main.aux" 1776051561.37851 2285 711cf8c2892a037602a2b51aa0649246 "lualatex"
   (generated)
   "main.bbl"
   "main.blg"
   (rewritten before read)
-["lualatex"] 1775815244.43256 "main.tex" "main.pdf" "main" 1775815245.56466 0
+["lualatex"] 1776051560.55801 "main.tex" "main.pdf" "main" 1776051561.71413 0
   "/Users/wedd/Library/texlive/2024/texmf-var/luatex-cache/generic/fonts/otl/lmroman10-bold.luc" 1766813714.81052 128410 d0a7d6c5b84cb323c732980fd1a15945 ""
   "/Users/wedd/Library/texlive/2024/texmf-var/luatex-cache/generic/fonts/otl/lmroman10-italic.luc" 1766813714.91235 136312 0e3e64866d362ca6507213d4e45d4d17 ""
   "/Users/wedd/Library/texlive/2024/texmf-var/luatex-cache/generic/fonts/otl/lmroman10-regular.luc" 1714795459.25019 127327 76a1047b4dbbf48407ed6ace26562c1b ""
@@ -224,10 +224,10 @@
   "/usr/local/texlive/2024/texmf-dist/tex/luatex/luaotfload/luaotfload.lua" 1709155629 13565 50482dad4c221a79dbdbb982122baf8c ""
   "/usr/local/texlive/2024/texmf-var/fonts/map/pdftex/updmap/pdftex.map" 1714800338.55124 5467645 128b85b7cde5f5edc5cb7f1dd7ff8736 ""
   "/usr/local/texlive/2024/texmf-var/web2c/luahbtex/lualatex.fmt" 1714800260 12255192 275bf7f30ced6b4d01ffbcc33153c70c ""
-  "main.aux" 1775815245.26054 2285 9c4e6782537a6c8593c00c7d75300cfd "lualatex"
-  "main.bbl" 1775815244.43148 1891 c25a9a48b5d9843f2d87382175e8be35 "bibtex main"
-  "main.out" 1775815245.2612 1499 26a2d82580fe6dc6061aea4593d35634 "lualatex"
-  "main.tex" 1775813528.39513 12503 d06142fb1748cbe71b96eab477729f04 ""
+  "main.aux" 1776051561.37851 2285 711cf8c2892a037602a2b51aa0649246 "lualatex"
+  "main.bbl" 1776051560.55414 1891 c25a9a48b5d9843f2d87382175e8be35 "bibtex main"
+  "main.out" 1776051561.37924 1499 26a2d82580fe6dc6061aea4593d35634 "lualatex"
+  "main.tex" 1776051555.80215 12570 8eee3be61a35d389dc3cf8bf31947b05 ""
   (generated)
   "main.aux"
   "main.log"

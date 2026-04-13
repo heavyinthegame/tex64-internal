@@ -1,4 +1,4 @@
-This is LuaHBTeX, Version 1.18.0 (TeX Live 2024)  (format=lualatex 2024.5.4)  10 APR 2026 19:00
+This is LuaHBTeX, Version 1.18.0 (TeX Live 2024)  (format=lualatex 2024.5.4)  13 APR 2026 12:39
  restricted system commands enabled.
  file:line:error style messages enabled.
 **main.tex
@@ -755,7 +755,7 @@ Overfull \hbox (2.99184pt too wide) in paragraph at lines 27--28
 [1
 
 {/usr/local/texlive/2024/texmf-var/fonts/map/pdftex/updmap/pdftex.map}]
-[2] [3] (./main.bbl) [4] (./main.aux)
+[2] [3] (./main.bbl [4]) [5] (./main.aux)
  ***********
 LaTeX2e <2023-11-01> patch level 1
 L3 programming layer <2024-02-20>
@@ -765,15 +765,15 @@ Package rerunfilecheck Info: File `main.out' has not changed.
 )
 
 Here is how much of LuaTeX's memory you used:
- 21217 strings out of 476447
+ 21218 strings out of 476447
  125027,1977958 words of node,token memory allocated
- 513 words of node memory still in use:
-   6 hlist, 2 vlist, 2 rule, 2 glue, 4 kern, 1 glyph, 10 attribute, 54 glue_spec
-, 10 attribute_list, 2 write nodes
-   avail lists: 2:264,3:188,4:73,5:589,6:42,7:10325,8:46,9:306,10:9,11:980
+ 517 words of node memory still in use:
+   6 hlist, 2 vlist, 2 rule, 2 glue, 4 kern, 1 glyph, 11 attribute, 54 glue_spec
+, 11 attribute_list, 2 write nodes
+   avail lists: 2:262,3:188,4:73,5:589,6:42,7:10325,8:46,9:306,10:9,11:980
  42757 multiletter control sequences out of 65536+600000
  47 fonts using 3265607 bytes
- 84i,6n,89p,579b,338s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ 84i,6n,89p,579b,464s stack positions out of 10000i,1000n,20000p,200000b,200000s
 </usr/local/texlive/2024/texmf-dist/fonts/opentype/public/lm/lmroman10-italic.ot
 f></usr/local/texlive/2024/texmf-dist/fonts/opentype/public/lm/lmroman12-bold.ot
 f></usr/local/texlive/2024/texmf-dist/fonts/opentype/public/lm/lmroman10-regular
@@ -789,10 +789,10 @@ usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmr8.pfb></usr/
 local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb></usr/lo
 cal/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy8.pfb></usr/local
 /texlive/2024/texmf-dist/fonts/type1/public/amsfonts/symbols/msbm10.pfb>
-Output written on main.pdf (4 pages, 118946 bytes).
+Output written on main.pdf (5 pages, 122088 bytes).
 
-PDF statistics: 176 PDF objects out of 1000 (max. 8388607)
- 141 compressed objects within 2 object streams
- 24 named destinations out of 1000 (max. 131072)
+PDF statistics: 180 PDF objects out of 1000 (max. 8388607)
+ 144 compressed objects within 2 object streams
+ 25 named destinations out of 1000 (max. 131072)
  104 words of extra memory for PDF output out of 10000 (max. 100000000)
 
