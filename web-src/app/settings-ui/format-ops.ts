@@ -7,6 +7,7 @@ import {
 } from "../settings-format.js";
 import type { SettingsUiRuntime } from "./runtime.js";
 import { updateSettingsToggle } from "./utils.js";
+import { getUiLocale } from "../i18n.js";
 
 export type SettingsFormatOps = {
   buildFormatSettingsPayload: () => FormatSettingsPayload;
@@ -44,7 +45,7 @@ export const createSettingsFormatOps = (runtime: SettingsUiRuntime): SettingsFor
     }
     editorFormatVerbatimList.innerHTML = "";
     const entries = Array.from(new Set(runtime.state.editorFormatSettings.customVerbatim)).sort((a, b) =>
-      a.localeCompare(b, "ja")
+      a.localeCompare(b, getUiLocale())
     );
     entries.forEach((entry) => {
       const row = document.createElement("div");

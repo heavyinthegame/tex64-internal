@@ -812,7 +812,7 @@ ipcMain.on("tex64", (_event, message) => {
     return;
   }
   if (type === "openWorkspace" || type === "requestWorkspace") {
-    workspaceHandlers.handleOpenWorkspace();
+    workspaceHandlers.handleOpenWorkspace(message);
     return;
   }
   if (type === "openRecentProject") {

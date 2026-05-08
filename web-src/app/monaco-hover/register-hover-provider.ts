@@ -18,6 +18,7 @@ import { resolveGraphicsCandidates, resolveTexIncludeCandidates, isPreviewableIm
 import { buildPackageHoverMarkdown } from "./package-hover.js";
 import { rememberStableHoverAnchor } from "./stable-hover.js";
 import { findFirstUnescapedPercent, getCursorIndex } from "./utils.js";
+import { getUiLocale } from "../i18n.js";
 
 export const registerHoverProvider = (
   monaco: {
@@ -302,7 +303,7 @@ export const registerHoverProvider = (
         })
         .sort((a, b) => {
           if (a.path !== b.path) {
-            return a.path.localeCompare(b.path, "ja");
+            return a.path.localeCompare(b.path, getUiLocale());
           }
           return a.line - b.line;
         });

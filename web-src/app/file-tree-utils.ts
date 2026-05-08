@@ -1,4 +1,5 @@
 import type { DragPayload, FileNode } from "./types.js";
+import { getUiLocale } from "./i18n.js";
 
 const dragDataType = "application/x-tex64-item";
 
@@ -33,7 +34,7 @@ const sortNodes = (nodes: FileNode[]) => {
     if (a.type !== b.type) {
       return a.type === "dir" ? -1 : 1;
     }
-    return a.name.localeCompare(b.name, "ja");
+    return a.name.localeCompare(b.name, getUiLocale());
   });
   nodes.forEach((node) => {
     if (node.children.length > 0) {

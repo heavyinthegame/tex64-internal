@@ -1,5 +1,6 @@
 import type { IndexEntry } from "./types.js";
 import { dedupeByKey, pickCitationEntries } from "./index-utils.js";
+import { getUiLocale } from "./i18n.js";
 
 export type CompletionState = { registered: boolean };
 
@@ -90,7 +91,7 @@ const findPathCandidates = (params: {
       unique.set(entry.label, entry);
     }
   });
-  return Array.from(unique.values()).sort((a, b) => a.label.localeCompare(b.label, "ja"));
+  return Array.from(unique.values()).sort((a, b) => a.label.localeCompare(b.label, getUiLocale()));
 };
 
 const ENV_SNIPPETS: Record<string, string> = {

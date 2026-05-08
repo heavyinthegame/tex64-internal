@@ -205,6 +205,22 @@ const runAgentConversation = async (
       // Japanese
       /(?:追加|挿入|更新|変更|作成|書[きい]|記述|修正|置換|削除|リファクタ|名称?変更|書き換え|書き加え|埋め)(?:しました|されました|ました|した)/,
       /(?:しました|されました|ました|した)\b/,
+      // Chinese (Simplified) — past-tense action confirmations: 已 + verb, 完成
+      /已(?:添加|新增|插入|更新|修改|更改|创建|写入|编写|替换|移除|删除|修复|重构|重命名|改名|重写|扩展|追加|应用|完成)/,
+      /(?:添加|新增|插入|更新|修改|更改|创建|写入|编写|替换|移除|删除|修复|重构|重命名|改名|重写|扩展|追加|应用)了/,
+      // Korean — completed-action endings on common edit verbs
+      /(?:추가|삽입|갱신|업데이트|수정|변경|생성|작성|기록|교체|치환|제거|삭제|수정|리팩터링|이름\s?변경|개명|재작성|확장|추가\s?작성|적용|완료)(?:했(?:습니다|어요|다)|됐(?:습니다|어요|다)|되었(?:습니다|어요|다)|했음|함)/,
+      // German — Ich habe ... ge<verb>; X wurde/wurden ge<verb>
+      /\bIch\s+(?:habe|hab)\b[\s\S]{0,80}?\b(?:hinzugefügt|eingefügt|aktualisiert|geändert|modifiziert|erstellt|geschrieben|ersetzt|entfernt|gelöscht|behoben|umbenannt|umgeschrieben|erweitert|angehängt|angewendet)\b/i,
+      /\b(?:wurde|wurden|ist|sind)\s+(?:hinzugefügt|eingefügt|aktualisiert|geändert|modifiziert|erstellt|geschrieben|ersetzt|entfernt|gelöscht|behoben|umbenannt|umgeschrieben|erweitert|angehängt|angewendet)\b/i,
+      // French — J'ai ... <verbe>; X a été <verbe>
+      // (Trailing \b dropped: most past participles end in `é` which is not in
+      // ASCII \w, so \b fails. Using \p{L} lookahead with the `u` flag instead.)
+      /\bJ['’]ai\b[\s\S]{0,80}?(?:ajouté|inséré|mis\s+à\s+jour|modifié|changé|créé|écrit|rempli|remplacé|retiré|supprimé|corrigé|refactorisé|renommé|réécrit|étendu|appliqué)(?!\p{L})/iu,
+      /\b(?:a|ont)\s+été\s+(?:ajouté|inséré|mis\s+à\s+jour|modifié|changé|créé|écrit|rempli|remplacé|retiré|supprimé|corrigé|refactorisé|renommé|réécrit|étendu|appliqué)e?s?(?!\p{L})/iu,
+      // Spanish — He ... <verbo>; X ha sido / se ha <verbo>
+      /\bHe\b[\s\S]{0,80}?\b(?:añadido|agregado|insertado|actualizado|modificado|cambiado|creado|escrito|rellenado|reemplazado|eliminado|borrado|corregido|refactorizado|renombrado|reescrito|ampliado|aplicado)\b/i,
+      /\b(?:ha\s+sido|han\s+sido|se\s+ha|se\s+han)\s+(?:añadido|agregado|insertado|actualizado|modificado|cambiado|creado|escrito|rellenado|reemplazado|eliminado|borrado|corregido|refactorizado|renombrado|reescrito|ampliado|aplicado)s?\b/i,
     ];
     let halluciationRetryCount = 0;
     const MAX_HALLUCINATION_RETRIES = 2;

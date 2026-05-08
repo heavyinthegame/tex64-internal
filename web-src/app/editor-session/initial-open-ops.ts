@@ -1,6 +1,7 @@
 import type { EditorGroupKey } from "./types.js";
 import type { EditorSessionRuntime } from "./runtime.js";
 import type { EditorSessionCoreOps } from "./core-ops.js";
+import { getUiLocale } from "../i18n.js";
 
 export type EditorSessionInitialOpenOps = {
   requestInitialOpen: () => void;
@@ -22,7 +23,7 @@ export const createEditorSessionInitialOpenOps = (
     }
     const texFiles = workspaceFiles
       .filter((path) => path.toLowerCase().endsWith(".tex"))
-      .sort((a, b) => a.localeCompare(b, "ja"));
+      .sort((a, b) => a.localeCompare(b, getUiLocale()));
     if (texFiles.length > 0) {
       return texFiles[0];
     }

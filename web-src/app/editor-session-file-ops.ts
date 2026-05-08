@@ -7,6 +7,7 @@ import type {
 } from "./editor-session.js";
 import { isImageFilePath, isPdfFilePath, isTextFilePath } from "./files.js";
 import { buildLineDiff } from "./diff.js";
+import { getUiLocale } from "./i18n.js";
 
 type PendingSave = {
   path: string;
@@ -578,7 +579,7 @@ export const createEditorSessionFileOps = (ctx: FileOpsDeps) => {
       if (b === activePath) {
         return 1;
       }
-      return a.localeCompare(b, "ja");
+      return a.localeCompare(b, getUiLocale());
     });
     const readBuffer = (path: string): string | null => {
       const entry = monacoModels.get(path);

@@ -48,7 +48,16 @@ export const createAiChatStatusController = (params: CreateAiChatStatusControlle
     return usage;
   };
 
-  const resolveIntlLocale = () => (getUiLocale() === "en" ? "en-US" : "ja-JP");
+  const INTL_LOCALE_MAP: Record<string, string> = {
+    ja: "ja-JP",
+    en: "en-US",
+    zh: "zh-CN",
+    ko: "ko-KR",
+    de: "de-DE",
+    fr: "fr-FR",
+    es: "es-ES",
+  };
+  const resolveIntlLocale = () => INTL_LOCALE_MAP[getUiLocale()] ?? "en-US";
 
   const isAiBlocked = () =>
     Boolean(state.platformAiAccess && state.platformAiAccess.allowed === false);

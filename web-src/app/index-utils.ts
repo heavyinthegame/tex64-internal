@@ -1,4 +1,5 @@
 import type { IndexEntry, SectionEntry } from "./types.js";
+import { getUiLocale } from "./i18n.js";
 
 export const dedupeByKey = (entries: IndexEntry[]) => {
   const map = new Map<string, IndexEntry>();
@@ -7,7 +8,7 @@ export const dedupeByKey = (entries: IndexEntry[]) => {
       map.set(entry.key, entry);
     }
   });
-  return Array.from(map.values()).sort((a, b) => a.key.localeCompare(b.key, "ja"));
+  return Array.from(map.values()).sort((a, b) => a.key.localeCompare(b.key, getUiLocale()));
 };
 
 export const dedupeByKeyAndLocation = (entries: IndexEntry[]) => {
@@ -19,7 +20,7 @@ export const dedupeByKeyAndLocation = (entries: IndexEntry[]) => {
     }
   });
   return Array.from(map.values()).sort((a, b) =>
-    a.path === b.path ? a.line - b.line : a.path.localeCompare(b.path, "ja")
+    a.path === b.path ? a.line - b.line : a.path.localeCompare(b.path, getUiLocale())
   );
 };
 
@@ -33,7 +34,7 @@ export const dedupeSections = (entries: SectionEntry[]) => {
   });
   return Array.from(map.values()).sort((a, b) => {
     if (a.path !== b.path) {
-      return a.path.localeCompare(b.path, "ja");
+      return a.path.localeCompare(b.path, getUiLocale());
     }
     return a.line - b.line;
   });

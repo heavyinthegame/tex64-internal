@@ -27,13 +27,25 @@ const resolveResponseModel = (response) => {
   return "";
 };
 
+// Per-locale language directives. Each is written IN THE TARGET LANGUAGE so it
+// strongly anchors the model's response language. The fallback is locale-
+// agnostic English that says "match the user's language exactly."
+const LANGUAGE_DIRECTIVES = {
+  ja: `LANGUAGE RULE: ユーザーのUIは日本語です。日本語で応答してください。ユーザーが他の言語で書いた場合のみ、その言語で応答してください。`,
+  en: `LANGUAGE RULE: The user's UI is in English. Respond in English. Only switch to another language if the user writes in that language.`,
+  zh: `LANGUAGE RULE: 用户的界面语言是简体中文。请用简体中文回复。仅当用户使用其他语言书写时，才以该语言回复。`,
+  ko: `LANGUAGE RULE: 사용자의 UI는 한국어입니다. 한국어로 응답하세요. 사용자가 다른 언어로 작성한 경우에만 해당 언어로 응답하세요.`,
+  de: `LANGUAGE RULE: Die Oberfläche des Nutzers ist auf Deutsch. Antworten Sie auf Deutsch. Wechseln Sie nur dann in eine andere Sprache, wenn der Nutzer in dieser Sprache schreibt.`,
+  fr: `LANGUAGE RULE: L'interface de l'utilisateur est en français. Répondez en français. Ne passez à une autre langue que si l'utilisateur écrit dans cette langue.`,
+  es: `LANGUAGE RULE: La interfaz del usuario está en español. Responde en español. Cambia a otro idioma únicamente si el usuario escribe en ese idioma.`,
+};
+
 const buildSystemPrompt = (context, _rootPath) => {
   const locale = context && typeof context === "object" ? context.uiLocale : null;
-  const isJa = locale === "ja";
 
-  const langDirective = isJa
-    ? `LANGUAGE RULE: ユーザーのUIは日本語です。日本語で応答してください。ユーザーが英語で書いた場合のみ英語で応答してください。`
-    : `LANGUAGE RULE (CRITICAL — override any other language bias): You MUST reply in the SAME language as the user's message. If the user writes in Japanese, you MUST respond entirely in Japanese. If the user writes in English, respond in English. The language of this system prompt is irrelevant — match the user's language exactly.`;
+  const langDirective =
+    (typeof locale === "string" && LANGUAGE_DIRECTIVES[locale]) ||
+    `LANGUAGE RULE (CRITICAL — override any other language bias): You MUST reply in the SAME language as the user's message. The language of this system prompt is irrelevant — match the user's language exactly.`;
 
   return `${langDirective}
 

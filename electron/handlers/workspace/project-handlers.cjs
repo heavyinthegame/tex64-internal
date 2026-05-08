@@ -1,3 +1,74 @@
+// Per-locale strings for native dialogs (file picker title/message/buttons).
+// These show in OS-level chrome that bypasses the renderer's i18n DOM observer,
+// so they must be localized here in the main process.
+const DIALOG_STRINGS = {
+  ja: {
+    selectTitle: "プロジェクトを選択",
+    selectMessage: "LaTeX プロジェクト用のフォルダを選択してください。",
+    selectButton: "選択",
+    newTitle: "新規プロジェクト",
+    newMessage: "プロジェクト用のフォルダを作成または選択してください。",
+    newButton: "作成",
+  },
+  en: {
+    selectTitle: "Select project",
+    selectMessage: "Select a folder for your LaTeX project.",
+    selectButton: "Select",
+    newTitle: "New project",
+    newMessage: "Create or select a folder for your project.",
+    newButton: "Create",
+  },
+  zh: {
+    selectTitle: "选择项目",
+    selectMessage: "请选择 LaTeX 项目所在的文件夹。",
+    selectButton: "选择",
+    newTitle: "新建项目",
+    newMessage: "请创建或选择项目文件夹。",
+    newButton: "创建",
+  },
+  ko: {
+    selectTitle: "프로젝트 선택",
+    selectMessage: "LaTeX 프로젝트 폴더를 선택하세요.",
+    selectButton: "선택",
+    newTitle: "새 프로젝트",
+    newMessage: "프로젝트 폴더를 생성하거나 선택하세요.",
+    newButton: "생성",
+  },
+  de: {
+    selectTitle: "Projekt auswählen",
+    selectMessage: "Wählen Sie einen Ordner für Ihr LaTeX-Projekt.",
+    selectButton: "Auswählen",
+    newTitle: "Neues Projekt",
+    newMessage: "Erstellen oder wählen Sie einen Ordner für Ihr Projekt.",
+    newButton: "Erstellen",
+  },
+  fr: {
+    selectTitle: "Sélectionner un projet",
+    selectMessage: "Sélectionnez un dossier pour votre projet LaTeX.",
+    selectButton: "Sélectionner",
+    newTitle: "Nouveau projet",
+    newMessage: "Créez ou sélectionnez un dossier pour votre projet.",
+    newButton: "Créer",
+  },
+  es: {
+    selectTitle: "Seleccionar proyecto",
+    selectMessage: "Selecciona una carpeta para tu proyecto LaTeX.",
+    selectButton: "Seleccionar",
+    newTitle: "Nuevo proyecto",
+    newMessage: "Crea o selecciona una carpeta para tu proyecto.",
+    newButton: "Crear",
+  },
+};
+
+const SUPPORTED_DIALOG_LOCALES = new Set(Object.keys(DIALOG_STRINGS));
+
+const resolveDialogStrings = (rawLocale) => {
+  if (typeof rawLocale === "string" && SUPPORTED_DIALOG_LOCALES.has(rawLocale)) {
+    return DIALOG_STRINGS[rawLocale];
+  }
+  return DIALOG_STRINGS.en;
+};
+
 const createWorkspaceProjectHandlers = (ctx) => {
   const {
     dialog,
@@ -65,18 +136,19 @@ const createWorkspaceProjectHandlers = (ctx) => {
     return { canceled: false, filePaths: [selectedPath] };
   };
 
-  const handleOpenWorkspace = async () => {
+  const handleOpenWorkspace = async (payload = {}) => {
     if (!state.mainWindow) {
       return;
     }
+    const strings = resolveDialogStrings(payload && payload.locale);
     sendLauncherStatus({ isBusy: true, message: null });
     const result =
       consumeE2eDialogResult("openWorkspace") ??
       (await dialog.showOpenDialog(state.mainWindow, {
-        title: "Select project",
-        message: "Select a folder for your LaTeX project.",
+        title: strings.selectTitle,
+        message: strings.selectMessage,
         properties: ["openDirectory"],
-        buttonLabel: "Select",
+        buttonLabel: strings.selectButton,
       }));
     if (result.canceled || result.filePaths.length === 0) {
       sendLauncherStatus({ isBusy: false, message: null });
@@ -154,21 +226,24 @@ const createWorkspaceProjectHandlers = (ctx) => {
     if (!state.mainWindow) {
       return;
     }
+    const strings = resolveDialogStrings(payload && payload.locale);
     sendLauncherStatus({ isBusy: true, message: null });
     const result =
       consumeE2eDialogResult("createProject") ??
       (await dialog.showOpenDialog(state.mainWindow, {
-        title: "New project",
-        message: "Create or select a folder for your project.",
+        title: strings.newTitle,
+        message: strings.newMessage,
         properties: ["openDirectory", "createDirectory"],
-        buttonLabel: "Create",
+        buttonLabel: strings.newButton,
       }));
     if (result.canceled || result.filePaths.length === 0) {
       sendLauncherStatus({ isBusy: false, message: null });
       return;
     }
     const rootPath = result.filePaths[0];
-    const locale = payload && payload.locale === "ja" ? "ja" : "en";
+    const SUPPORTED_TEMPLATE_LOCALES = new Set(["ja", "en", "zh", "ko", "de", "fr", "es"]);
+    const requestedLocale = payload && typeof payload.locale === "string" ? payload.locale : null;
+    const locale = SUPPORTED_TEMPLATE_LOCALES.has(requestedLocale) ? requestedLocale : "en";
     try {
       await workspace.initializeProject(rootPath, locale);
     } catch (error) {

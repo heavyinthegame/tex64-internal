@@ -1,6 +1,7 @@
 import type { TabKey } from "./config.js";
 import type { AppContext } from "./context.js";
 import type { DiffContext } from "./diff-modal.js";
+import { getUiLocale } from "./i18n.js";
 import type {
   IndexEntry,
   IssueItem,
@@ -188,7 +189,7 @@ export const initWorkspaceController = (
         byKey.set(key, [entry]);
       }
     });
-    const keys = Array.from(byKey.keys()).sort((a, b) => a.localeCompare(b, "ja"));
+    const keys = Array.from(byKey.keys()).sort((a, b) => a.localeCompare(b, getUiLocale()));
     const issues: IssueItem[] = [];
     const maxLocationsShown = 4;
     for (const key of keys) {
@@ -198,7 +199,7 @@ export const initWorkspaceController = (
       }
       entries.sort((a, b) => {
         if (a.path !== b.path) {
-          return a.path.localeCompare(b.path, "ja");
+          return a.path.localeCompare(b.path, getUiLocale());
         }
         return a.line - b.line;
       });

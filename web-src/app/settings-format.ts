@@ -4,6 +4,7 @@ import {
   normalizeEnvName,
 } from "./env-registry.js";
 import type { EnvRegistryApi } from "./env-registry-ui.js";
+import { getUiLocale } from "./i18n.js";
 import type {
   EditorFormatAlignEnvs,
   EditorFormatSettings,
@@ -111,8 +112,8 @@ export const buildEditorFormatAlignEnvs = (
     }
   });
   return {
-    math: Array.from(math).sort((a, b) => a.localeCompare(b, "ja")),
-    table: Array.from(table).sort((a, b) => a.localeCompare(b, "ja")),
+    math: Array.from(math).sort((a, b) => a.localeCompare(b, getUiLocale())),
+    table: Array.from(table).sort((a, b) => a.localeCompare(b, getUiLocale())),
   };
 };
 
