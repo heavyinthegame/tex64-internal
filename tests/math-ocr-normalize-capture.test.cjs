@@ -71,6 +71,18 @@ const restoreTextBlocks = (value, blocks) =>
     (_match, idx) => blocks[parseInt(idx, 10)] ?? ""
   );
 
+const BARE_LATEX_STRUCTURE_COMMAND_PATTERN =
+  /(^|[^\\A-Za-z])(frac|dfrac|tfrac|sqrt|binom|dbinom|tbinom|operatorname)(?=\*?\s*(?:\[[^\]]*\]\s*)?\{)/g;
+const BARE_LATEX_OPERATOR_COMMAND_PATTERN =
+  /(^|[^\\A-Za-z])(sum|prod|int|oint|lim)(?=$|[^A-Za-z])/g;
+
+const normalizeBareLatexCommands = (value) => {
+  if (!value) return value;
+  return value
+    .replace(BARE_LATEX_STRUCTURE_COMMAND_PATTERN, "$1\\$2")
+    .replace(BARE_LATEX_OPERATOR_COMMAND_PATTERN, "$1\\$2");
+};
+
 const normalizeMathCaptureText = (value) => {
   const trimmed = value.trim();
   if (!trimmed) return "";
@@ -82,7 +94,7 @@ const normalizeMathCaptureText = (value) => {
     .replace(/\s+/g, "");
 
   const { result: withPlaceholders, blocks } = protectTextBlocks(noWhitespace);
-  let cleaned = withPlaceholders;
+  let cleaned = normalizeBareLatexCommands(withPlaceholders);
   cleaned = cleaned.replace(/\\newline/g, "").replace(/\\\\/g, "");
   cleaned = cleaned.replace(/[^A-Za-z0-9\\{}_^=+\-*/().,\[\]|<>!:\x00TXTBLK]/g, "");
   cleaned = restoreTextBlocks(cleaned, blocks);
@@ -113,6 +125,18 @@ test("\\mu \\nu → \\mu\\nu (backslash separates commands naturally)", () => {
 
 test("\\frac{1}{2} → unchanged", () => {
   assert.equal(normalizeMathCaptureText("\\frac{1}{2}"), "\\frac{1}{2}");
+});
+
+test("bare frac command is repaired", () => {
+  assert.equal(normalizeMathCaptureText("frac { 1 } { 2 }"), "\\frac{1}{2}");
+});
+
+test("bare sqrt command is repaired", () => {
+  assert.equal(normalizeMathCaptureText("sqrt { x }"), "\\sqrt{x}");
+});
+
+test("bare operator command is repaired", () => {
+  assert.equal(normalizeMathCaptureText("sum _ { i = 1 } ^ { n } x_i"), "\\sum_{i=1}^{n}x_i");
 });
 
 test("x + y → x+y (regular spaces stripped)", () => {

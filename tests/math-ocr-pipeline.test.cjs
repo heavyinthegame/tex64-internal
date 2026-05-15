@@ -36,6 +36,11 @@ test("pipeline: clean quadratic formula passes through", () => {
   assert.ok(scoreLatexCandidate(result) >= 90, `score should be >= 90: ${scoreLatexCandidate(result)}`);
 });
 
+test("pipeline: bare structural commands gain missing backslashes", () => {
+  assert.equal(simulateDecodePipeline("frac { 1 } { 2 }"), "\\frac{1}{2}");
+  assert.equal(simulateDecodePipeline("sqrt { x }"), "\\sqrt{x}");
+});
+
 test("pipeline: text-prefixed formula strips text", () => {
   const raw = "Solve the following equation x ^ { 2 } + 3 x + 2 = 0";
   const result = simulateDecodePipeline(raw);

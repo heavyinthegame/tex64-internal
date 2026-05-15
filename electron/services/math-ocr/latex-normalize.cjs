@@ -28,6 +28,66 @@ const postProcessLatex = (value) => {
   return result;
 };
 
+const TEXT_PLACEHOLDER_PREFIX = "\x00TXTBLK";
+
+const protectTextBlocks = (value) => {
+  const blocks = [];
+  const textCmdPattern = /\\(?:text|mbox|textnormal|textrm|textsf|texttt|textbf|textit)\s*\{/g;
+  let result = "";
+  let lastIndex = 0;
+  let match;
+
+  while ((match = textCmdPattern.exec(value)) !== null) {
+    result += value.slice(lastIndex, match.index);
+    const braceStart = match.index + match[0].length - 1;
+    let depth = 0;
+    let braceEnd = -1;
+    for (let i = braceStart; i < value.length; i += 1) {
+      if (value[i] === "{") depth += 1;
+      if (value[i] === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          braceEnd = i;
+          break;
+        }
+      }
+    }
+    if (braceEnd >= 0) {
+      const fullBlock = value.slice(match.index, braceEnd + 1);
+      blocks.push(fullBlock);
+      result += `${TEXT_PLACEHOLDER_PREFIX}${blocks.length - 1}\x00`;
+      lastIndex = braceEnd + 1;
+      textCmdPattern.lastIndex = lastIndex;
+    } else {
+      result += value[match.index];
+      lastIndex = match.index + 1;
+      textCmdPattern.lastIndex = lastIndex;
+    }
+  }
+  result += value.slice(lastIndex);
+  return { result, blocks };
+};
+
+const restoreTextBlocks = (value, blocks) =>
+  value.replace(
+    new RegExp(`${TEXT_PLACEHOLDER_PREFIX.replace(/\x00/g, "\\x00")}(\\d+)\\x00`, "g"),
+    (_match, idx) => blocks[parseInt(idx, 10)] ?? ""
+  );
+
+const BARE_LATEX_STRUCTURE_COMMAND_PATTERN =
+  /(^|[^\\A-Za-z])(frac|dfrac|tfrac|sqrt|binom|dbinom|tbinom|operatorname)(?=\*?\s*(?:\[[^\]]*\]\s*)?\{)/g;
+const BARE_LATEX_OPERATOR_COMMAND_PATTERN =
+  /(^|[^\\A-Za-z])(sum|prod|int|oint|lim)(?=$|[^A-Za-z])/g;
+
+const normalizeBareLatexCommands = (value) => {
+  if (!value) return value;
+  const { result: protectedValue, blocks } = protectTextBlocks(value);
+  const normalized = protectedValue
+    .replace(BARE_LATEX_STRUCTURE_COMMAND_PATTERN, "$1\\$2")
+    .replace(BARE_LATEX_OPERATOR_COMMAND_PATTERN, "$1\\$2");
+  return restoreTextBlocks(normalized, blocks);
+};
+
 const fixMatrixSeparators = (value) => {
   if (!value) return value;
   return value.replace(
@@ -553,6 +613,7 @@ const stripRedundantOuterSquareDelimiters = (value) => {
 const normalizeDecodedLatex = (value) => {
   if (!value) return "";
   let output = postProcessLatex(value);
+  output = normalizeBareLatexCommands(output);
   output = stripArrayFormattingCommands(output);
   output = unwrapBoxedExpression(output);
   output = repairBrokenFractionParentheses(output);

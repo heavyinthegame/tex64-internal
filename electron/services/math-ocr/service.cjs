@@ -126,7 +126,17 @@ class MathOcrService {
         );
       }
     })();
-    await this.loading;
+    try {
+      await this.loading;
+    } catch (error) {
+      this.config = null;
+      this.idToToken = [];
+      this.encoderSession = null;
+      this.decoderSession = null;
+      this.ort = null;
+      this.loading = null;
+      throw error;
+    }
     // Preload Tesseract worker in background (non-blocking)
     this.ensureTesseractWorker().catch(() => {});
   }
@@ -161,7 +171,13 @@ class MathOcrService {
       });
       this.tesseractWorker = worker;
     })();
-    await this.tesseractLoading;
+    try {
+      await this.tesseractLoading;
+    } catch (error) {
+      this.tesseractWorker = null;
+      this.tesseractLoading = null;
+      throw error;
+    }
     this.tesseractLoading = null;
     return this.tesseractWorker;
   }

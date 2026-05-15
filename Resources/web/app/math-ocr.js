@@ -484,13 +484,9 @@ const buildVariantCanvas = (source, variant) => {
         enhanceCanvas(work, CONTRAST_FACTOR + 0.55, SHARPNESS_FACTOR + 0.35);
         binarizeCanvas(work);
     }
-    else if (variant === "binary-soft") {
-        enhanceCanvas(work, CONTRAST_FACTOR + 0.35, SHARPNESS_FACTOR + 0.2);
-        binarizeCanvas(work, { thresholdOffset: 10 });
-    }
     else {
-        enhanceCanvas(work, CONTRAST_FACTOR + 0.55, SHARPNESS_FACTOR + 0.35);
-        binarizeCanvas(work, { invert: true });
+        const _exhaustive = variant;
+        return _exhaustive;
     }
     return fitCanvasWithPadding(work, TARGET_WIDTH, TARGET_HEIGHT, 255);
 };
@@ -514,9 +510,7 @@ const preprocessImageVariants = async (dataUrl) => {
         for (const variant of variants) {
             const canvas = buildVariantCanvas(cropCanvas, variant);
             const includeFallback = variant === "contrast" ||
-                variant === "binary" ||
-                variant === "binary-soft" ||
-                variant === "binary-invert";
+                variant === "binary";
             const fallbackImageDataUrl = includeFallback ? canvas.toDataURL("image/png") : undefined;
             payloads.push(canvasToPayload(canvas, fallbackImageDataUrl));
             if (payloads.length >= MAX_PREPROCESS_PAYLOADS) {

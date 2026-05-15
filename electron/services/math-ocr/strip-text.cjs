@@ -129,7 +129,7 @@ const isMathFunctionName = (word) => {
 
 // Common multi-letter LaTeX command names (without backslash) — module-level for performance
 const LATEX_COMMAND_NAMES = new Set([
-  "frac", "sqrt", "sum", "prod", "int", "oint",
+  "frac", "dfrac", "tfrac", "sqrt", "sum", "prod", "int", "oint",
   "partial", "nabla", "cdot", "times", "div",
   "alpha", "beta", "gamma", "delta", "epsilon",
   "zeta", "eta", "theta", "iota", "kappa",
@@ -140,7 +140,7 @@ const LATEX_COMMAND_NAMES = new Set([
   "cap", "cup", "subset", "supset",
   "left", "right", "big", "bigg",
   "begin", "end",
-  "binom", "choose",
+  "binom", "dbinom", "tbinom", "choose",
   "hat", "bar", "dot", "ddot", "tilde", "vec",
   "overline", "underline", "underbrace", "overbrace",
   "matrix", "pmatrix", "bmatrix", "vmatrix",

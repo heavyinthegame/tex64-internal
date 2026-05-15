@@ -46,6 +46,18 @@ test("normalizeDecodedLatex: postProcessLatex removes extra spaces", () => {
   assert.equal(result, "x^{2}+3");
 });
 
+test("normalizeDecodedLatex: repairs bare frac command", () => {
+  assert.equal(normalizeDecodedLatex("frac { 1 } { 2 }"), "\\frac{1}{2}");
+});
+
+test("normalizeDecodedLatex: repairs bare sqrt command", () => {
+  assert.equal(normalizeDecodedLatex("sqrt { x }"), "\\sqrt{x}");
+});
+
+test("normalizeDecodedLatex: keeps text block contents literal during bare command repair", () => {
+  assert.equal(normalizeDecodedLatex("\\text{alpha} + sqrt { x }"), "\\text{alpha}+\\sqrt{x}");
+});
+
 test("normalizeDecodedLatex: repairs broken fraction parentheses", () => {
   // Repair produces \left(\frac{a}{b}\right), then outer delimiters stripped
   const result = normalizeDecodedLatex("\\frac{(a}{b)}");

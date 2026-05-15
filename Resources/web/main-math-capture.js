@@ -16,52 +16,16 @@ const stripMathCaptureWrapper = (value) => {
     }
     return trimmed;
 };
-const stripLatexCommandBlocks = (value, commands) => {
-    let result = "";
-    for (let i = 0; i < value.length; i += 1) {
-        if (value[i] !== "\\") {
-            result += value[i];
-            continue;
-        }
-        let name = "";
-        let cursor = i + 1;
-        while (cursor < value.length && /[A-Za-z]/.test(value[cursor])) {
-            name += value[cursor];
-            cursor += 1;
-        }
-        if (!name || !commands.has(name)) {
-            result += value[i];
-            continue;
-        }
-        while (cursor < value.length && /\s/.test(value[cursor])) {
-            cursor += 1;
-        }
-        if (value[cursor] !== "{") {
-            result += value[i];
-            continue;
-        }
-        let depth = 0;
-        let end = cursor;
-        for (; end < value.length; end += 1) {
-            if (value[end] === "{") {
-                depth += 1;
-            }
-            else if (value[end] === "}") {
-                depth -= 1;
-                if (depth === 0) {
-                    break;
-                }
-            }
-        }
-        if (depth === 0) {
-            i = end;
-            continue;
-        }
-        result += value[i];
-    }
-    return result;
-};
 const TEXT_PLACEHOLDER_PREFIX = "\x00TXTBLK";
+const BARE_LATEX_STRUCTURE_COMMAND_PATTERN = /(^|[^\\A-Za-z])(frac|dfrac|tfrac|sqrt|binom|dbinom|tbinom|operatorname)(?=\*?\s*(?:\[[^\]]*\]\s*)?\{)/g;
+const BARE_LATEX_OPERATOR_COMMAND_PATTERN = /(^|[^\\A-Za-z])(sum|prod|int|oint|lim)(?=$|[^A-Za-z])/g;
+const normalizeBareLatexCommands = (value) => {
+    if (!value)
+        return value;
+    return value
+        .replace(BARE_LATEX_STRUCTURE_COMMAND_PATTERN, "$1\\$2")
+        .replace(BARE_LATEX_OPERATOR_COMMAND_PATTERN, "$1\\$2");
+};
 const protectTextBlocks = (value) => {
     const blocks = [];
     const textCmdPattern = /\\(?:text|mbox|textnormal|textrm|textsf|texttt|textbf|textit)\s*\{/g;
@@ -118,8 +82,8 @@ const normalizeMathCaptureText = (value) => {
         .replace(/\s+/g, "");
     // Protect interior \text{...} blocks from the character filter
     const { result: withPlaceholders, blocks } = protectTextBlocks(noWhitespace);
-    // Apply character filter to non-text parts
-    let cleaned = withPlaceholders;
+    // Apply command repair and character filter to non-text parts.
+    let cleaned = normalizeBareLatexCommands(withPlaceholders);
     cleaned = cleaned.replace(/\\newline/g, "").replace(/\\\\/g, "");
     cleaned = cleaned.replace(/[^A-Za-z0-9\\{}_^=+\-*/().,\[\]|<>!:\x00TXTBLK]/g, "");
     // Restore \text{...} blocks
