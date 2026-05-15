@@ -244,11 +244,39 @@ jobs:
 
       - name: Build distributables
         shell: bash
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           npm run -s dist:prep
           npm run -s web:build
           npx --no-install electron-builder --win --x64 --publish never
+
+      - name: Verify Windows signature
+        shell: pwsh
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: |
+          $installer = Get-ChildItem -Path dist -Filter "TeX64-*-win-x64.exe" | Select-Object -First 1
+          if (-not $installer) {
+            throw "Windows installer not found."
+          }
+
+          $signature = Get-AuthenticodeSignature -FilePath $installer.FullName
+          if ([string]::IsNullOrWhiteSpace($env:WIN_CSC_LINK) -or [string]::IsNullOrWhiteSpace($env:WIN_CSC_KEY_PASSWORD)) {
+            Write-Host "Windows signing: disabled (WIN_CSC_LINK/WIN_CSC_KEY_PASSWORD secrets missing)"
+            Write-Host "Signature status: $($signature.Status)"
+            exit 0
+          }
+
+          if ($signature.Status -ne "Valid") {
+            throw "Windows installer signature is $($signature.Status): $($signature.StatusMessage)"
+          }
+
+          Write-Host "Windows signing: valid"
+          Write-Host "Signer: $($signature.SignerCertificate.Subject)"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
